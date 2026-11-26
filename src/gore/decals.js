@@ -70,6 +70,115 @@ function holeTexture() {
   });
 }
 
+/** Directional spatter: a blob on the left with streaks and droplets thrown towards +X. */
+function spatterTexture() {
+  return canvasTexture(256, 128, (g, w, h) => {
+    g.fillStyle = '#fff';
+    const cx = w * 0.3, cy = h / 2, R = h * 0.26;
+    g.beginPath();
+    for (let i = 0; i <= 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      const r = R * (0.85 + Math.sin(a * 7 + 1.3) * 0.08 + Math.random() * 0.1) * (Math.cos(a) > 0 ? 1 + Math.cos(a) * 0.35 : 1);
+      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * 0.9;
+      i ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.fill();
+    // tapered streaks fanning out to the right
+    for (let i = 0; i < 9; i++) {
+      const a = (Math.random() - 0.5) * 0.9, len = w * (0.25 + Math.random() * 0.4), wd = 2 + Math.random() * 6;
+      const x0 = cx + R * 0.6, y0 = cy + Math.sin(a) * R * 0.6;
+      const x1 = x0 + Math.cos(a) * len, y1 = y0 + Math.sin(a) * len;
+      g.beginPath(); g.moveTo(x0, y0 - wd); g.quadraticCurveTo((x0 + x1) / 2, (y0 + y1) / 2 - wd * 0.4, x1, y1); g.quadraticCurveTo((x0 + x1) / 2, (y0 + y1) / 2 + wd * 0.4, x0, y0 + wd); g.fill();
+      g.beginPath(); g.arc(x1, y1, wd * 0.45, 0, Math.PI * 2); g.fill();
+    }
+    // droplets in a cone
+    for (let i = 0; i < 40; i++) {
+      const a = (Math.random() - 0.5) * 1.3, d = R + Math.random() * w * 0.62;
+      const r = Math.max(0.8, (1 - d / w) * 5 * Math.random() + 0.6);
+      g.beginPath(); g.ellipse(cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.8, r * 1.6, r, a, 0, Math.PI * 2); g.fill();
+    }
+    // a few drops behind (back-spatter)
+    for (let i = 0; i < 10; i++) {
+      const a = Math.PI + (Math.random() - 0.5) * 2, d = R * (1.05 + Math.random() * 0.5);
+      g.beginPath(); g.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, 1 + Math.random() * 3, 0, Math.PI * 2); g.fill();
+    }
+  }, { srgb: false });
+}
+
+/** Blood running down a wall: a few runs from the top edge, each ending in a bead. */
+function dripTexture() {
+  return canvasTexture(64, 256, (g, w, h) => {
+    g.fillStyle = '#fff';
+    for (let i = 0; i < 4; i++) {
+      const x = w * (0.2 + Math.random() * 0.6), wd = 2.5 + Math.random() * 5, len = h * (0.35 + Math.random() * 0.6);
+      g.beginPath();
+      g.moveTo(x - wd, 0);
+      g.bezierCurveTo(x - wd * 0.6, len * 0.4, x - wd * 0.4 + (Math.random() - 0.5) * 3, len * 0.8, x, len);
+      g.bezierCurveTo(x + wd * 0.4, len * 0.8, x + wd * 0.6, len * 0.4, x + wd, 0);
+      g.fill();
+      g.beginPath(); g.ellipse(x, len, wd * 0.75, wd * 1.05, 0, 0, Math.PI * 2); g.fill();
+    }
+    const grd = g.createLinearGradient(0, 0, 0, 30); grd.addColorStop(0, '#fff'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd; g.fillRect(w * 0.1, 0, w * 0.8, 30);
+  }, { srgb: false });
+}
+
+/** Explosion scorch: charred centre, ragged edge and soot rays thrown outwards. */
+function scorchTexture() {
+  return canvasTexture(256, 256, (g, w, h) => {
+    g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+    g.translate(w / 2, h / 2);
+    const R = w * 0.3;
+    // soot rays
+    g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 70; i++) {
+      const a = Math.random() * Math.PI * 2, len = R * (0.9 + Math.random() * 0.75), wd = 2 + Math.random() * 7;
+      const grd = g.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len);
+      grd.addColorStop(0, 'rgba(70,70,70,0.5)'); grd.addColorStop(0.6, 'rgba(45,45,45,0.25)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
+      g.strokeStyle = grd; g.lineWidth = wd; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * len, Math.sin(a) * len); g.stroke();
+    }
+    g.globalCompositeOperation = 'source-over';
+    // main char with a ragged edge
+    const grd = g.createRadialGradient(0, 0, 0, 0, 0, R * 1.05);
+    grd.addColorStop(0, 'rgb(250,250,250)'); grd.addColorStop(0.55, 'rgb(235,235,235)'); grd.addColorStop(0.8, 'rgb(170,170,170)'); grd.addColorStop(1, 'rgba(110,110,110,0)');
+    g.fillStyle = grd;
+    g.beginPath();
+    for (let i = 0; i <= 72; i++) {
+      const a = (i / 72) * Math.PI * 2;
+      const r = R * (0.88 + Math.sin(a * 5 + 0.7) * 0.06 + Math.sin(a * 13) * 0.04 + Math.random() * 0.08);
+      i ? g.lineTo(Math.cos(a) * r, Math.sin(a) * r) : g.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    g.fill();
+    // soot specks around the edge
+    for (let i = 0; i < 160; i++) {
+      const a = Math.random() * Math.PI * 2, d = R * (0.8 + Math.random() * 0.9), r = 0.6 + Math.random() * 2.6;
+      g.fillStyle = `rgba(200,200,200,${0.25 + Math.random() * 0.5})`;
+      g.beginPath(); g.arc(Math.cos(a) * d, Math.sin(a) * d, r, 0, Math.PI * 2); g.fill();
+    }
+  }, { srgb: false });
+}
+
+/** Mottled bruise blotch (white, used with a coloured material). */
+function bruiseTexture(soot = false) {
+  return canvasTexture(128, 128, (g, w, h) => {
+    g.translate(w / 2, h / 2);
+    const n = soot ? 30 : 9;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.random() * w * (soot ? 0.3 : 0.18), r = w * (soot ? 0.05 + Math.random() * 0.1 : 0.16 + Math.random() * 0.16);
+      const x = Math.cos(a) * d, y = Math.sin(a) * d;
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, `rgba(255,255,255,${soot ? 0.5 : 0.42})`); grd.addColorStop(0.6, `rgba(255,255,255,${soot ? 0.25 : 0.2})`); grd.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+    }
+    if (soot) for (let i = 0; i < 90; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.random() * w * 0.42;
+      g.fillStyle = `rgba(255,255,255,${Math.random() * 0.6})`;
+      g.beginPath(); g.arc(Math.cos(a) * d, Math.sin(a) * d, 0.5 + Math.random() * 1.5, 0, Math.PI * 2); g.fill();
+    }
+  }, { srgb: false });
+}
+
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0), Zf = new THREE.Vector3(0, 0, 1);
 
@@ -107,6 +216,41 @@ export class Decals {
     }));
     this.stainMat = new THREE.MeshStandardMaterial({ map: stainTexture(), transparent: true, depthWrite: false, roughness: 0.35, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
     this.poolHue = [1, 0.03, 0.03];
+
+    // ---- blood on walls and the sides of props: splats + runs that ooze downwards ----
+    const wallMat = (tex, offset) => new THREE.MeshStandardMaterial({
+      color: 0xffffff, alphaMap: tex, transparent: true, depthWrite: false, roughness: 0.3, metalness: 0, envMapIntensity: 0.5,
+      polygonOffset: true, polygonOffsetFactor: offset, polygonOffsetUnits: offset,
+    });
+    const instanced = (geo, mat, n) => {
+      const m = new THREE.InstancedMesh(geo, mat, n);
+      m.count = 0; m.frustumCulled = false; m.receiveShadow = true;
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      scene.add(m);
+      return m;
+    };
+    this.maxWall = 320;
+    this.wallMeshes = [blobTexture(1.3), spatterTexture()].map((t) => instanced(new THREE.PlaneGeometry(1, 1), wallMat(t, -2), this.maxWall));
+    this.walls = [];
+    this.maxDrips = 90;
+    this.dripMesh = instanced(new THREE.PlaneGeometry(1, 1).translate(0, -0.5, 0), wallMat(dripTexture(), -2.5), this.maxDrips);
+    this.drips = [];
+    this.wallDirty = false;
+
+    // ---- explosion scorch marks (floor + walls), drawn under the blood ----
+    this.maxScorch = 48;
+    this.scorchMesh = instanced(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({
+      color: 0xffffff, alphaMap: scorchTexture(), transparent: true, depthWrite: false, roughness: 0.95, metalness: 0,
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+    }), this.maxScorch);
+    this.scorchMesh.renderOrder = -1;
+    this.scorchIndex = 0;
+
+    // ---- bruises / soot on the ragdoll (one small material per mark so each can age) ----
+    this.bruiseTex = bruiseTexture(false);
+    this.sootTex = bruiseTexture(true);
+    this.bruiseGeo = new THREE.PlaneGeometry(1, 1);
+
     this.woundGeo = new THREE.PlaneGeometry(1, 1);
     this.stainGeo = new THREE.PlaneGeometry(1, 2).translate(0, -0.8, 0);
   }
@@ -165,7 +309,131 @@ export class Decals {
   setBloodTint(blood) {
     this.poolHue = blood.pool;
     for (const m of [...this.woundMat, this.stainMat]) m.color.setRGB(...blood.decal);
-    this.poolDirty = true;
+    this.poolDirty = true; this.wallDirty = true;
+  }
+
+  // ---------------------------------------------------------------- walls
+  /**
+   * Blood hitting a vertical (or overhanging) surface. n = surface normal, vel = droplet velocity
+   * (the splat stretches along the direction it was travelling).
+   */
+  addWallSplat(point, n, vel, volume, size) {
+    // merge into a splat already on this face
+    for (let i = this.walls.length - 1; i >= Math.max(0, this.walls.length - 60); i--) {
+      const w = this.walls[i];
+      if (w.n.dot(n) < 0.97) continue;
+      const d = w.p.distanceTo(point);
+      if (d < w.r * 0.55) {
+        w.vol += volume;
+        w.r = Math.min(0.32, Math.max(w.r, 0.035 * Math.sqrt(w.vol)));
+        w.age = Math.min(w.age, 4);
+        this.maybeDrip(w);
+        this.wallDirty = true;
+        return;
+      }
+    }
+    const tang = _p.copy(vel).addScaledVector(n, -vel.dot(n));
+    const speed = tang.length();
+    const type = speed > 1.6 ? 1 : 0;
+    const r = Math.max(0.02, size * (1.6 + Math.random() * 1.4)) * (type ? 1.5 : 1);
+    // orientation: plane faces n, texture +X along the travel direction
+    const z = n.clone();
+    const x = speed > 1e-3 ? tang.clone().normalize() : new THREE.Vector3().crossVectors(UP, z).normalize();
+    if (x.lengthSq() < 0.5) x.set(1, 0, 0);
+    const y = new THREE.Vector3().crossVectors(z, x);
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+    if (!type) q.multiply(_q.setFromAxisAngle(Zf, Math.random() * Math.PI * 2));
+    const stretch = type ? Math.min(2.4, 1 + speed * 0.25) : rand(0.85, 1.2);
+    const w = { p: point.clone().addScaledVector(n, 0.002 + Math.random() * 0.001), n: n.clone(), q, r, stretch, vol: volume, age: 0, type, dripped: 0 };
+    // the spatter texture's blob sits left of centre: shift so the blob lands on the hit point
+    if (type) w.p.addScaledVector(x, r * 2 * stretch * 1.4 * 0.2);
+    if (this.walls.length >= this.maxWall) this.walls.shift();
+    this.walls.push(w);
+    this.maybeDrip(w);
+    this.wallDirty = true;
+  }
+
+  /** Enough blood on a vertical face starts to run down it. */
+  maybeDrip(w) {
+    if (Math.abs(w.n.y) > 0.5) return;
+    const want = Math.floor(w.vol / 9);
+    if (want <= w.dripped || w.dripped >= 3) return;
+    w.dripped++;
+    const z = w.n.clone();
+    const y = UP.clone().addScaledVector(z, -z.y).normalize();
+    const x = new THREE.Vector3().crossVectors(y, z);
+    const q = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+    const p = w.p.clone().add(x.clone().multiplyScalar((Math.random() - 0.5) * w.r)).addScaledVector(z, 0.0005);
+    const width = Math.min(0.12, w.r * rand(0.8, 1.3));
+    const d = { p, q, width, len: 0.01, target: Math.min(p.y - 0.01, rand(0.25, 0.75) * Math.sqrt(w.vol / 9)), age: 0 };
+    if (this.drips.length >= this.maxDrips) this.drips.shift();
+    this.drips.push(d);
+  }
+
+  updateWalls(dt) {
+    let moving = this.wallDirty;
+    for (const d of this.drips) {
+      d.age += dt;
+      if (d.len < d.target) { d.len = Math.min(d.target, d.len + dt * (0.02 + (d.target - d.len) * 0.6)); moving = true; }
+    }
+    for (const w of this.walls) w.age += dt;
+    // colour darkens slowly as it dries
+    this.wallTimer = (this.wallTimer || 0) + dt;
+    if (this.wallTimer > 1) { this.wallTimer = 0; moving = true; }
+    if (!moving) return;
+    this.wallDirty = false;
+    const color = new THREE.Color(), hue = this.poolHue;
+    const counts = [0, 0];
+    for (const w of this.walls) {
+      const mesh = this.wallMeshes[w.type];
+      const i = counts[w.type]++;
+      const ax = w.type ? 1.4 : 1, ay = w.type ? 0.7 : 1; // spatter texture is 2:1
+      _m.compose(w.p, w.q, _s.set(w.r * 2 * w.stretch * ax, w.r * 2 / Math.sqrt(w.stretch) * ay, 1));
+      mesh.setMatrixAt(i, _m);
+      const v = 0.21 - 0.1 * Math.min(1, w.age / 90);
+      mesh.setColorAt(i, color.setRGB(v * hue[0], v * hue[1], v * hue[2]));
+    }
+    this.wallMeshes.forEach((m, t) => { m.count = counts[t]; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+    this.drips.forEach((d, i) => {
+      _m.compose(d.p, d.q, _s.set(d.width, d.len, 1));
+      this.dripMesh.setMatrixAt(i, _m);
+      const v = 0.19 - 0.09 * Math.min(1, d.age / 90);
+      this.dripMesh.setColorAt(i, color.setRGB(v * hue[0], v * hue[1], v * hue[2]));
+    });
+    this.dripMesh.count = this.drips.length;
+    this.dripMesh.instanceMatrix.needsUpdate = true;
+    if (this.dripMesh.instanceColor) this.dripMesh.instanceColor.needsUpdate = true;
+  }
+
+  // ---------------------------------------------------------------- scorch
+  /** Black explosion residue on a surface (point on the surface, n = its normal). */
+  addScorch(point, n, radius, darkness = 1) {
+    const i = this.scorchIndex++ % this.maxScorch;
+    _q.setFromUnitVectors(Zf, n).multiply(new THREE.Quaternion().setFromAxisAngle(Zf, Math.random() * Math.PI * 2));
+    _m.compose(_p.copy(point).addScaledVector(n, 0.0015 + (i % 8) * 0.0002), _q, _s.set(radius * 2, radius * 2 * rand(0.85, 1.15), 1));
+    this.scorchMesh.setMatrixAt(i, _m);
+    const v = 0.012 + (1 - darkness) * 0.03;
+    this.scorchMesh.setColorAt(i, new THREE.Color(v, v * 0.95, v * 0.9));
+    this.scorchMesh.count = Math.min(this.maxScorch, Math.max(this.scorchMesh.count, i + 1));
+    this.scorchMesh.instanceMatrix.needsUpdate = true;
+    this.scorchMesh.instanceColor.needsUpdate = true;
+  }
+
+  // ---------------------------------------------------------------- bruises
+  /** A bruise (or soot mark) on a body-part group, in that part's local space. */
+  addBruise(group, localPoint, localNormal, size, soot = false) {
+    const mat = new THREE.MeshStandardMaterial({
+      map: soot ? this.sootTex : this.bruiseTex, transparent: true, depthWrite: false, opacity: 0, roughness: soot ? 0.95 : 0.6,
+      polygonOffset: true, polygonOffsetFactor: -3.5, polygonOffsetUnits: -3.5,
+    });
+    const m = new THREE.Mesh(this.bruiseGeo, mat);
+    m.position.copy(localPoint).addScaledVector(localNormal, 0.0012);
+    m.quaternion.setFromUnitVectors(Zf, localNormal);
+    m.rotateZ(Math.random() * Math.PI * 2);
+    m.scale.setScalar(size);
+    m.userData.decal = true;
+    group.add(m);
+    return m;
   }
 
   // ---------------------------------------------------------------- bullet holes
@@ -203,5 +471,8 @@ export class Decals {
     this.pools = []; this.poolDirty = true;
     this.updatePools(0);
     this.holes.count = 0; this.holeIndex = 0;
+    this.walls = []; this.drips = []; this.wallDirty = true;
+    this.updateWalls(0);
+    this.scorchMesh.count = 0; this.scorchIndex = 0;
   }
 }

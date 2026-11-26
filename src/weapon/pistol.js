@@ -4,9 +4,10 @@ import { clamp, damp, Spring, lerp, viewmodelToWorld, drawOffset } from '../core
 import { buildM1911, muzzleFlashTexture, flameTexture } from './model1911.js';
 import { ClipPlayer, CLIPS } from './anim.js';
 import { Casings } from './casings.js';
+import { BlockArms, sampleHand, anchorPos } from './arms.js';
 
 const W = CONFIG.weapon;
-const _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
+const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _h1 = new THREE.Vector3(), _h2 = new THREE.Vector3();
 
 /**
  * M1911 viewmodel + weapon logic.
@@ -46,6 +47,22 @@ export class Pistol {
     this.flame.position.set(0, 0, -0.01);
     this.flame.visible = false;
     this.gun.muzzle.add(this.flame);
+    // ---- hands: anchors on the gun the blocky hands snap to ----
+    this.arms = new BlockArms(this.scene, { handSize: 0.058 });
+    const anchor = (parent, x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); parent.add(o); return o; };
+    this.anchors = {
+      grip: anchor(this.gun.root, 0.002, -0.066, 0.02),
+      support: anchor(this.gun.root, -0.036, -0.078, 0.004),
+      mag: anchor(this.gun.mag, -0.004, -0.112, 0.004),
+      slide: anchor(this.gun.slide, -0.024, 0.006, -0.026),
+    };
+    this.handTargets = {
+      support: () => anchorPos(this.anchors.support, _h1),
+      mag: () => anchorPos(this.anchors.mag, _h1),
+      slide: () => anchorPos(this.anchors.slide, _h1),
+      pouch: new THREE.Vector3(-0.17, -0.36, -0.22),
+      low: new THREE.Vector3(-0.22, -0.4, -0.14),
+    };
     this.raise = 1;          // 0 = holstered, 1 = up (set by the toolbox)
     this.name = 'M1911';
 
@@ -110,8 +127,18 @@ export class Pistol {
 
     this.anim.update(dt);
     this.animateGun(dt);
+    this.updateArms();
     this.updateDropMags(dt);
     this.casings.update(worldDt);
+  }
+
+  /** Right hand on the grip; left hand supports, fetches magazines and racks the slide. */
+  updateArms() {
+    this.pivot.updateMatrixWorld(true);
+    this.arms.setOn('right', this.anchors.grip, { roll: 0.1 });
+    const clip = this.anim.clip;
+    const left = clip?.lh ? sampleHand(clip.lh, this.anim.time, this.handTargets, _h2) : anchorPos(this.anchors.support, _h2);
+    this.arms.set('left', left, { roll: -0.25 });
   }
 
   muzzleWorld(out = new THREE.Vector3()) {
@@ -249,8 +276,9 @@ export class Pistol {
 
     // magazine track (0 = seated, >2 = hidden off-screen)
     const magT = a.sample('mag', 0);
-    g.mag.visible = magT < 2;
-    g.mag.position.copy(g.magBasePos).addScaledVector(g.magDir, Math.min(magT, 2) * 0.1);
+    // (a fresh magazine comes up from below the screen in the left hand)
+    g.mag.visible = magT < 3.5;
+    g.mag.position.copy(g.magBasePos).addScaledVector(g.magDir, magT * 0.1);
 
     // ---- muzzle flash ----
     const flashOn = ft < 0.035;

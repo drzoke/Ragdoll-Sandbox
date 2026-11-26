@@ -72,6 +72,20 @@ export class Audio {
     f.frequency.setTargetAtTime(500 + 600 * pitch, t, 0.05);
   }
 
+  /** Grenade explosion; quieter and duller with distance (d in metres). */
+  boom(d = 5) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const near = Math.max(0.15, Math.min(1.4, 9 / (d + 4)));
+    const lp = 600 + 5000 * Math.min(1, 12 / (d + 6));
+    this._noise(t, 1.6, { freq: lp, gain: 1.3 * near, decay: 1.3, toReverb: true });
+    this._noise(t, 0.25, { type: 'highpass', freq: 1500, gain: 0.6 * near * near, decay: 0.12 });
+    this._tone(t, 70, 1.0, { gain: 1.3 * near, endFreq: 22 });
+    this._tone(t, 140, 0.35, { gain: 0.6 * near, type: 'triangle', endFreq: 40 });
+    // debris pattering down afterwards
+    for (let i = 0; i < 6; i++) this._noise(t + 0.3 + Math.random() * 0.9, 0.05, { type: 'bandpass', freq: 1800 + Math.random() * 2000, q: 2, gain: 0.12 * near, decay: 0.04 });
+  }
+
   play(name) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
@@ -99,6 +113,25 @@ export class Audio {
       case 'throw': this._noise(t, 0.35, { type: 'bandpass', freq: 900, q: 0.8, gain: 0.7, decay: 0.3, toReverb: true }); this._tone(t, 180, 0.3, { gain: 0.25, type: 'sawtooth', endFreq: 60 }); this._tone(t, 1600, 0.12, { gain: 0.06, endFreq: 3200 }); break;
       case 'deny': this._tone(t, 180, 0.12, { gain: 0.1, type: 'square', endFreq: 150 }); break;
       case 'equip': this._noise(t, 0.08, { type: 'bandpass', freq: 1200, q: 2, gain: 0.35, decay: 0.07 }); this._tone(t + 0.05, 1500, 0.04, { gain: 0.05, type: 'square' }); break;
+      // shotgun
+      case 'shotgun':
+        this._noise(t, 0.6, { freq: 3800, gain: 1.15, decay: 0.45, toReverb: true });
+        this._noise(t, 0.16, { type: 'highpass', freq: 1800, gain: 0.7, decay: 0.09 });
+        this._tone(t, 95, 0.4, { gain: 1.1, endFreq: 30 });
+        this._tone(t, 220, 0.12, { gain: 0.35, type: 'triangle', endFreq: 60 });
+        break;
+      case 'pumpBack': this._noise(t, 0.09, { type: 'bandpass', freq: 1500, q: 2.5, gain: 0.7, decay: 0.08 }); this._noise(t + 0.06, 0.05, { type: 'bandpass', freq: 2600, q: 5, gain: 0.55, decay: 0.04 }); break;
+      case 'pumpFwd': this._noise(t, 0.08, { type: 'bandpass', freq: 1900, q: 2.5, gain: 0.7, decay: 0.07 }); this._noise(t + 0.05, 0.05, { type: 'bandpass', freq: 3400, q: 6, gain: 0.6, decay: 0.035 }); this._tone(t + 0.05, 700, 0.05, { gain: 0.06, type: 'square' }); break;
+      case 'shellIn': this._noise(t, 0.07, { type: 'bandpass', freq: 1100, q: 3, gain: 0.6, decay: 0.06 }); this._tone(t + 0.03, 420, 0.06, { gain: 0.1, type: 'square', endFreq: 380 }); break;
+      case 'hull': { const f = 900 + Math.random() * 300; this._tone(t, f, 0.08, { gain: 0.06, type: 'triangle', endFreq: f * 0.8 }); this._noise(t, 0.05, { type: 'bandpass', freq: 1200, q: 2, gain: 0.15, decay: 0.04 }); break; }
+      // fists
+      case 'whoosh': this._noise(t, 0.16, { type: 'bandpass', freq: 700 + Math.random() * 300, q: 1.2, gain: 0.35, attack: 0.05, decay: 0.15 }); break;
+      case 'punch': this._noise(t, 0.1, { freq: 900, gain: 0.9, decay: 0.08 }); this._tone(t, 120, 0.09, { gain: 0.55, endFreq: 55 }); this._noise(t, 0.03, { type: 'highpass', freq: 3000, gain: 0.25, decay: 0.02 }); break;
+      case 'punchHard': this._noise(t, 0.14, { freq: 700, gain: 1.0, decay: 0.12, toReverb: true }); this._tone(t, 100, 0.14, { gain: 0.7, endFreq: 42 }); this._noise(t, 0.04, { type: 'highpass', freq: 2600, gain: 0.35, decay: 0.03 }); break;
+      // grenade
+      case 'pin': this._tone(t, 2600, 0.05, { gain: 0.08, type: 'triangle', endFreq: 2400 }); this._noise(t, 0.05, { type: 'bandpass', freq: 5000, q: 4, gain: 0.3, decay: 0.04 }); this._tone(t + 0.07, 3200, 0.1, { gain: 0.05, endFreq: 3100 }); break;
+      case 'spoon': this._tone(t, 1900, 0.18, { gain: 0.06, type: 'triangle', endFreq: 1700 }); this._tone(t + 0.02, 2900, 0.14, { gain: 0.04, endFreq: 2800 }); break;
+      case 'clink': { const f = 600 + Math.random() * 250; this._tone(t, f, 0.12, { gain: 0.12, type: 'triangle', endFreq: f * 0.85 }); this._noise(t, 0.05, { type: 'bandpass', freq: 1500, q: 2, gain: 0.3, decay: 0.04 }); break; }
       case 'timeSlow': this._tone(t, 520, 0.45, { gain: 0.14, endFreq: 130 }); break;
       case 'timeFast': this._tone(t, 180, 0.3, { gain: 0.12, endFreq: 720 }); break;
     }

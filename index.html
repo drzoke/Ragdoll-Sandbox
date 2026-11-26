@@ -31,11 +31,15 @@
     var tips = ['Press X to open the X-ray panel. It shows the bones, organs, blood and oxygen of the ragdoll you look at.',
       'Grab a ragdoll and swing it into the floor or a wall to break its bones.',
       'Press Z to slow time down and V to speed it up.',
-      'Press Tab to open the toolbox. Press 1 or 2 to switch tools.',
+      'Press Tab to open the toolbox. Press 1 to 5 to switch items.',
+      'Throw a grenade with left click, or lob it underhand with right click. It goes off after 3 seconds.',
+      'Shoot the ragdoll with the shotgun while it stands by a wall and the blood ends up on the wall too.',
+      'Punch the ragdoll with your fists to leave bruises. A hook to the head can knock it out.',
+      'Press Shift+X to switch the x-ray between the 3D view and a flat picture.',
       'Press Esc and open Settings to change the graphics and gore options.',
       'Press E on the red button to get a new ragdoll, and on the blue button to clean up the blood.'];
     document.getElementById('ld-tip').textContent = tips[(Math.random() * tips.length) | 0];
-    var expected = 38, seen = 0;
+    var expected = 47, seen = 0;
     window.__loader = { p: 0, set: function (p, text) {
       this.p = Math.max(this.p, p);
       document.getElementById('ld-fill').style.width = (this.p * 100).toFixed(1) + '%';
@@ -83,7 +87,7 @@
       <div class="xr-title">X-RAY · <span id="xr-name">No target</span></div>
       <div class="xr-state" id="xr-state">Look at a ragdoll</div>
     </div>
-    <div class="xr-key">X</div>
+    <div class="xr-key" title="Shift+X: Dynamic / Flat">X</div>
   </header>
   <div id="xr-view"><canvas id="ecg" width="300" height="46"></canvas></div>
   <section id="xr-vitals"></section>
@@ -117,6 +121,8 @@
       <div class="row"><span>Blood colour</span><div class="seg small" data-setting="bloodColor"><button data-v="red">Red</button><button data-v="purple">Purple</button></div></div>
       <h3>HUD</h3>
       <label class="row"><span>Show tool controls (left side)</span><input type="checkbox" data-setting="showControls"><i class="sw"></i></label>
+      <div class="row"><span>X-ray view</span><div class="seg small" data-setting="xrayMode"><button data-v="dynamic">Dynamic</button><button data-v="flat">Flat</button></div></div>
+      <p class="note">Dynamic shows a 3D x-ray that turns with the ragdoll. Flat shows a still front-view picture of the bones and organs with the same damage. Shift+X switches between them.</p>
     </section>
 
     <section class="tab hidden" id="tab-keys">
@@ -126,13 +132,16 @@
         <tr><td>Shift</td><td>Sprint</td></tr>
         <tr><td>Space</td><td>Jump</td></tr>
         <tr><td>C / Ctrl</td><td>Crouch (hold)</td></tr>
-        <tr><td>1, 2 or Q</td><td>Switch tool</td></tr>
-        <tr><td>Mouse wheel</td><td>Switch tool (or move what you're holding with Grab)</td></tr>
+        <tr><td>1 – 5 or Q</td><td>Switch item (Fists, M1911, Shotgun, Grenade, Grab)</td></tr>
+        <tr><td>Mouse wheel</td><td>Switch item (or move what you're holding with Grab)</td></tr>
+        <tr><td>Left / right click</td><td>Use the item (fire, punch, throw, grab)</td></tr>
+        <tr><td>R</td><td>Reload</td></tr>
         <tr><td>Tab</td><td>Open toolbox</td></tr>
         <tr><td>Z</td><td>Slow down time</td></tr>
         <tr><td>V</td><td>Speed up time</td></tr>
         <tr><td>E</td><td>Press button</td></tr>
         <tr><td>X</td><td>X-ray panel</td></tr>
+        <tr><td>Shift + X</td><td>Switch the x-ray between Dynamic (3D) and Flat</td></tr>
         <tr><td>H</td><td>Hide the tool controls list</td></tr>
         <tr><td>F3</td><td>Debug info</td></tr>
         <tr><td>Esc</td><td>Pause</td></tr>

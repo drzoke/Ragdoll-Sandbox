@@ -11,6 +11,7 @@ import { settings } from '../settings.js';
 const G = CONFIG.gore;
 const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Quaternion();
 const Zf = new THREE.Vector3(0, 0, 1);
+const _w1 = new THREE.Vector3(), _w2 = new THREE.Vector3(), _w3 = new THREE.Vector3();
 
 const MAT = {
   meat: new THREE.MeshStandardMaterial({ color: 0x6e0b0b, roughness: 0.35, metalness: 0.05 }),
@@ -32,6 +33,9 @@ export class Gore {
     this.particles = new Particles(scene, G.maxParticles, map.colliders);
     this.decals = new Decals(scene, G.maxPools, G.maxDecals);
     this.particles.onLand = (x, y, z, vol, size) => this.decals.addDrop(x, y, z, vol, size);
+    this.particles.onWall = (x, y, z, nx, ny, nz, vx, vy, vz, vol, size) =>
+      this.decals.addWallSplat(_w1.set(x, y, z), _w2.set(nx, ny, nz), _w3.set(vx, vy, vz), vol, size);
+    this.bruises = [];       // { ragdoll, part, mesh, local, sev, age, soot }
     this.gibs = [];
     this.woundVisuals = new Map(); // wound object -> {decal, stain}
     this.applyBloodColor();
@@ -78,6 +82,91 @@ export class Gore {
   bulletImpactWorld(point, normal) {
     this.decals.addHole(point, normal);
     this.dust(point, normal, 12);
+  }
+
+  /**
+   * A bullet that already went through someone hits a wall/floor: it carries blood with it and
+   * leaves a spatter around its hole.
+   */
+  bloodyImpactWorld(point, normal, dir, amount = 1) {
+    const tang = _v.copy(dir).addScaledVector(normal, -dir.dot(normal)).multiplyScalar(4);
+    if (Math.abs(normal.y) > 0.7) this.decals.addDrop(point.x, point.y + 0.001, point.z, 4 * amount, 0.03 * amount);
+    else this.decals.addWallSplat(point, normal, tang, 4 * amount, 0.026 * Math.sqrt(amount));
+    // a little spray bouncing off
+    const out = _n.copy(normal).multiplyScalar(0.8).addScaledVector(dir, 0.4);
+    this.spray(point.clone().addScaledVector(normal, 0.01), out, Math.round(6 * amount), { speed: 1.2, spread: 0.7, size: 0.012, volume: 0.5 });
+  }
+
+  /**
+   * Shotgun pellets punch a cone of blood out of the far side of the body part even when the
+   * pellet stops inside: this is what paints the wall behind someone.
+   */
+  pelletSpatter(ragdoll, partName, entryWorld, dir) {
+    const part = ragdoll.parts[partName];
+    const def = part.def;
+    const depth = def.shape === 'sphere' ? def.size[0] * 2 : Math.max(def.size[0], def.size[2]);
+    const back = _v.copy(entryWorld).addScaledVector(dir, depth * 0.9);
+    for (let i = 0; i < 9; i++) {
+      const s = rand(3.5, 8);
+      const vx = dir.x + rand(-0.32, 0.32), vy = dir.y + rand(-0.25, 0.35), vz = dir.z + rand(-0.32, 0.32);
+      const l = Math.hypot(vx, vy, vz) || 1;
+      this.particles.spawn(back.x + rand(-0.03, 0.03), back.y + rand(-0.03, 0.03), back.z + rand(-0.03, 0.03),
+        (vx / l) * s, (vy / l) * s, (vz / l) * s, { size: rand(0.012, 0.03), life: 2.5, color: this.bc(rand(0.3, 0.48)), volume: 1.6 });
+    }
+  }
+
+  // ---------------------------------------------------------------- bruises
+  /**
+   * Purple bruise where something blunt hit (punch, slam, blast). Nearby bruises merge and darken.
+   * severity 0..1. soot = black blast residue instead of a bruise.
+   */
+  addBruise(ragdoll, partName, worldPoint, severity, { soot = false } = {}) {
+    const part = ragdoll.parts[partName];
+    if (!part || part.removed || severity <= 0.02) return;
+    const g = part.group;
+    const inv = _q.copy(g.quaternion).invert();
+    const local = worldPoint.clone().sub(g.position).applyQuaternion(inv);
+    // outward normal from the part's shape (box: the face the point is closest to)
+    const def = part.def;
+    let n;
+    if (def.shape === 'sphere') n = local.lengthSq() > 1e-6 ? local.clone().normalize() : new THREE.Vector3(0, 0, 1);
+    else {
+      const hx = def.size[0] / 2, hy = def.size[1] / 2, hz = def.size[2] / 2;
+      const ax = Math.abs(local.x) / hx, ay = Math.abs(local.y) / hy, az = Math.abs(local.z) / hz;
+      n = ax >= ay && ax >= az ? new THREE.Vector3(Math.sign(local.x) || 1, 0, 0) : ay >= az ? new THREE.Vector3(0, Math.sign(local.y) || 1, 0) : new THREE.Vector3(0, 0, Math.sign(local.z) || 1);
+    }
+    // merge with a bruise close by on the same part
+    for (const b of this.bruises) {
+      if (b.ragdoll !== ragdoll || b.part !== partName || b.soot !== soot) continue;
+      if (b.local.distanceTo(local) < 0.05 + b.size * 0.3) {
+        b.sev = Math.min(1.6, b.sev + severity * 0.6);
+        b.size = Math.min(0.2, b.size + severity * 0.02);
+        b.mesh.scale.setScalar(b.size);
+        b.age = Math.min(b.age, 1);
+        return;
+      }
+    }
+    const surf = this.surfacePoint(part, local.clone().addScaledVector(n, -0.01), n);
+    const size = (soot ? 0.1 : 0.07) + severity * (soot ? 0.12 : 0.09);
+    const mesh = this.decals.addBruise(g, surf.point, surf.normal, size, soot);
+    const mine = this.bruises.filter((b) => b.ragdoll === ragdoll);
+    if (mine.length >= 28) { const old = mine[0]; old.mesh.parent?.remove(old.mesh); old.mesh.material.dispose(); this.bruises.splice(this.bruises.indexOf(old), 1); }
+    this.bruises.push({ ragdoll, part: partName, mesh, local: surf.point.clone(), sev: severity, size, age: 0, soot });
+  }
+
+  /** Bruises come up over a second or two, then darken from red-purple to deep purple. */
+  updateBruises(dt) {
+    const fresh = new THREE.Color(0.36, 0.05, 0.26), deep = new THREE.Color(0.16, 0.03, 0.26), old = new THREE.Color(0.13, 0.05, 0.19);
+    for (let i = this.bruises.length - 1; i >= 0; i--) {
+      const b = this.bruises[i];
+      if (b.ragdoll.removed) { this.bruises.splice(i, 1); continue; }
+      b.age += dt;
+      const m = b.mesh.material;
+      if (b.soot) { m.color.setRGB(0.02, 0.018, 0.016); m.opacity = Math.min(0.92, b.age * 6) * Math.min(1, 0.55 + b.sev * 0.5); continue; }
+      const k1 = Math.min(1, b.age / 10), k2 = Math.min(1, Math.max(0, b.age - 20) / 120);
+      m.color.copy(fresh).lerp(deep, k1).lerp(old, k2);
+      m.opacity = Math.min(1, b.age / 1.6) * Math.min(0.95, 0.35 + b.sev * 0.55);
+    }
   }
 
   /** Called for each body part a bullet passes through. */
@@ -381,6 +470,8 @@ export class Gore {
   update(dt, camera, viewportHeight) {
     this.particles.update(dt, camera, viewportHeight);
     this.decals.updatePools(dt);
+    this.decals.updateWalls(dt);
+    this.updateBruises(dt);
     for (const g of this.gibs) {
       g.mesh.position.copy(g.body.position);
       g.mesh.quaternion.copy(g.body.quaternion);

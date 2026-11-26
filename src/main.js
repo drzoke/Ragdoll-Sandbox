@@ -12,6 +12,11 @@ import { Gore } from './gore/gore.js';
 import { RagdollManager } from './ragdoll/manager.js';
 import { HUD } from './ui/hud.js';
 import { GrabTool } from './weapon/grab.js';
+import { Shotgun } from './weapon/shotgun.js';
+import { Fists } from './weapon/fists.js';
+import { GrenadeTool } from './weapon/grenade.js';
+import { Explosives } from './weapon/explosives.js';
+import { ARM_MATERIALS } from './weapon/arms.js';
 import { Toolbox } from './weapon/toolbox.js';
 import { Graphics } from './graphics.js';
 import { settings } from './settings.js';
@@ -55,7 +60,7 @@ const buttons = [
   new PressButton({ scene, physics, map, position: [-3, 0, 4], label: 'RESPAWN', sub: 'Press E · new ragdoll', color: 0xd8302a,
     onPress: () => { audio.play('button'); grab.release(); ragdolls.respawn(); pistol.refill(); hud.toast('Ragdoll respawned'); } }),
   new PressButton({ scene, physics, map, position: [-4.2, 0, 4], label: 'CLEAN UP', sub: 'Press E · blood & gibs', color: 0x2a7bd8,
-    onPress: () => { audio.play('button'); if (grab.held?.kind === 'gib') grab.release(); gore.clear(); ballistics.clear(); pistol.casings.clear(); hud.toast('Cleaned up'); } }),
+    onPress: () => { audio.play('button'); if (grab.held?.kind === 'gib') grab.release(); gore.clear(); ballistics.clear(); explosives.clear(); pistol.casings.clear(); shotgun.hulls.clear(); hud.toast('Cleaned up'); } }),
 ];
 
 await stage(0.8, 'Loading weapons');
@@ -65,14 +70,39 @@ const pistol = new Pistol({
   onFire: (o, d, muzzle) => ballistics.fire(o, d, muzzle),
 });
 const grab = new GrabTool({ mainScene: scene, mainCamera: camera, player, audio, environment: scene.environment, physics, ragdolls, gore, hud });
+const shotgun = new Shotgun({
+  mainScene: scene, mainCamera: camera, player, audio, environment: scene.environment,
+  onFire: (o, d, muzzle, opts) => ballistics.fire(o, d, muzzle, opts),
+});
+const explosives = new Explosives({ scene, physics, ragdolls, gore, map, audio, player, camera });
+explosives.ballistics = ballistics;
+ballistics.explosives = explosives;
+const fists = new Fists({ mainCamera: camera, player, audio, environment: scene.environment, gore, hud, targets: () => ballistics.targets() });
+const throwRay = new THREE.Raycaster();
+const grenade = new GrenadeTool({
+  mainCamera: camera, player, audio, environment: scene.environment,
+  onThrow: (pos, vel, spin, { right }) => {
+    // never spawn the grenade inside a wall you're standing against
+    const eye = camera.getWorldPosition(new THREE.Vector3());
+    const to = pos.clone().sub(eye);
+    throwRay.set(eye, to.clone().normalize()); throwRay.far = to.length() + 0.08;
+    const hit = throwRay.intersectObjects(map.solidMeshes, false)[0];
+    if (hit) pos.copy(hit.point).addScaledVector(to.normalize(), -0.1);
+    explosives.throwGrenade(pos, vel, spin);
+    explosives.spawnSpoon(pos.clone().add(new THREE.Vector3(0, 0.05, 0)), vel.clone().multiplyScalar(0.35).addScaledVector(right, 1.8).add(new THREE.Vector3(0, 2.2, 0)));
+  },
+});
 // Materials whose detail follows the graphics preset
 trackMaterials(RAGDOLL_GRAY); trackMaterials(RAGDOLL_BLACK, { grime: false });
-trackMaterials(pistol.gun.root); trackMaterials(grab.gadget.root);
+trackMaterials(pistol.gun.root); trackMaterials(grab.gadget.root); trackMaterials(shotgun.gun.root); trackMaterials(grenade.model.root);
+trackMaterials(explosives.template.root);
+trackMaterials(ARM_MATERIALS.skin, { grime: false }); trackMaterials(ARM_MATERIALS.sleeve); trackMaterials(ARM_MATERIALS.cuff);
 for (const m of map.solidMeshes) trackMaterials(m);
 for (const b of buttons) for (const m of b.meshes) trackMaterials(m, { grime: false });
 graphics.apply(settings.get('graphics'));
 grab.setQuality(settings.get('graphics'));
-const toolbox = new Toolbox([pistol, grab], { audio, onOpenChange: (open) => onToolboxChange(open) });
+const tools = [fists, pistol, shotgun, grenade, grab];
+const toolbox = new Toolbox(tools, { audio, start: 1, onOpenChange: (open) => onToolboxChange(open) });
 
 await stage(0.86, 'Spawning ragdoll');
 ragdolls.spawn();
@@ -204,8 +234,7 @@ function resize() {
   const w = innerWidth, h = innerHeight;
   graphics.resize();
   camera.aspect = w / h; camera.updateProjectionMatrix();
-  pistol.resize(w / h);
-  grab.resize(w / h);
+  for (const t of tools) t.resize(w / h);
 }
 addEventListener('resize', resize);
 resize();
@@ -257,7 +286,15 @@ function frame() {
   last = now;
   fps += (1 / Math.max(dt, 1e-4) - fps) * 0.05;
 
-  if (input.wasPressed('KeyX')) hud.toggleXray();
+  if (input.wasPressed('KeyX')) {
+    // Shift+X switches the x-ray between the 3D view and the flat diagram
+    if (input.isDown('ShiftLeft') || input.isDown('ShiftRight')) {
+      const m = settings.get('xrayMode') === 'flat' ? 'dynamic' : 'flat';
+      settings.set('xrayMode', m);
+      hud.toast(`X-ray: ${m === 'flat' ? 'Flat' : 'Dynamic'}`);
+      if (!hud.xrayOpen) hud.toggleXray();
+    } else hud.toggleXray();
+  }
   if (input.wasPressed('F3')) debugOn = !debugOn;
   if (input.wasPressed('KeyZ')) setTimeIndex(timeIndex - 1);
   if (input.wasPressed('KeyV')) setTimeIndex(timeIndex + 1);
@@ -269,6 +306,7 @@ function frame() {
   physics.update(dt, ts);
   ragdolls.update(wdt);
   ballistics.update(wdt, dt);
+  explosives.update(wdt);
   gore.update(wdt, camera, renderer.domElement.height);
   map.update(player.pos);
   updateInteraction(dt);
@@ -282,7 +320,7 @@ function frame() {
       `pos ${player.pos.x.toFixed(2)} ${player.pos.y.toFixed(2)} ${player.pos.z.toFixed(2)}  speed ${player.speed2D.toFixed(2)}`,
       `particles ${gore.particles.alive.size}  pools ${gore.decals.pools.length}  gibs ${gore.gibs.length}`,
       r0 ? `${r0.name}: ${r0.brain.state} / ${r0.brain.activity}  pelvis y ${r0.pelvis.position.y.toFixed(2)}` : '',
-      `pistol ${pistol.state}  mag ${pistol.mag}  chamber ${pistol.chambered}  bullets ${ballistics.bullets.length}`,
+      `pistol ${pistol.state}  mag ${pistol.mag}  chamber ${pistol.chambered}  shotgun ${shotgun.state} ${shotgun.tube}+${shotgun.chamber}  bullets ${ballistics.bullets.length}  grenades ${explosives.live.length}`,
       `time ${world.timeScale}x  gfx ${graphics.level}  tool ${toolbox.active.name}${grab.held ? ' holding ' + (grab.held.part || 'gib') : ''}`,
     ].join('\n') : null,
   });
@@ -294,7 +332,7 @@ function frame() {
 
 // ---- finish loading: compile shaders, then hand over to the menu ----
 await stage(0.92, 'Compiling shaders');
-try { renderer.compile(scene, camera); renderer.compile(pistol.scene, pistol.camera); renderer.compile(grab.scene, grab.camera); } catch { /* optional */ }
+try { renderer.compile(scene, camera); for (const t of tools) renderer.compile(t.scene, t.camera); } catch { /* optional */ }
 await stage(1, 'Ready');
 frame();
 setTimeout(() => {
@@ -305,4 +343,4 @@ setTimeout(() => {
 }, 250);
 
 // Exposed for debugging from the console and for automated tests.
-window.game = { debug, THREE, scene, camera, renderer, physics, player, pistol, grab, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };
+window.game = { debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };

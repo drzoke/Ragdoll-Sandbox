@@ -60,6 +60,16 @@ export class Brain {
     }
   }
 
+  /** Punched: a stagger step back; falls only when knocked down. */
+  onPunch(partName, dir, knockdown) {
+    this.lastHitDir.copy(dir).setY(0).normalize();
+    this.lastHitPart = partName;
+    if (this.state !== 'stand') return;
+    this.stagger = 0.4;
+    this.root.addScaledVector(this.lastHitDir, knockdown ? 0.3 : 0.12);
+    if (knockdown) this.fall();
+  }
+
   fall() { this.setState('fallen'); this.nextDecision = rand(1.2, 2.2); }
 
   get h() { return this.r.health; }

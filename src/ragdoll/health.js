@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { ANATOMY } from './anatomy.js';
 import { PARTS, PART_BY_NAME, descendants } from './skeleton.js';
 import { CONFIG } from '../config.js';
@@ -261,6 +262,93 @@ export class Health {
     return out;
   }
 
+  /**
+   * A punch. power ~0.5 (jab) .. 1 (hook). Mostly pain and bruising; head shots can knock the
+   * ragdoll out or bloody the nose, and a hard hook can crack a bone.
+   * Returns { knockout, fractured, bleed }.
+   */
+  punch(partName, power) {
+    const out = { knockout: false, fractured: false, bleed: false };
+    const part = this.parts[partName];
+    if (!part.attached && partName !== 'head') { part.tissue = Math.max(0, part.tissue - 6 * power); return out; }
+    part.tissue = Math.max(0, part.tissue - 7 * power);
+    this.rawPain += 7 + 12 * power;
+    this.adrenaline = Math.min(1, this.adrenaline + 0.12);
+    this.lastHitTime = this.time; this.lastHitPart = partName;
+    if (partName === 'head') {
+      this.consciousness = Math.max(0, this.consciousness - (8 + 26 * power) * (0.7 + Math.random() * 0.6));
+      if (this.consciousness < 30 && !this.knockedOut) { this.knockedOut = true; out.knockout = true; this.log('Knocked out', 'warn'); }
+      else this.log(power > 0.8 ? 'Hook to the head' : 'Punched in the face', 'warn');
+      if (Math.random() < 0.25 + power * 0.35) {
+        out.bleed = true;
+        if (!this.noseBleed) {
+          this.noseBleed = true;
+          this.wounds.push({ part: 'head', pos: new THREE.Vector3(0, -0.02, 0.1), normal: new THREE.Vector3(0, -0.3, 1).normalize(), rate: 0.9, arterial: false, exit: false, age: 0 });
+          this.log('Bloody nose', 'warn');
+        }
+      }
+    } else this.log(`Punched (${part.label.toLowerCase()})`, 'info');
+    if (power > 0.8 && Math.random() < 0.12) {
+      for (const b of ANATOMY[partName].bones) {
+        const bone = this.bones[b.id];
+        if (bone.fractured || b.spine) continue;
+        bone.integrity = Math.max(0, bone.integrity - 50);
+        if (bone.integrity < 55) { bone.fractured = true; out.fractured = true; this.rawPain += 20; this.log(`${bone.name} fractured`); }
+        break;
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Explosion blast on one body part. k = 0..1 strength at that part (1 = right on top of it).
+   * Returns { fractured, sever, explode } for the caller to act on (if dismemberment is on).
+   */
+  blast(partName, k, { dismember = true } = {}) {
+    const out = { fractured: false, sever: false, explode: false };
+    const part = this.parts[partName];
+    const anat = ANATOMY[partName];
+    const dmg = 150 * k * k + 30 * k;
+    part.tissue = Math.max(0, part.tissue - dmg);
+    if (part.tissue <= 0) part.overkill = (part.overkill || 0) + dmg * 0.5;
+    if (part.attached) {
+      this.rawPain += 30 * k;
+      this.adrenaline = Math.min(1, this.adrenaline + 0.5 * k);
+      this.shock = Math.min(100, this.shock + 22 * k);
+    }
+    for (const b of anat.bones) {
+      if (Math.random() > Math.min(0.95, k * 1.5 - 0.15)) continue;
+      const bone = this.bones[b.id];
+      if (bone.integrity <= 0) continue;
+      bone.integrity = Math.max(0, bone.integrity - (40 + 70 * k) * (0.7 + Math.random() * 0.6));
+      if (!bone.fractured && bone.integrity < 55) { bone.fractured = true; out.fractured = true; this.log(`${bone.name} fractured (blast)`); }
+      if (b.spine && !this.paralyzed && bone.integrity < 35) { this.paralyzed = true; this.log('Spinal cord damaged: legs paralysed'); }
+    }
+    // the pressure wave hurts air-filled and soft organs most
+    for (const og of anat.organs) {
+      const organ = this.organs[og.id];
+      const mul = /lung/.test(og.id) ? 1.4 : og.id === 'intestines' ? 1.1 : 0.8;
+      const was = organ.hp;
+      organ.hp = Math.max(0, organ.hp - 85 * k * k * mul * (0.75 + Math.random() * 0.5));
+      if (was > 0 && organ.hp <= 0) this.log(`${organ.name} destroyed (blast)`);
+      else if (was - organ.hp > 15) this.log(`${organ.name} damaged (blast)`, 'warn');
+    }
+    if (partName === 'head' && part.attached) {
+      this.consciousness = Math.max(0, this.consciousness - 110 * k);
+      this.organs.brain.hp = Math.max(0, this.organs.brain.hp - 60 * k * k);
+    }
+    if (k > 0.2 && part.attached) this.wounds.push({ part: partName, pos: null, blunt: true, normal: null, rate: 0.6 + 5 * k * k, arterial: k > 0.65, exit: false, age: 0 });
+    if (dismember && !part.exploded) {
+      const isTorso = partName === 'chest' || partName === 'abdomen' || partName === 'pelvis';
+      const roll = Math.random();
+      if (isTorso) { if (k > 0.88 && roll < 0.6) out.explode = true; }
+      else if (partName === 'head') { if (k > 0.82 && roll < 0.7) out.explode = true; }
+      else if (k > 0.8 && roll < 0.55) out.explode = true;
+      else if (k > 0.55 && part.attached && roll < (k - 0.45) * 1.4) out.sever = true;
+    }
+    return out;
+  }
+
   // ---------------------------------------------------------------- Capabilities
   partCap(name) {
     const p = this.parts[name];
@@ -377,6 +465,7 @@ export class Health {
     this.consciousness += (cTarget - this.consciousness) * clamp(dt * rate);
     if (was >= 25 && this.consciousness < 25 && this.alive) this.log('Lost consciousness', 'warn');
     if (was < 25 && this.consciousness >= 25 && this.alive) this.log('Regained consciousness', 'info');
+    if (this.knockedOut && this.consciousness > 60) this.knockedOut = false;
   }
 
   // ---------------------------------------------------------------- Readouts

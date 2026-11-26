@@ -16,7 +16,7 @@ export class HUD {
   constructor(scene) {
     this.el = {
       crosshair: $('crosshair'), hit: $('hitmarker'), prompt: $('prompt'), ammo: $('ammo'),
-      mag: $('ammo-mag'), chamber: $('ammo-chamber'), reserve: $('ammo-reserve'), debug: $('debug'), toast: $('toast'),
+      mag: $('ammo-mag'), chamber: $('ammo-chamber'), reserve: $('ammo-reserve'), ammoName: $('ammo-name'), debug: $('debug'), toast: $('toast'),
       time: $('timescale'), toolStatus: $('toolstatus'), tsTitle: $('ts-title'), tsSub: $('ts-sub'),
       xray: $('xray'), xrName: $('xr-name'), xrState: $('xr-state'), vitals: $('xr-vitals'), bones: $('xr-bones'), organs: $('xr-organs'), log: $('xr-log'), ecg: $('ecg'),
     };
@@ -64,23 +64,31 @@ export class HUD {
   }
 
   update(dt, { pistol, tool, player, target, viewerPos, debugText }) {
-    // Crosshair spread
+    // Crosshair: each tool can widen it (shotgun pattern, recoil) or hide it while aiming
     const isPistol = tool === pistol;
-    const spread = 6 + clamp(player.speed2D / CONFIG.player.walkSpeed) * 10 + (player.onGround ? 0 : 10) + (isPistol ? Math.max(0, 0.11 - pistol.fireT) * 120 : 0);
+    const ch = isPistol ? { gap: Math.max(0, 0.11 - pistol.fireT) * 120, ads: pistol.ads > 0.6 } : tool.crosshair?.() || { grab: true };
+    const spread = 6 + clamp(player.speed2D / CONFIG.player.walkSpeed) * 10 + (player.onGround ? 0 : 10) + (ch.gap || 0);
     this.el.crosshair.style.setProperty('--gap', `${spread.toFixed(1)}px`);
-    this.el.crosshair.classList.toggle('ads', isPistol && pistol.ads > 0.6);
-    this.el.crosshair.classList.toggle('grab', !isPistol);
-    this.el.crosshair.classList.toggle('holding', !isPistol && !!tool.held);
+    this.el.crosshair.classList.toggle('ads', !!ch.ads);
+    this.el.crosshair.classList.toggle('grab', !!ch.grab);
+    this.el.crosshair.classList.toggle('dot', !!ch.dot);
+    this.el.crosshair.classList.toggle('holding', !!ch.grab && !!tool.held);
 
-    // Ammo / tool status
-    this.el.ammo.classList.toggle('hidden', !isPistol);
-    const st = isPistol ? null : tool.status();
+    // Ammo (guns) or a status line (other tools)
+    const am = isPistol
+      ? { mag: pistol.mag, chamber: pistol.chambered ? '+1' : '+0', reserve: CONFIG.weapon.infiniteReserve ? '∞' : pistol.reserve, name: 'M1911 · .45 ACP', low: pistol.mag <= 2 }
+      : tool.ammo?.() || null;
+    this.el.ammo.classList.toggle('hidden', !am);
+    const st = am ? null : tool.status();
     this.el.toolStatus.classList.toggle('hidden', !st);
     if (st) { this.el.tsTitle.textContent = st.title; this.el.tsSub.textContent = st.sub; }
-    this.el.mag.textContent = pistol.mag;
-    this.el.chamber.textContent = pistol.chambered ? '+1' : '+0';
-    this.el.reserve.textContent = CONFIG.weapon.infiniteReserve ? '∞' : pistol.reserve;
-    this.el.ammo.classList.toggle('low', pistol.mag <= 2);
+    if (am) {
+      this.el.mag.textContent = am.mag;
+      this.el.chamber.textContent = am.chamber;
+      this.el.reserve.textContent = am.reserve;
+      if (this.el.ammoName.textContent !== am.name) this.el.ammoName.textContent = am.name;
+      this.el.ammo.classList.toggle('low', !!am.low);
+    }
 
     if (this.toastTimer > 0) { this.toastTimer -= dt; if (this.toastTimer <= 0) this.el.toast.classList.remove('show'); }
     if (debugText !== null) { this.el.debug.classList.add('show'); this.el.debug.textContent = debugText; }

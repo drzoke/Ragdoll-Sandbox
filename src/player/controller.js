@@ -185,6 +185,9 @@ export class PlayerController {
     this.shake = Math.min(1, this.shake + 0.35);
   }
 
+  /** Big screen shake (explosions). amount ~0..2 */
+  addShake(amount) { this.blastShake = Math.min(2.2, (this.blastShake || 0) + amount); }
+
   updateCamera(dt, strafe) {
     const hs = Math.hypot(this.vel.x, this.vel.z);
     this.speed2D = hs;
@@ -202,14 +205,18 @@ export class PlayerController {
     const ry = this.recoilYaw.update(dt);
     this.shake = Math.max(0, this.shake - dt * 4);
     const sh = this.shake * this.shake * 0.004;
+    this.blastShake = Math.max(0, (this.blastShake || 0) - dt * 1.6);
+    const bs = this.blastShake * this.blastShake * 0.02;
+    this.shakeT = (this.shakeT || 0) + dt;
+    const bsx = (Math.sin(this.shakeT * 61) + Math.sin(this.shakeT * 37.7)) * bs, bsy = (Math.sin(this.shakeT * 53.3 + 1) + Math.sin(this.shakeT * 29.1)) * bs;
 
     const cam = this.camera;
     _v.set(bobX, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
     cam.position.set(this.pos.x + _v.x, this.pos.y + this.eyeHeight + bobY + land, this.pos.z + _v.z);
     cam.rotation.set(
-      this.pitch + rp + (Math.random() - 0.5) * sh,
-      this.yaw + ry + (Math.random() - 0.5) * sh,
-      this.tilt + bobRoll, 'YXZ'
+      this.pitch + rp + (Math.random() - 0.5) * sh + bsx,
+      this.yaw + ry + (Math.random() - 0.5) * sh + bsy,
+      this.tilt + bobRoll + bsx * 0.6, 'YXZ'
     );
 
     const fovTarget = P.fov + (this.sprinting ? P.sprintFovBoost : 0);

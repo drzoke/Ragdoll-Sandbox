@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
+import { BlockArms, anchorPos } from './arms.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CONFIG } from '../config.js';
 import { clamp, damp, lerp, Spring, viewmodelToWorld, drawOffset } from '../core/util.js';
@@ -210,6 +211,10 @@ export class GrabTool {
     this.gadget.root.scale.setScalar(0.5);
     this.gadget.root.position.set(0, 0, 0.04);
     this.pivot.add(this.gadget.root);
+    // blocky hands: right on the grip, left under the front of the body
+    this.arms = new BlockArms(this.scene);
+    const anchor = (x, y, z) => { const o = new THREE.Object3D(); o.position.set(x, y, z); this.gadget.root.add(o); return o; };
+    this.anchors = { grip: anchor(0, -0.112, 0.05), front: anchor(-0.05, -0.085, -0.14) };
     this.vmLight = new THREE.PointLight(0xcfe6ff, 0, 0.6, 2);
     this.vmLight.position.set(0, 0, -0.3);
     this.gadget.root.add(this.vmLight);
@@ -560,6 +565,10 @@ export class GrabTool {
     const strain = this.held ? Math.sin(this.time * 31) * 0.0008 * (1 + this.dist / 6) : 0;
     this.pivot.position.set(0.16 + this.swayX + bobX + strain + dr.x, -0.165 + this.swayY + bobY + idle + dr.y - p.crouch * 0.01, -0.44 + k * 0.004 + dr.z);
     this.pivot.rotation.set(-k * 0.01 + this.swayY * 1.5 + dr.rx, 0.05 + this.swayX * 1.5, this.swayX * 1.2 + dr.rz, 'YXZ');
+    this.pivot.updateMatrixWorld(true);
+    this.arms.setOn('right', this.anchors.grip, { roll: 0.15 });
+    // the support hand squeezes a little harder while holding something heavy
+    this.arms.setOn('left', this.anchors.front, { roll: -0.3, fist: !!this.held });
   }
 
   dispose() { this.release(); }

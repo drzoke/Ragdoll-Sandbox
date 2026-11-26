@@ -49,23 +49,40 @@ export class Ballistics {
       ...this.map.solidMeshes,
       ...this.buttons.flatMap((b) => b.meshes),
       ...this.gore.gibs.map((g) => g.mesh),
+      ...(this.explosives ? this.explosives.meshes() : []),
     ];
   }
 
-  /** Fire a bullet from the eye along dir. visualFrom = muzzle position for the tracer start. */
-  fire(origin, dir, visualFrom) {
+  /**
+   * Fire a projectile from origin along dir. visualFrom = muzzle position for the tracer start.
+   * opts: energy (0..1, penetration and damage), impulse (push on the body part), size (visual
+   * scale), speed (m/s), pellet (shotgun pellet: blows blood out of the far side), shot (shared
+   * object for all pellets of one shot), range, life (s).
+   */
+  fire(origin, dir, visualFrom, opts = {}) {
+    const { energy = 1, impulse = W.impulse, size = 1, speed = this.speed, pellet = false, shot = null, range = W.range, life = 1.5, glowSize = 0.075 } = opts;
     const tracer = new THREE.Mesh(tracerGeo, tracerMat);
     tracer.frustumCulled = false;
     const slug = new THREE.Mesh(slugGeo, slugMat);
     tracer.add(slug);
     const glow = new THREE.Sprite(glowMat);
-    glow.scale.setScalar(0.075);
+    glow.scale.setScalar(glowSize);
     slug.add(glow);
+    tracer.userData.width = size;
     this.scene.add(tracer);
     this.bullets.push({
-      pos: origin.clone(), vel: dir.clone().multiplyScalar(this.speed), energy: 1, traveled: 0, age: 0,
+      pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), energy, impulse, pellet, shot, range, life, size, traveled: 0, age: 0, bloody: 0,
       skip: new Set(), offset: visualFrom ? visualFrom.clone().sub(origin) : new THREE.Vector3(), tracer, slug, dead: false,
     });
+  }
+
+  /** Avoid stacking a dozen identical sounds in one frame (shotgun pellets, shrapnel). */
+  sound(name) {
+    const now = performance.now();
+    this.soundT = this.soundT || {};
+    if (now - (this.soundT[name] || 0) < 25) return;
+    this.soundT[name] = now;
+    this.audio.play(name);
   }
 
   /** dt = world (time-scaled) seconds, realDt = wall-clock seconds (for streak length). */
@@ -93,7 +110,7 @@ export class Ballistics {
         b.pos.copy(exit);
         b.vel.multiplyScalar(Math.sqrt(Math.max(0.05, b.energy)));
       }
-      if (b.age > 1.5 || b.traveled > W.range) b.dead = true;
+      if (b.age > b.life || b.traveled > b.range) b.dead = true;
       this.updateVisual(b, realDt);
     }
     for (const b of this.bullets) if (b.dead) this.scene.remove(b.tracer);
@@ -110,7 +127,8 @@ export class Ballistics {
     const len = Math.min(b.traveled + 0.01, Math.max(0.14, speed * Math.max(b.lastDt, 1 / 2000) * 0.7), 3);
     b.tracer.position.copy(head);
     b.tracer.quaternion.setFromUnitVectors(UP, _dir.copy(b.vel).normalize());
-    b.tracer.scale.set(1, len, 1);
+    const wd = b.size;
+    b.tracer.scale.set(wd, len, wd);
     b.slug.scale.set(1, 1 / len, 1); // keep the bullet itself real-size
     b.slug.position.set(0, 0, 0);
   }
@@ -129,10 +147,20 @@ export class Ballistics {
       const localEntry = hit.point.clone().sub(part.group.position).applyQuaternion(inv);
       const localDir = dir.clone().applyQuaternion(inv);
       const res = r.health.bulletHit(partName, localEntry, localDir, energy, { dismember: settings.get('dismemberment') });
-      r.hitImpulse(partName, hit.point, dir, W.impulse * energy);
+      r.hitImpulse(partName, hit.point, dir, b.impulse * energy);
       this.gore.bulletWound(r, res, hit.point, dir);
-      this.audio.play(res.bones.length ? 'bone' : 'flesh');
-      this.hud.hitMarker(res.organs.length > 0 || res.vessels.length > 0);
+      if (b.pellet) {
+        this.gore.pelletSpatter(r, partName, hit.point, dir);
+        // several pellets into the body at once knock the ragdoll off its feet
+        if (b.shot) {
+          const n = (b.shot.hits.get(r) || 0) + 1;
+          b.shot.hits.set(r, n);
+          if (n === 4 && r.brain.state === 'stand') r.brain.fall();
+        }
+      }
+      b.bloody = 1;
+      this.sound(res.bones.length ? 'bone' : 'flesh');
+      if (b.size >= 0.9 || b.pellet) this.hud.hitMarker(res.organs.length > 0 || res.vessels.length > 0);
       this.lastTarget = r;
       if (res.explode) {
         this.gore.explodePart(r, partName, dir);
@@ -149,16 +177,24 @@ export class Ballistics {
       const exitLocal = localEntry.clone().addScaledVector(localDir, res.exitT + 0.005);
       return exitLocal.applyQuaternion(part.group.quaternion).add(part.group.position);
     }
-    if (ud.button) { ud.button.press(); this.audio.play('concrete'); return null; }
+    if (ud.grenade) {
+      // a bullet sets off a live grenade
+      this.sound('clink');
+      this.explosives?.detonate(ud.grenade);
+      return null;
+    }
+    if (ud.button) { ud.button.press(); this.sound('concrete'); return null; }
     if (ud.gib) {
       const gb = ud.gib.body;
       gb.applyImpulse(new CANNON.Vec3(dir.x * 1.5, dir.y * 1.5 + 0.5, dir.z * 1.5));
       this.gore.spray(hit.point, dir, 10, { speed: 2 });
+      b.bloody = 1;
       return null;
     }
     const n = hit.face ? hit.face.normal.clone().transformDirection(obj.matrixWorld) : new THREE.Vector3(0, 1, 0);
     this.gore.bulletImpactWorld(hit.point, n);
-    this.audio.play('concrete');
+    if (b.bloody) this.gore.bloodyImpactWorld(hit.point, n, dir, b.pellet ? 0.6 : 1);
+    this.sound('concrete');
     return null;
   }
 

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { ANATOMY } from '../ragdoll/anatomy.js';
+import { PARTS } from '../ragdoll/skeleton.js';
+import { settings } from '../settings.js';
 import { clamp, lerp } from '../core/util.js';
 
 export const XRAY_LAYER = 1;
@@ -30,6 +32,23 @@ function capsuleBetween(a, b, r, mat) {
   m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize());
   return m;
 }
+
+// Damage colours shared by both x-ray modes.
+const C_BONE = new THREE.Color(0xe8f2ff), C_WARN = new THREE.Color(0xffb020), C_BAD = new THREE.Color(0xff2a1a);
+function boneColor(bone, flash, out = new THREE.Color()) {
+  const k = 1 - bone.integrity / 100;
+  out.copy(C_BONE).lerp(C_WARN, clamp(k * 1.8)).lerp(C_BAD, clamp((k - 0.45) * 2));
+  if (bone.fractured) out.lerp(C_BAD, flash * 0.6);
+  return out;
+}
+function organColor(organ, base, flash, out = new THREE.Color()) {
+  const k = organ.hp / organ.maxHp;
+  out.copy(base).multiplyScalar(lerp(0.35, 1, k));
+  if (k < 1) out.lerp(new THREE.Color(0xff1010), (1 - k) * (0.4 + 0.5 * flash));
+  if (k <= 0) out.setRGB(0.25, 0.05, 0.05).lerp(new THREE.Color(0xff0000), flash * 0.5);
+  return out;
+}
+const css = (c, a = 1) => `rgba(${Math.round(clamp(c.r) * 255)},${Math.round(clamp(c.g) * 255)},${Math.round(clamp(c.b) * 255)},${a})`;
 
 /**
  * Builds x-ray visuals (on a separate render layer) for a ragdoll and keeps their colours in sync
@@ -100,21 +119,12 @@ export class XRayRig {
   update(time) {
     const h = this.r.health;
     const flash = 0.5 + 0.5 * Math.sin(time * 10);
+    const c = new THREE.Color();
     for (const [id, b] of Object.entries(this.boneMeshes)) {
-      const bone = h.bones[id];
-      const k = 1 - bone.integrity / 100;
-      const c = new THREE.Color(0xe8f2ff).lerp(new THREE.Color(0xffb020), clamp(k * 1.8)).lerp(new THREE.Color(0xff2a1a), clamp((k - 0.45) * 2));
-      if (bone.fractured) c.lerp(new THREE.Color(0xff2a1a), flash * 0.6);
+      boneColor(h.bones[id], flash, c);
       for (const m of b.mat) m.color.copy(c);
     }
-    for (const [id, o] of Object.entries(this.organMeshes)) {
-      const organ = h.organs[id];
-      const k = organ.hp / organ.maxHp;
-      const c = o.base.clone().multiplyScalar(lerp(0.35, 1, k));
-      if (k < 1) c.lerp(new THREE.Color(0xff1010), (1 - k) * (0.4 + 0.5 * flash));
-      if (k <= 0) c.setRGB(0.25, 0.05, 0.05).lerp(new THREE.Color(0xff0000), flash * 0.5);
-      o.mat.color.copy(c);
-    }
+    for (const [id, o] of Object.entries(this.organMeshes)) o.mat.color.copy(organColor(h.organs[id], o.base, flash, c));
     for (const [id, v] of Object.entries(this.vesselMeshes)) {
       const cut = h.vessels[id].cut;
       v.mat.color.setHex(cut ? 0xff2020 : 0xa02838);
@@ -138,6 +148,178 @@ export class XRayRig {
   }
 }
 
+/**
+ * Flat x-ray: a still, front-on diagram of the skeleton and organs (like an x-ray film), drawn
+ * on a 2D canvas from the anatomy data. Shows the same damage as the 3D view.
+ */
+export class FlatXRay {
+  constructor(container) {
+    this.canvas = document.createElement('canvas');
+    this.canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:none;';
+    container.prepend(this.canvas);
+    this.ctx = this.canvas.getContext('2d');
+    this.timer = 0;
+    this.base = {};
+    for (const a of Object.values(ANATOMY)) for (const o of a.organs) this.base[o.id] = new THREE.Color(o.color);
+  }
+
+  show(on) { this.canvas.style.display = on ? 'block' : 'none'; }
+
+  draw(ragdoll, dt) {
+    this.timer -= dt;
+    if (this.timer > 0) return;
+    this.timer = 0.1; // ~10 redraws a second is plenty for a still diagram
+    const cv = this.canvas, dpr = Math.min(devicePixelRatio, 2);
+    const W = Math.max(1, Math.round(cv.clientWidth * dpr)), H = Math.max(1, Math.round(cv.clientHeight * dpr));
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    const g = this.ctx;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, W, H);
+    // film background + grid
+    const bg = g.createRadialGradient(W / 2, H * 0.45, 0, W / 2, H * 0.45, Math.max(W, H) * 0.7);
+    bg.addColorStop(0, 'rgba(18,40,64,0.92)'); bg.addColorStop(1, 'rgba(4,10,18,0.92)');
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(90,170,255,0.07)'; g.lineWidth = 1;
+    const step = 16 * dpr;
+    for (let x = (W / 2) % step; x < W; x += step) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke(); }
+    for (let y = H % step; y < H; y += step) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }
+    g.fillStyle = 'rgba(150,200,255,0.55)'; g.font = `${10 * dpr}px system-ui, sans-serif`;
+    g.textAlign = 'left'; g.fillText('FLAT · FRONT', 8 * dpr, 14 * dpr);
+    if (!ragdoll) { g.textAlign = 'center'; g.fillText('No target', W / 2, H / 2); return; }
+    g.textAlign = 'center';
+    g.fillText('R', W * 0.1, H * 0.5); g.fillText('L', W * 0.9, H * 0.5); // the ragdoll's own right / left
+
+    const h = ragdoll.health;
+    const time = performance.now() / 1000;
+    const flash = 0.5 + 0.5 * Math.sin(time * 10);
+    // fit 1.9 m of body into the panel (the ECG strip covers the bottom)
+    const s = Math.min(H * 0.8 / 1.9, W * 0.92 / 1.1);
+    const cx = W / 2, floor = H * 0.86;
+    const X = (x) => cx + x * s, Y = (y) => floor - y * s;
+    const col = new THREE.Color();
+
+    // silhouette (tinted by tissue damage), severed parts dashed
+    for (const def of PARTS) {
+      const hp = h.parts[def.name];
+      const gone = !hp.attached || ragdoll.parts[def.name].removed;
+      const k = hp.tissue / hp.maxTissue;
+      col.setRGB(0.31, 0.7, 1).lerp(new THREE.Color(1, 0.55, 0.15), clamp((1 - k) * 1.5)).lerp(new THREE.Color(1, 0.15, 0.1), clamp((0.4 - k) * 2.5));
+      g.setLineDash(gone ? [4 * dpr, 4 * dpr] : []);
+      g.strokeStyle = gone ? 'rgba(255,90,80,0.55)' : css(col, 0.75);
+      g.fillStyle = gone ? 'rgba(255,60,50,0.05)' : css(col, 0.09);
+      g.lineWidth = 1.3 * dpr;
+      g.beginPath();
+      if (def.shape === 'sphere') g.arc(X(def.pos[0]), Y(def.pos[1]), def.size[0] * s, 0, Math.PI * 2);
+      else roundRect(g, X(def.pos[0] - def.size[0] / 2), Y(def.pos[1] + def.size[1] / 2), def.size[0] * s, def.size[1] * s, Math.min(def.size[0], def.size[1]) * s * 0.3);
+      g.fill(); g.stroke();
+      if (hp.exploded) {
+        g.setLineDash([]); g.strokeStyle = 'rgba(255,80,60,0.8)'; g.lineWidth = 2 * dpr;
+        const r = (def.shape === 'sphere' ? def.size[0] : Math.min(def.size[0], def.size[1]) / 2) * s * 0.7;
+        g.beginPath(); g.moveTo(X(def.pos[0]) - r, Y(def.pos[1]) - r); g.lineTo(X(def.pos[0]) + r, Y(def.pos[1]) + r);
+        g.moveTo(X(def.pos[0]) + r, Y(def.pos[1]) - r); g.lineTo(X(def.pos[0]) - r, Y(def.pos[1]) + r); g.stroke();
+      }
+    }
+    g.setLineDash([]);
+
+    // organs (behind the bones)
+    for (const def of PARTS) {
+      const a = ANATOMY[def.name], gone = !h.parts[def.name].attached;
+      for (const og of a.organs) {
+        const organ = h.organs[og.id];
+        organColor(organ, this.base[og.id], flash, col);
+        g.fillStyle = css(col, gone ? 0.25 : 0.85);
+        g.beginPath();
+        g.ellipse(X(def.pos[0] + og.c[0]), Y(def.pos[1] + og.c[1]), og.r[0] * s, og.r[1] * s, 0, 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+    // vessels
+    g.lineCap = 'round';
+    for (const def of PARTS) {
+      for (const v of ANATOMY[def.name].vessels) {
+        const cut = h.vessels[v.id].cut;
+        g.strokeStyle = cut ? `rgba(255,40,40,${0.5 + 0.5 * flash})` : 'rgba(170,40,60,0.75)';
+        g.lineWidth = Math.max(1, v.r * 1.4 * s);
+        g.beginPath(); g.moveTo(X(def.pos[0] + v.a[0]), Y(def.pos[1] + v.a[1])); g.lineTo(X(def.pos[0] + v.b[0]), Y(def.pos[1] + v.b[1])); g.stroke();
+      }
+    }
+    // bones
+    for (const def of PARTS) {
+      const px = def.pos[0], py = def.pos[1], gone = !h.parts[def.name].attached;
+      for (const b of ANATOMY[def.name].bones) {
+        const bone = h.bones[b.id];
+        boneColor(bone, flash, col);
+        const alpha = gone ? 0.35 : 0.92;
+        g.strokeStyle = css(col, alpha); g.fillStyle = css(col, alpha * 0.35);
+        if (!b.shell) {
+          g.lineWidth = Math.max(1.5, b.r * 2 * s);
+          // foot bones run front-to-back: from the front they show as a short block
+          const ax = px + b.a[0], ay = py + (b.a[1] || 0), bx = px + b.b[0], by = py + (b.b[1] || 0);
+          if (Math.abs(ay - by) < 1e-3 && Math.abs(ax - bx) < 1e-3) { g.beginPath(); g.ellipse(X(ax), Y(ay), b.r * s * 1.6, b.r * s, 0, 0, Math.PI * 2); g.fill(); g.stroke(); }
+          else { g.beginPath(); g.moveTo(X(ax), Y(ay)); g.lineTo(X(bx), Y(by)); g.stroke(); }
+          if (bone.fractured) crack(g, X((ax + bx) / 2), Y((ay + by) / 2), b.r * s * 2.4, flash, dpr);
+        } else if (b.id === 'skull') {
+          g.lineWidth = 2 * dpr;
+          g.beginPath(); g.ellipse(X(px), Y(py + 0.01), 0.088 * s, 0.1 * s, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+          for (const sx of [-1, 1]) { g.beginPath(); g.ellipse(X(px + sx * 0.032), Y(py + 0.012), 0.019 * s, 0.016 * s, 0, 0, Math.PI * 2); g.stroke(); }
+          g.beginPath(); g.moveTo(X(px), Y(py - 0.005)); g.lineTo(X(px - 0.008), Y(py - 0.025)); g.lineTo(X(px + 0.008), Y(py - 0.025)); g.closePath(); g.stroke();
+          g.beginPath(); g.ellipse(X(px), Y(py - 0.06), 0.05 * s, 0.032 * s, 0, 0, Math.PI); g.stroke();
+          if (bone.fractured) crack(g, X(px + 0.04), Y(py + 0.05), 0.05 * s, flash, dpr);
+        } else if (b.id === 'ribs') {
+          g.lineWidth = Math.max(1.2, 0.012 * s);
+          g.beginPath(); g.moveTo(X(px), Y(py + 0.12)); g.lineTo(X(px), Y(py - 0.05)); g.stroke(); // sternum
+          for (let i = 0; i < 6; i++) {
+            const w = 0.15 - Math.abs(i - 2) * 0.008, y = py + 0.1 - i * 0.04;
+            for (const sx of [-1, 1]) {
+              g.beginPath(); g.moveTo(X(px + sx * 0.012), Y(y));
+              g.bezierCurveTo(X(px + sx * w * 0.7), Y(y + 0.02), X(px + sx * w * 1.05), Y(y - 0.01), X(px + sx * w * 0.95), Y(y - 0.045));
+              g.stroke();
+            }
+          }
+          for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(X(px + sx * 0.02), Y(py + 0.125)); g.lineTo(X(px + sx * 0.17), Y(py + 0.13)); g.stroke(); } // clavicles
+          if (bone.fractured) crack(g, X(px - 0.1), Y(py + 0.02), 0.06 * s, flash, dpr);
+        } else if (b.id === 'pelvisBone') {
+          g.lineWidth = Math.max(1.5, 0.016 * s);
+          for (const sx of [-1, 1]) {
+            g.beginPath(); g.moveTo(X(px + sx * 0.02), Y(py - 0.05));
+            g.bezierCurveTo(X(px + sx * 0.06), Y(py + 0.09), X(px + sx * 0.15), Y(py + 0.07), X(px + sx * 0.13), Y(py - 0.01));
+            g.lineTo(X(px + sx * 0.08), Y(py - 0.07)); g.stroke();
+          }
+          g.beginPath(); g.ellipse(X(px), Y(py), 0.025 * s, 0.04 * s, 0, 0, Math.PI * 2); g.fill(); g.stroke();
+          if (bone.fractured) crack(g, X(px + 0.09), Y(py + 0.03), 0.05 * s, flash, dpr);
+        }
+      }
+    }
+    // wound markers
+    for (const w of h.wounds) {
+      const def = PARTS.find((p) => p.name === w.part);
+      if (!def || w.rate <= 0.001 && !w.stump) continue;
+      let x = def.pos[0], y = def.pos[1], r = 3.2 * dpr;
+      if (w.stump) { const child = PARTS.find((p) => p.joint?.name === w.joint); x = child.joint.pivot[0]; y = child.joint.pivot[1]; r = 6 * dpr; }
+      else if (w.pos) { x += w.pos.x; y += w.pos.y; }
+      else r = (w.burst ? 0.09 : 0.05) * s;
+      g.fillStyle = `rgba(255,50,30,${0.35 + 0.65 * clamp(w.rate / 3) * flash + 0.2})`;
+      g.strokeStyle = 'rgba(255,90,60,0.9)'; g.lineWidth = 1 * dpr;
+      g.beginPath(); g.arc(X(x), Y(y), r, 0, Math.PI * 2);
+      if (w.pos || w.stump) g.fill(); else g.stroke();
+    }
+  }
+}
+
+function roundRect(g, x, y, w, h, r) {
+  g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r); g.lineTo(x + w, y + h - r);
+  g.quadraticCurveTo(x + w, y + h, x + w - r, y + h); g.lineTo(x + r, y + h); g.quadraticCurveTo(x, y + h, x, y + h - r);
+  g.lineTo(x, y + r); g.quadraticCurveTo(x, y, x + r, y); g.closePath();
+}
+
+/** Zig-zag fracture mark across a bone. */
+function crack(g, x, y, size, flash, dpr) {
+  g.save();
+  g.strokeStyle = `rgba(255,${60 + 80 * flash},40,0.95)`; g.lineWidth = 1.6 * dpr;
+  g.beginPath(); g.moveTo(x - size * 0.6, y - size * 0.3); g.lineTo(x - size * 0.15, y + size * 0.15); g.lineTo(x + size * 0.1, y - size * 0.2); g.lineTo(x + size * 0.6, y + size * 0.3);
+  g.stroke(); g.restore();
+}
+
 /** Small dedicated renderer drawing the targeted ragdoll's x-ray into the HUD panel. */
 export class XRayView {
   constructor(container, scene) {
@@ -148,6 +330,8 @@ export class XRayView {
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
     container.prepend(this.renderer.domElement);
+    this.flat = new FlatXRay(container);
+    this.mode = '';
     this.camera = new THREE.PerspectiveCamera(30, 1, 0.1, 50);
     this.camera.layers.set(XRAY_LAYER);
     this.camPos = new THREE.Vector3(); this.look = new THREE.Vector3();
@@ -156,6 +340,14 @@ export class XRayView {
   }
 
   render(ragdoll, viewerPos, dt) {
+    const mode = settings.get('xrayMode') === 'flat' ? 'flat' : 'dynamic';
+    if (mode !== this.mode) {
+      this.mode = mode;
+      this.flat.show(mode === 'flat');
+      this.renderer.domElement.style.display = mode === 'flat' ? 'none' : 'block';
+      this.flat.timer = 0; this.first = true;
+    }
+    if (mode === 'flat') { this.flat.draw(ragdoll, dt); return; }
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (w !== this.w || h !== this.h) { this.w = w; this.h = h; this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
     if (!ragdoll) { this.renderer.clear(); return; }

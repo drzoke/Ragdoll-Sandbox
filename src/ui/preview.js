@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildM1911, muzzleFlashTexture } from '../weapon/model1911.js';
 import { buildGadget } from '../weapon/grab.js';
+import { buildRemington870 } from '../weapon/model870.js';
+import { buildGrenade } from '../weapon/grenadeModel.js';
+import { ARM_MATERIALS } from '../weapon/arms.js';
 import { trackMaterials } from '../materials.js';
 
 const W = 240, H = 180;
@@ -56,6 +59,9 @@ export class ItemPreview {
     this.items = {};
     this.items.M1911 = this.makePistol();
     this.items.Grab = this.makeGrab();
+    this.items.Fists = this.makeFists();
+    this.items['Remington 870'] = this.makeShotgun();
+    this.items.Grenade = this.makeGrenade();
     this.level = 'medium';
   }
 
@@ -121,6 +127,78 @@ export class ItemPreview {
         burst.material.opacity = b * 0.9;
         burst.scale.set(1, 1, 0.3 + b);
         return b;
+      },
+    };
+  }
+
+  makeFists() {
+    const root = new THREE.Group();
+    const fists = [];
+    for (const sx of [-1, 1]) {
+      const arm = new THREE.Group();
+      const hand = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.08), ARM_MATERIALS.skin);
+      const fore = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.062, 0.16).translate(0, 0, 0.12), ARM_MATERIALS.skin);
+      const cuff = new THREE.Mesh(new THREE.BoxGeometry(0.074, 0.074, 0.03).translate(0, 0, 0.215), ARM_MATERIALS.cuff);
+      const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.12).translate(0, 0, 0.29), ARM_MATERIALS.sleeve);
+      // knuckle lines
+      for (let i = 0; i < 3; i++) {
+        const k = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.003, 0.004), new THREE.MeshStandardMaterial({ color: 0xb98a63, roughness: 0.8 }));
+        k.position.set(0, -0.018 + i * 0.018, -0.0405); arm.add(k);
+      }
+      arm.add(hand, fore, cuff, sleeve);
+      arm.position.set(sx * 0.07, sx * 0.012, 0);
+      arm.rotation.set(0.1, sx * 0.18, 0);
+      root.add(arm);
+      fists.push(arm);
+    }
+    root.rotation.y = Math.PI / 2;
+    const f = this.frame(root, 0.95);
+    return {
+      ...f, effects: (t, on) => {
+        // alternating jabs
+        fists.forEach((a, i) => {
+          const ph = on ? ((t * 1.2 + i * 0.5) % 1) : 1;
+          const k = ph < 0.18 ? Math.sin(ph / 0.18 * Math.PI) : 0;
+          a.position.z = -k * 0.09;
+        });
+        return 0;
+      },
+    };
+  }
+
+  makeShotgun() {
+    const gun = buildRemington870();
+    gun.root.rotation.y = Math.PI / 2;
+    const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: muzzleFlashTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    flash.scale.setScalar(0.2); flash.position.set(0, 0, -0.06); flash.visible = false;
+    const f = this.frame(gun.root, 1.15);
+    gun.muzzle.add(flash);
+    return {
+      ...f, effects: (t, on) => {
+        // fire, then rack the pump
+        const ft = on ? (t % 2.6) : 9;
+        flash.visible = ft < 0.06;
+        flash.material.rotation = t * 5;
+        const pr = ft > 0.3 && ft < 0.75 ? Math.sin(((ft - 0.3) / 0.45) * Math.PI) : 0;
+        gun.pump.position.z = pr * 0.085;
+        return ft < 0.08 ? 1 : 0;
+      },
+    };
+  }
+
+  makeGrenade() {
+    const gr = buildGrenade();
+    const f = this.frame(gr.root, 0.62);
+    const pin0 = gr.pinGroup.position.clone(), spoonRot = gr.spoon.rotation.z;
+    return {
+      ...f, effects: (t, on) => {
+        // the pin slides out and back, the ring swings
+        const ph = on ? (t % 3) : 9;
+        const out = ph > 1.2 && ph < 2.2 ? Math.sin(((ph - 1.2) / 1.0) * Math.PI) : 0;
+        gr.pinGroup.position.set(pin0.x - out * 0.03, pin0.y, pin0.z);
+        gr.ring.rotation.z = 0.5 + Math.sin(t * 3) * 0.25 * (on ? 1 : 0);
+        gr.spoon.rotation.z = spoonRot - out * 0.12;
+        return 0;
       },
     };
   }

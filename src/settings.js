@@ -2,11 +2,12 @@
 const KEY = 'ragdoll-sandbox-settings-v1';
 
 const DEFAULTS = {
-  graphics: 'medium',      // 'low' | 'medium' | 'high'
+  graphics: 'medium',      // 'low' | 'medium' | 'high' | 'ultra'
   showOrgans: true,        // exposed organs + organ gibs
   bloodColor: 'red',       // 'red' | 'purple'
   dismemberment: true,     // severing + exploding body parts
   showControls: true,      // weapon controls panel on the left
+  xrayMode: 'dynamic',     // 'dynamic' (3D) | 'flat' (still front-view diagram)
 };
 
 // Hues (multiplied by a brightness): particle = shader colour, pool/decal/meat = linear material colours.

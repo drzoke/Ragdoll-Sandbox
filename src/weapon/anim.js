@@ -49,7 +49,7 @@ export const CLIPS = {
   reload: new Clip('reload', 1.7, {
     pos: [[0, Z3], [0.22, R_POS], [1.12, R_POS], [1.18, R_BUMP], [1.3, R_POS], [1.62, Z3]],
     rot: [[0, Z3], [0.22, R_ROT], [1.12, R_ROT], [1.18, R_ROTB], [1.3, R_ROT], [1.62, Z3]],
-    mag: [[0, 0], [0.3, 0], [0.44, 1.4], [0.45, 2.6], [0.75, 2.6], [1.05, 0.3], [1.15, 0]],
+    mag: [[0, 0], [0.3, 0], [0.44, 1.4], [0.45, 3.6], [0.6, 3.6], [0.75, 2.6], [1.05, 0.3], [1.15, 0]],
   }, [[0.3, 'magOut'], [1.15, 'magIn'], [1.55, 'done']]),
 
   reloadEmpty: new Clip('reloadEmpty', 2.05, {
@@ -57,7 +57,7 @@ export const CLIPS = {
       [1.45, [-0.03, 0.04, 0.02]], [1.52, [-0.03, 0.055, 0.035]], [1.95, Z3]],
     rot: [[0, Z3], [0.22, R_ROT], [1.12, R_ROT], [1.18, R_ROTB], [1.3, [0.15, 0.1, -0.3]],
       [1.45, [0.1, 0.08, -0.2]], [1.52, [0.25, 0.08, -0.22]], [1.95, Z3]],
-    mag: [[0, 0], [0.3, 0], [0.44, 1.4], [0.45, 2.6], [0.75, 2.6], [1.05, 0.3], [1.15, 0]],
+    mag: [[0, 0], [0.3, 0], [0.44, 1.4], [0.45, 3.6], [0.6, 3.6], [0.75, 2.6], [1.05, 0.3], [1.15, 0]],
     slide: [[0, 1], [1.46, 1], [1.5, 0]],
   }, [[0.3, 'magOut'], [1.15, 'magIn'], [1.47, 'slideRelease'], [1.9, 'done']]),
 
@@ -67,3 +67,9 @@ export const CLIPS = {
     slide: [[0, 0], [2.25, 0], [2.4, 0.38], [2.7, 0.38], [2.8, 0]],
   }, [[2.26, 'slideBack'], [2.8, 'click']]),
 };
+
+// Left-hand tracks (named targets, see arms.js sampleHand): the support hand lets go, fetches a
+// fresh magazine from the belt, pushes it home and racks or releases the slide.
+CLIPS.reload.lh = [[0, 'support'], [0.24, 'support'], [0.5, 'pouch'], [0.74, 'mag'], [1.16, 'mag'], [1.45, 'support']];
+CLIPS.reloadEmpty.lh = [[0, 'support'], [0.24, 'support'], [0.5, 'pouch'], [0.74, 'mag'], [1.16, 'mag'], [1.32, 'slide'], [1.5, 'slide'], [1.85, 'support']];
+CLIPS.inspect.lh = [[0, 'support'], [0.3, 'support'], [0.62, 'low'], [1.9, 'low'], [2.18, 'slide'], [2.82, 'slide'], [3.45, 'support']];

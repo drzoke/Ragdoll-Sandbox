@@ -52,6 +52,7 @@ export class RagdollManager {
     let loudest = 0, cracked = false;
     for (const imp of r.impacts) {
       const res = r.health.impact(imp.part, imp.speed);
+      if (imp.speed > 5) this.gore.addBruise(r, imp.part, imp.point, Math.min(1, (imp.speed - 4.5) / 9));
       if (res.fractured) {
         cracked = true;
         this.gore.impactBlood(imp.point, imp.speed);

@@ -5,10 +5,16 @@ const $ = (id) => document.getElementById(id);
 
 // Pictures of the items (used on the hotbar, and in the toolbox on the Low preset).
 const ICONS = {
+  Fists: `<svg viewBox="0 0 64 40"><rect x="10" y="12" width="18" height="18" rx="2" fill="currentColor"/><rect x="2" y="16" width="10" height="10" fill="currentColor" opacity=".75"/><rect x="36" y="10" width="18" height="18" rx="2" fill="currentColor"/><rect x="52" y="14" width="10" height="10" fill="currentColor" opacity=".75"/><path d="M14 17h10M14 21h10M40 15h10M40 19h10" stroke="#000" stroke-opacity=".35" stroke-width="1.5"/></svg>`,
+  'Remington 870': `<svg viewBox="0 0 64 40"><path d="M2 15h30v-2h4v2h26v3H36v2h12v3H34l-2 2H22l-3 3-12 6-4-4 9-6v-3H2z" fill="currentColor"/><rect x="38" y="19" width="12" height="5" rx="1" fill="currentColor" opacity=".7"/></svg>`,
+  Grenade: `<svg viewBox="0 0 64 40"><circle cx="30" cy="24" r="13" fill="currentColor"/><rect x="25" y="6" width="10" height="7" fill="currentColor"/><path d="M35 8h6l3 6-2 12" stroke="currentColor" stroke-width="3" fill="none"/><circle cx="20" cy="10" r="5" stroke="currentColor" stroke-width="2" fill="none"/></svg>`,
   M1911: `<svg viewBox="0 0 64 40"><path d="M4 9h50l3 3v6H31l-2 3h-6l-3 15H8l5-18H4z" fill="currentColor"/></svg>`,
   Grab: `<svg viewBox="0 0 64 40"><path d="M8 13h30v12H20l-3 11h-8l3-11H8z" fill="currentColor"/><rect x="38" y="15" width="8" height="8" fill="currentColor"/><path d="M46 12l10-4v4l-7 3zM46 26l10 4v-4l-7-3z" fill="currentColor"/><circle cx="52" cy="19" r="3" fill="#fff"/></svg>`,
 };
 const INFO = {
+  Fists: { category: 'weapons', type: 'Melee', text: 'Your bare fists. Left click throws quick jabs, right click a hard hook. Punches leave bruises and can knock the ragdoll down or out.' },
+  'Remington 870': { category: 'weapons', type: 'Shotgun', text: 'Pump-action 12 gauge: 8 pellets per shot, 6 shells in the tube plus one in the chamber. It pumps itself after each shot. R loads one shell at a time; fire to stop loading.' },
+  Grenade: { category: 'weapons', type: 'Explosive', text: 'Green ball grenade. Left click pulls the pin and throws it, right click lobs it underhand. It goes off 3 seconds after it leaves your hand and leaves black scorch marks. Shoot one to set it off early.' },
   M1911: { category: 'weapons', type: 'Pistol', text: 'Semi-automatic .45 pistol with 7 rounds plus one in the chamber. Left click fires, right click aims, R reloads.' },
   Grab: { category: 'tools', type: 'Tool', text: 'Picks up ragdolls and loose body parts from a distance. Right click grabs or drops, left click throws. Swing them into things to break bones.' },
 };
@@ -20,10 +26,10 @@ const CATEGORIES = [['all', 'All'], ['weapons', 'Weapons'], ['tools', 'Tools']];
  * wheel switch tools. Also handles the holster → draw animation and the controls panel.
  */
 export class Toolbox {
-  constructor(tools, { audio, onOpenChange }) {
+  constructor(tools, { audio, onOpenChange, start = 0 }) {
     this.tools = tools;
     this.audio = audio;
-    this.index = 0;
+    this.index = start;
     this.pending = -1;
     this.isOpen = false;
     this.onOpenChange = onOpenChange;
@@ -36,7 +42,7 @@ export class Toolbox {
 
     this.el = { hotbar: $('hotbar'), box: $('toolbox'), grid: $('toolbox-grid'), cats: $('toolbox-cats'), info: $('tb-info'),
       controls: $('controls'), ctlList: $('controls-list'), ctlTitle: $('controls-title') };
-    this.el.hotbar.innerHTML = tools.map((t, i) => `<div class="slot" data-i="${i}"><span class="key">${i + 1}</span>${ICONS[t.name] || ''}<span class="nm">${t.name}</span></div>`).join('');
+    this.el.hotbar.innerHTML = tools.map((t, i) => `<div class="slot" data-i="${i}"><span class="key">${i + 1}</span>${ICONS[t.name] || ''}<span class="nm">${t.short || t.name}</span></div>`).join('');
     this.el.grid.innerHTML = tools.map((t, i) => `<button class="tool-card" data-i="${i}" data-cat="${INFO[t.name]?.category || 'tools'}">
         <span class="key">${i + 1}</span>
         <div class="pv"><canvas width="240" height="180"></canvas><div class="icon">${ICONS[t.name] || ''}</div></div>
@@ -149,7 +155,7 @@ export class Toolbox {
 
   renderControls() {
     const t = this.active;
-    const rows = [...t.controls, ['1, 2 or Q', 'Switch tool'], ['Tab', 'Open toolbox'], ['Z', 'Slow down time'], ['V', 'Speed up time'], ['H', 'Hide this list']];
+    const rows = [...t.controls.filter(([k]) => k), [`1–${this.tools.length} or Q`, 'Switch item'], ['Tab', 'Open toolbox'], ['Z', 'Slow down time'], ['V', 'Speed up time'], ['H', 'Hide this list']];
     const key = t.name + JSON.stringify(rows);
     if (key === this.controlsKey) return;
     this.controlsKey = key;

@@ -18,6 +18,7 @@ export class Particles {
     for (let i = max - 1; i >= 0; i--) this.free.push(i);
     this.alive = new Set();
     this.onLand = null;
+    this.onWall = null;  // (x, y, z, nx, ny, nz, vx, vy, vz, volume, size) blood hitting a wall
     this.spawnScale = 1; // < 1 on the Low graphics preset // (x, y, z, volume, size) for blood
 
     const g = new THREE.BufferGeometry();
@@ -82,6 +83,38 @@ export class Particles {
     return h;
   }
 
+  /**
+   * Blood droplet flying into the side (or underside) of a wall / prop: works out which face it
+   * crossed from where it was last frame, and reports a wall splat with that face's normal.
+   */
+  hitSide(i3, dt) {
+    const P = this.pos, V = this.vel;
+    const x = P[i3], y = P[i3 + 1], z = P[i3 + 2];
+    for (const c of this.colliders) {
+      if (x <= c.min.x || x >= c.max.x || y <= c.min.y || y >= c.max.y - 0.004 || z <= c.min.z || z >= c.max.z) continue;
+      const px = x - V[i3] * dt, py = y - V[i3 + 1] * dt, pz = z - V[i3 + 2] * dt;
+      // the axis whose slab it entered last (largest entry time) is the face it hit
+      let best = -1, bt = -Infinity, nx = 0, ny = 0, nz = 0;
+      const axes = [[px, V[i3], c.min.x, c.max.x], [py, V[i3 + 1], c.min.y, c.max.y], [pz, V[i3 + 2], c.min.z, c.max.z]];
+      for (let a = 0; a < 3; a++) {
+        const [p0, v, lo, hi] = axes[a];
+        if (p0 > lo && p0 < hi) continue;
+        if (Math.abs(v) < 1e-6) continue;
+        const t = p0 <= lo ? (lo - p0) / v : (hi - p0) / v;
+        if (t > bt) { bt = t; best = a; }
+      }
+      if (best < 0) return false; // started inside (spawned in a wall): just let it go
+      if (best === 1 && V[i3 + 1] < 0) return false; // landing on top: handled as a floor pool
+      const [p0, , lo, hi] = axes[best];
+      const face = p0 <= lo ? lo : hi, sign = p0 <= lo ? -1 : 1;
+      if (best === 0) nx = sign; else if (best === 1) ny = sign; else nz = sign;
+      const hx = best === 0 ? face : x, hy = best === 1 ? face : y, hz = best === 2 ? face : z;
+      this.onWall(hx, hy, hz, nx, ny, nz, V[i3], V[i3 + 1], V[i3 + 2], this.vol[i3 / 3], this.size[i3 / 3]);
+      return true;
+    }
+    return false;
+  }
+
   update(dt, camera, viewportHeight) {
     this.material.uniforms.scale.value = viewportHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
     const P = this.pos, V = this.vel;
@@ -93,6 +126,7 @@ export class Particles {
       P[i3] += V[i3] * dt; P[i3 + 1] += V[i3 + 1] * dt; P[i3 + 2] += V[i3 + 2] * dt;
       this.life[i] -= dt;
       if (k === 1) this.alpha[i] = Math.min(0.55, this.life[i]) ;
+      if (k === 0 && this.onWall && this.hitSide(i3, dt)) { this.kill(i); continue; }
       if (k === 0 && V[i3 + 1] < 0) {
         const h = this.surfaceHeight(P[i3], P[i3 + 1], P[i3 + 2]);
         if (P[i3 + 1] <= h + 0.003) {
