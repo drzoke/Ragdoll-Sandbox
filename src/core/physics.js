@@ -66,17 +66,32 @@ export class Physics {
     return body;
   }
 
-  update(dt) {
-    const h = CONFIG.physics.step;
-    this.accumulator += Math.min(dt, 0.1);
+  /**
+   * Advance the simulation. In slow motion the step gets smaller instead of rarer, so motion
+   * stays smooth at any time scale (cost per rendered frame stays about the same).
+   */
+  update(dt, timeScale = 1) {
+    const base = CONFIG.physics.step;
+    const h = base * Math.min(1, timeScale);
+    this.syncConstraintStiffness(h);
+    this.accumulator += Math.min(dt, 0.1) * timeScale;
+    const max = Math.ceil(CONFIG.physics.maxSubSteps * Math.max(1, timeScale));
     let n = 0;
-    while (this.accumulator >= h && n < CONFIG.physics.maxSubSteps) {
+    while (this.accumulator >= h && n < max) {
       for (const fn of this.stepCallbacks) fn(h);
       this.world.step(h);
       this.accumulator -= h;
       this.time += h;
       n++;
     }
-    if (n === CONFIG.physics.maxSubSteps) this.accumulator = 0;
+    if (n === max) this.accumulator = 0;
+  }
+
+  /** Joint equations keep spook params tuned for one step size; re-tune when it changes. */
+  syncConstraintStiffness(h) {
+    const count = this.world.constraints.length;
+    if (h === this._lastH && count === this._lastCount) return;
+    this._lastH = h; this._lastCount = count;
+    for (const c of this.world.constraints) for (const eq of c.equations) eq.setSpookParams(1e7, 4, h * 2);
   }
 }

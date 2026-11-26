@@ -52,6 +52,26 @@ export class Audio {
     o.start(t); o.stop(t + dur + 0.02);
   }
 
+  /** Continuous hum (grab tool beam). Call every frame with a 0..1 level and a pitch factor. */
+  hum(level, pitch = 1) {
+    if (!this.ctx) return;
+    if (!this.humNodes) {
+      const ctx = this.ctx;
+      const o1 = ctx.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 110;
+      const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = 223;
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 700;
+      const g = ctx.createGain(); g.gain.value = 0;
+      o1.connect(f); o2.connect(f); f.connect(g).connect(this.master);
+      o1.start(); o2.start();
+      this.humNodes = { o1, o2, f, g };
+    }
+    const { o1, o2, g, f } = this.humNodes, t = this.ctx.currentTime;
+    g.gain.setTargetAtTime(level * 0.06, t, 0.05);
+    o1.frequency.setTargetAtTime(110 * pitch, t, 0.05);
+    o2.frequency.setTargetAtTime(223 * pitch, t, 0.05);
+    f.frequency.setTargetAtTime(500 + 600 * pitch, t, 0.05);
+  }
+
   play(name) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
@@ -73,6 +93,14 @@ export class Audio {
       case 'splat': this._noise(t, 0.15, { freq: 500, gain: 0.35, decay: 0.12 }); break;
       case 'button': this._tone(t, 520, 0.08, { gain: 0.15, type: 'square', endFreq: 500 }); this._tone(t + 0.09, 780, 0.12, { gain: 0.12, type: 'square', endFreq: 770 }); break;
       case 'thud': this._noise(t, 0.12, { freq: 300, gain: 0.5, decay: 0.1 }); break;
+      // grab tool
+      case 'grab': this._tone(t, 220, 0.25, { gain: 0.12, type: 'sawtooth', endFreq: 880 }); this._tone(t, 1320, 0.18, { gain: 0.05, endFreq: 1760 }); this._noise(t, 0.1, { type: 'highpass', freq: 3000, gain: 0.25, decay: 0.08 }); break;
+      case 'drop': this._tone(t, 660, 0.2, { gain: 0.08, type: 'sawtooth', endFreq: 160 }); break;
+      case 'throw': this._noise(t, 0.35, { type: 'bandpass', freq: 900, q: 0.8, gain: 0.7, decay: 0.3, toReverb: true }); this._tone(t, 180, 0.3, { gain: 0.25, type: 'sawtooth', endFreq: 60 }); this._tone(t, 1600, 0.12, { gain: 0.06, endFreq: 3200 }); break;
+      case 'deny': this._tone(t, 180, 0.12, { gain: 0.1, type: 'square', endFreq: 150 }); break;
+      case 'equip': this._noise(t, 0.08, { type: 'bandpass', freq: 1200, q: 2, gain: 0.35, decay: 0.07 }); this._tone(t + 0.05, 1500, 0.04, { gain: 0.05, type: 'square' }); break;
+      case 'timeSlow': this._tone(t, 520, 0.45, { gain: 0.14, endFreq: 130 }); break;
+      case 'timeFast': this._tone(t, 180, 0.3, { gain: 0.12, endFreq: 720 }); break;
     }
   }
 }

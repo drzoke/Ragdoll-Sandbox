@@ -71,3 +71,18 @@ export function canvasTexture(w, h, draw, { repeat = false, srgb = true } = {}) 
   t.anisotropy = 8;
   return t;
 }
+
+/**
+ * Viewmodels are drawn by their own camera (different FOV) on top of the world. This maps a point
+ * from viewmodel space to the world position that appears at the same spot on screen.
+ */
+const _ndc = new THREE.Vector3(), _cp = new THREE.Vector3(), _fw = new THREE.Vector3();
+export function viewmodelToWorld(local, vmCamera, mainCamera, out = new THREE.Vector3()) {
+  const depth = -local.z;
+  _ndc.copy(local).project(vmCamera);
+  mainCamera.getWorldPosition(_cp);
+  mainCamera.getWorldDirection(_fw);
+  out.set(_ndc.x, _ndc.y, 0.5).unproject(mainCamera).sub(_cp).normalize();
+  const t = depth / Math.max(0.05, out.dot(_fw));
+  return out.multiplyScalar(t).add(_cp);
+}

@@ -80,7 +80,7 @@ export class Health {
    * @param energy 0..1 remaining bullet energy
    * @returns result describing what happened (used for gore and for continuing the bullet)
    */
-  bulletHit(partName, o, d, energy) {
+  bulletHit(partName, o, d, energy, { dismember = true } = {}) {
     const def = PART_BY_NAME[partName];
     const part = this.parts[partName];
     const anat = ANATOMY[partName];
@@ -135,6 +135,7 @@ export class Health {
 
     // Tissue
     const tissueDmg = (20 + path * 60) * energy * (0.85 + Math.random() * 0.3);
+    if (part.tissue <= 0) part.overkill = (part.overkill || 0) + tissueDmg; // already destroyed tissue
     part.tissue = Math.max(0, part.tissue - tissueDmg);
     part.hits++;
     res.bleed += 0.5 + path * 2;
@@ -158,10 +159,14 @@ export class Health {
         this.log(partName === 'head' ? 'Skull breached' : `${part.label} torn open: organs exposed`);
       }
     }
-    const canSever = !isTorso;
     const boneGone = anat.bones.some((b) => this.bones[b.id].integrity <= 0);
-    if (canSever && part.attached && (part.tissue <= 0 || (boneGone && frac < 0.35))) {
-      res.dismember = true;
+    if (dismember && !part.exploded) {
+      // Head pops once its tissue is gone; torso parts and severed limbs burst after more punishment;
+      // attached limbs get severed first.
+      if (partName === 'head') { if (part.tissue <= 0 || (boneGone && frac < 0.35)) res.explode = true; }
+      else if (isTorso && (part.overkill || 0) > 45) res.explode = true;
+      else if (!isTorso && !part.attached && part.tissue <= 0 && (part.overkill || 0) > 15) res.explode = true;
+      else if (!isTorso && part.attached && (part.tissue <= 0 || (boneGone && frac < 0.35))) res.dismember = true;
     }
 
     const wound = { part: partName, pos: o.clone().addScaledVector(d, t0), normal: d.clone().negate(), rate: res.bleed, arterial: res.vessels.length > 0 || res.organs.some((x) => x.id === 'heart'), exit: false, age: 0 };
@@ -177,27 +182,83 @@ export class Health {
   }
 
   /** Detach a limb (and everything below it). Returns the list of parts that came off. */
-  sever(partName) {
+  sever(partName, silent = false) {
     const list = [partName, ...descendants(partName)];
     for (const n of list) this.parts[n].attached = false;
     const p = this.parts[partName];
-    this.log(`${p.label} severed`);
+    if (!silent) this.log(`${p.label} severed`);
     this.rawPain += partName === 'head' ? 0 : 45;
     const big = partName.startsWith('thigh') ? 26 : partName.startsWith('upperArm') ? 12 : partName === 'head' ? 40 : 6;
     // Stump wound on the parent: heavy arterial bleed.
     this.wounds.push({ part: PART_BY_NAME[partName].parent, pos: null, joint: PART_BY_NAME[partName].joint.name, normal: null, rate: big, arterial: true, stump: true, exit: false, age: 0 });
-    if (partName === 'head') { this.decapitated = true; this.log('Decapitated'); }
+    if (partName === 'head') { this.decapitated = true; if (!silent) this.log('Decapitated'); }
     return list;
   }
 
-  /** Blunt trauma from impacts (falls, being thrown into things). */
+  /** Blow a body part apart. Limbs/head come off and vanish; torso parts are gutted in place. */
+  explode(partName) {
+    const p = this.parts[partName];
+    if (p.exploded) return [];
+    p.exploded = true;
+    const anat = ANATOMY[partName];
+    for (const og of anat.organs) this.organs[og.id].hp = 0;
+    for (const b of anat.bones) { const bone = this.bones[b.id]; bone.integrity = 0; bone.fractured = true; }
+    for (const v of anat.vessels) this.vessels[v.id].cut = true;
+    p.tissue = 0;
+    const isTorso = partName === 'chest' || partName === 'abdomen' || partName === 'pelvis';
+    let list = [];
+    if (isTorso) {
+      this.wounds.push({ part: partName, pos: null, burst: true, normal: null, rate: partName === 'pelvis' ? 30 : 45, arterial: true, exit: false, age: 0 });
+      if (partName === 'abdomen' || partName === 'chest') { this.paralyzed = true; }
+      this.log(`${p.label} blown apart`);
+    } else {
+      if (p.attached) list = this.sever(partName, true);
+      else list = [partName];
+      // wounds on the vanished part stop bleeding (the stump carries it)
+      for (const w of this.wounds) if (w.part === partName) w.rate = 0;
+      this.log(partName === 'head' ? 'Head exploded' : `${p.label} blown apart`);
+    }
+    this.rawPain += 60;
+    return list;
+  }
+
+  /**
+   * Blunt trauma from impacts (falls, being thrown or slammed with the grab tool).
+   * Returns { fractured } so the caller can play a crack and splat.
+   */
   impact(partName, speed) {
-    if (speed < 6) return;
-    const dmg = (speed - 6) * 6;
+    const out = { fractured: false, damage: 0 };
+    if (speed < 5) return out;
     const part = this.parts[partName];
-    part.tissue = Math.max(0, part.tissue - dmg * 0.3);
-    this.rawPain += dmg * 0.4;
-    if (partName === 'head') this.consciousness -= dmg * 1.5;
+    const sev = speed - 5;
+    const dmg = sev * sev * 0.9 + sev * 2;
+    out.damage = dmg;
+    part.tissue = Math.max(0, part.tissue - dmg * 0.35);
+    if (part.attached) {
+      this.rawPain += Math.min(40, dmg * 0.5);
+      this.adrenaline = Math.min(1, this.adrenaline + 0.1);
+    }
+    // Bones break when the hit is hard enough (chance grows with speed).
+    const breakChance = Math.max(0, Math.min(0.95, (speed - 7) / 9));
+    for (const b of ANATOMY[partName].bones) {
+      if (Math.random() > breakChance * (b.shell ? 0.6 : 1)) continue;
+      const bone = this.bones[b.id];
+      if (bone.integrity <= 0) continue;
+      bone.integrity = Math.max(0, bone.integrity - (35 + sev * 7) * (0.7 + Math.random() * 0.6));
+      if (!bone.fractured && bone.integrity < 55) {
+        bone.fractured = true; out.fractured = true;
+        if (part.attached) this.rawPain += 25;
+        this.log(`${bone.name} fractured (impact ${speed.toFixed(0)} m/s)`);
+      } else if (bone.integrity <= 0) { out.fractured = true; this.log(`${bone.name} shattered (impact)`); }
+      if (b.spine && !this.paralyzed && bone.integrity < 35) { this.paralyzed = true; this.log('Spinal cord damaged: legs paralysed'); }
+    }
+    if (partName === 'head' && part.attached) {
+      this.consciousness = Math.max(0, this.consciousness - sev * 9);
+      this.organs.brain.hp = Math.max(0, this.organs.brain.hp - Math.max(0, speed - 9) * 4);
+      if (speed > 9) this.log(`Head trauma (${speed.toFixed(0)} m/s)`, 'warn');
+    }
+    if (dmg > 25 && part.attached) this.wounds.push({ part: partName, pos: null, blunt: true, normal: null, rate: Math.min(3, dmg * 0.03), arterial: false, exit: false, age: 0 });
+    return out;
   }
 
   // ---------------------------------------------------------------- Capabilities

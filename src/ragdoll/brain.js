@@ -93,7 +93,12 @@ export class Brain {
     const pelvisPos = r.bodyPos('pelvis');
     const pelvisUp = Y.clone().applyQuaternion(r.bodyQuat('pelvis', _q));
 
-    switch (this.state) {
+    if (r.grabbed) {
+      // Held by the grab tool: curl up into a fetal ball. Afterwards it lands "fallen" and decides
+      // what to do once it has settled.
+      if (h.alive && this.state !== 'unconscious') { if (this.state !== 'fallen') this.setState('fallen'); this.nextDecision = this.stateTime + rand(1.2, 2.2); }
+      this.updateGrabbed(dt, pose, { awake });
+    } else switch (this.state) {
       case 'stand': {
         const mustFall = support < 0.33 || Math.min(capL, capR) < 0.2 || h.consciousness < 42 || h.pain > 90 || h.paralyzed;
         const tipped = pelvisPos.y < 0.62 || pelvisUp.y < 0.5;
@@ -369,6 +374,28 @@ export class Brain {
         const w = r.parts[name].body.angularVelocity; w.x += axis.x; w.y += axis.y; w.z += axis.z;
       }
     }
+  }
+
+  updateGrabbed(dt, pose, { awake }) {
+    const r = this.r, S = r.strength, h = this.h, t = this.time;
+    this.activity = h.alive ? (awake > 0.2 ? 'Grabbed: curled up' : 'Grabbed (limp)') : 'Grabbed (dead)';
+    pose.relative = true;
+    const n = (k, s) => noise1(t * k, this.seed + s);
+    const struggle = h.alive ? 0.12 * awake : 0;
+    pose.spine = 0.7 + struggle * n(2, 1);
+    pose.chest = 0.6 + struggle * n(2.2, 2);
+    pose.neck = 0.65 + struggle * n(1.7, 3);
+    pose.hipL = [1.75 + struggle * n(2.5, 4), 0.12];
+    pose.hipR = [1.75 + struggle * n(2.4, 5), 0.12];
+    pose.kneeL = 2.25; pose.kneeR = 2.25;
+    pose.ankleL = 0.4; pose.ankleR = 0.4;
+    // arms hug the knees
+    pose.shoulderL = [1.05 + struggle * n(3, 6), -0.35];
+    pose.shoulderR = [1.05 + struggle * n(3.1, 7), -0.35];
+    pose.elbowL = 1.9; pose.elbowR = 1.9;
+    const st = !h.alive ? 0.14 : h.consciousness < 22 ? 0.25 : 0.45 + 0.35 * awake;
+    for (const name in r.parts) S[name] = st * Math.max(0.35, h.partCap(name));
+    S.pelvis = 0;
   }
 
   twitch(amount) {

@@ -17,6 +17,7 @@ export class HUD {
     this.el = {
       crosshair: $('crosshair'), hit: $('hitmarker'), prompt: $('prompt'), ammo: $('ammo'),
       mag: $('ammo-mag'), chamber: $('ammo-chamber'), reserve: $('ammo-reserve'), debug: $('debug'), toast: $('toast'),
+      time: $('timescale'), toolStatus: $('toolstatus'), tsTitle: $('ts-title'), tsSub: $('ts-sub'),
       xray: $('xray'), xrName: $('xr-name'), xrState: $('xr-state'), vitals: $('xr-vitals'), bones: $('xr-bones'), organs: $('xr-organs'), log: $('xr-log'), ecg: $('ecg'),
     };
     this.el.vitals.innerHTML = VITALS.map((v) => `<div class="vital" id="v-${v.key}"><div class="lbl"><span>${v.label}</span><b>-</b></div><div class="bar"><i></i></div></div>`).join('');
@@ -51,13 +52,31 @@ export class HUD {
     else this.el.prompt.classList.remove('show');
   }
 
-  update(dt, { pistol, player, target, viewerPos, debugText }) {
-    // Crosshair spread
-    const spread = 6 + clamp(player.speed2D / CONFIG.player.walkSpeed) * 10 + (player.onGround ? 0 : 10) + Math.max(0, 0.11 - pistol.fireT) * 120;
-    this.el.crosshair.style.setProperty('--gap', `${spread.toFixed(1)}px`);
-    this.el.crosshair.classList.toggle('ads', pistol.ads > 0.6);
+  /** Time-scale badge (slow motion / fast forward). */
+  setTimeScale(ts) {
+    const el = this.el.time;
+    if (Math.abs(ts - 1) < 1e-3) { el.classList.remove('show'); document.body.classList.remove('slowmo', 'fastfwd'); return; }
+    el.classList.add('show');
+    el.querySelector('b').textContent = `${ts < 1 ? (ts >= 0.1 ? ts.toFixed(2).replace(/0$/, '') : ts.toFixed(2)) : ts.toFixed(1).replace(/\.0$/, '')}×`;
+    el.querySelector('span').textContent = ts < 1 ? 'SLOW MOTION' : 'FAST FORWARD';
+    document.body.classList.toggle('slowmo', ts < 1);
+    document.body.classList.toggle('fastfwd', ts > 1);
+  }
 
-    // Ammo
+  update(dt, { pistol, tool, player, target, viewerPos, debugText }) {
+    // Crosshair spread
+    const isPistol = tool === pistol;
+    const spread = 6 + clamp(player.speed2D / CONFIG.player.walkSpeed) * 10 + (player.onGround ? 0 : 10) + (isPistol ? Math.max(0, 0.11 - pistol.fireT) * 120 : 0);
+    this.el.crosshair.style.setProperty('--gap', `${spread.toFixed(1)}px`);
+    this.el.crosshair.classList.toggle('ads', isPistol && pistol.ads > 0.6);
+    this.el.crosshair.classList.toggle('grab', !isPistol);
+    this.el.crosshair.classList.toggle('holding', !isPistol && !!tool.held);
+
+    // Ammo / tool status
+    this.el.ammo.classList.toggle('hidden', !isPistol);
+    const st = isPistol ? null : tool.status();
+    this.el.toolStatus.classList.toggle('hidden', !st);
+    if (st) { this.el.tsTitle.textContent = st.title; this.el.tsSub.textContent = st.sub; }
     this.el.mag.textContent = pistol.mag;
     this.el.chamber.textContent = pistol.chambered ? '+1' : '+0';
     this.el.reserve.textContent = CONFIG.weapon.infiniteReserve ? '∞' : pistol.reserve;

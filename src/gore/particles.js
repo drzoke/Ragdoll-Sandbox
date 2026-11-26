@@ -17,7 +17,8 @@ export class Particles {
     this.free = [];
     for (let i = max - 1; i >= 0; i--) this.free.push(i);
     this.alive = new Set();
-    this.onLand = null; // (x, y, z, volume, size) for blood
+    this.onLand = null;
+    this.spawnScale = 1; // < 1 on the Low graphics preset // (x, y, z, volume, size) for blood
 
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
@@ -54,6 +55,10 @@ export class Particles {
   }
 
   spawn(x, y, z, vx, vy, vz, { size = 0.02, life = 3, color = [0.42, 0.02, 0.02], kind = 0, volume = 1 } = {}) {
+    if (this.spawnScale < 1 && kind === 0) {
+      if (Math.random() > this.spawnScale) return;
+      volume /= this.spawnScale; size *= 1.2;
+    }
     const i = this.free.pop();
     if (i === undefined) return;
     const i3 = i * 3;

@@ -6,6 +6,7 @@ import { Decals } from './decals.js';
 import { PART_BY_NAME } from '../ragdoll/skeleton.js';
 import { GROUP } from '../core/physics.js';
 import { rand } from '../core/util.js';
+import { settings } from '../settings.js';
 
 const G = CONFIG.gore;
 const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Quaternion();
@@ -33,7 +34,24 @@ export class Gore {
     this.particles.onLand = (x, y, z, vol, size) => this.decals.addDrop(x, y, z, vol, size);
     this.gibs = [];
     this.woundVisuals = new Map(); // wound object -> {decal, stain}
+    this.applyBloodColor();
+    settings.onChange((k) => { if (k === 'bloodColor') this.applyBloodColor(); });
   }
+
+  /** Blood colour setting (red / purple): particles, pools, wound decals, stumps. */
+  applyBloodColor() {
+    const b = settings.blood;
+    this.hue = b.particle;
+    this.decals.setBloodTint(b);
+    MAT.meat.color.setHex(b.meat);
+    MAT.meatDark.color.setHex(b.meatDark);
+  }
+
+  /** Blood particle colour at a given brightness. */
+  bc(shade) { const h = this.hue; return [h[0] * shade, h[1] * shade, h[2] * shade]; }
+
+  /** Organ material, or plain meat when organs are hidden in the gore settings. */
+  organMat(m) { return settings.get('showOrgans') ? m : MAT.meat; }
 
   // ---------------------------------------------------------------- spray helpers
   spray(pos, dir, count, { speed = 2.5, spread = 0.5, size = 0.018, volume = 1.2, life = 3 } = {}) {
@@ -43,7 +61,7 @@ export class Gore {
       const l = Math.hypot(vx, vy, vz) || 1;
       const shade = 0.3 + Math.random() * 0.18;
       this.particles.spawn(pos.x, pos.y, pos.z, (vx / l) * s, (vy / l) * s, (vz / l) * s,
-        { size: size * (0.5 + Math.random()), life, color: [shade, 0.01, 0.015], volume });
+        { size: size * (0.5 + Math.random()), life, color: this.bc(shade), volume });
     }
   }
 
@@ -82,7 +100,7 @@ export class Gore {
     }
     if (res.organs.some((o) => o.hp <= 0) && Math.random() < 0.6) {
       const at = (res.exitWound || res.wound).pos.clone().applyQuaternion(group.quaternion).add(group.position);
-      this.spawnGib(at, dirWorld.clone().multiplyScalar(3), res.organs[0].id === 'brain' ? MAT.brain : MAT.organ);
+      this.spawnGib(at, dirWorld.clone().multiplyScalar(3), this.organMat(res.organs[0].id === 'brain' ? MAT.brain : MAT.organ));
     }
     if (res.bones.length && res.exit && Math.random() < 0.5) {
       const at = res.exitWound.pos.clone().applyQuaternion(group.quaternion).add(group.position);
@@ -156,6 +174,7 @@ export class Gore {
     rim.scale.set(1, 0.75, 1);
     g.add(rim);
 
+    const organs = settings.get('showOrgans');
     if (partName === 'chest') {
       for (let i = -2; i <= 2; i++) {
         const rib = new THREE.Mesh(new THREE.CapsuleGeometry(0.0055, 0.1, 3, 6).rotateZ(Math.PI / 2), MAT.bone);
@@ -164,10 +183,12 @@ export class Gore {
         if (Math.random() < 0.35) { rib.scale.x = 0.45; rib.position.x = rand(-0.03, 0.03); rib.rotation.y = rand(-0.4, 0.4); }
         g.add(rib);
       }
-      const lung = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 10), MAT.lung);
-      lung.scale.set(1, 1.2, 0.45); lung.position.set(0.02, 0.005, -0.012);
-      g.add(lung);
-    } else if (partName === 'abdomen' || partName === 'pelvis') {
+      if (organs) {
+        const lung = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 10), MAT.lung);
+        lung.scale.set(1, 1.2, 0.45); lung.position.set(0.02, 0.005, -0.012);
+        g.add(lung);
+      }
+    } else if ((partName === 'abdomen' || partName === 'pelvis') && organs) {
       // intestines spilling out
       for (let k = 0; k < 2; k++) {
         const pts = [];
@@ -181,7 +202,7 @@ export class Gore {
         g.add(tube);
       }
     } else if (partName === 'head') {
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < (organs ? 6 : 0); i++) {
         const b = new THREE.Mesh(new THREE.SphereGeometry(rand(0.012, 0.02), 8, 6), MAT.brain);
         b.position.set(rand(-0.025, 0.025), rand(-0.018, 0.018), rand(-0.01, 0.004));
         g.add(b);
@@ -198,7 +219,76 @@ export class Gore {
     const world = surf.point.clone().applyQuaternion(part.group.quaternion).add(part.group.position);
     const wn = surf.normal.clone().applyQuaternion(part.group.quaternion);
     this.spray(world, wn, 40, { speed: 2.5, spread: 0.6, size: 0.022, volume: 1.5 });
-    this.spawnGib(world, wn.clone().multiplyScalar(2.5), partName === 'head' ? MAT.brain : MAT.gut);
+    this.spawnGib(world, wn.clone().multiplyScalar(2.5), this.organMat(partName === 'head' ? MAT.brain : MAT.gut));
+  }
+
+  // ---------------------------------------------------------------- explosions
+  /** A body part is blown apart (shot enough times). */
+  explodePart(ragdoll, partName, dir) {
+    const part = ragdoll.parts[partName];
+    const def = PART_BY_NAME[partName];
+    const centre = ragdoll.bodyPos(partName);
+    const vel = part.body.velocity;
+    const torso = /chest|abdomen|pelvis/.test(partName);
+    const out = ragdoll.explodePart(partName);
+    const organs = settings.get('showOrgans');
+    const scale = partName === 'head' ? 1.2 : torso ? 1.5 : /thigh|upperArm/.test(partName) ? 1 : 0.6;
+
+    // Blood burst: a dense outward cloud biased along the bullet, plus a fine mist.
+    _n.copy(dir).multiplyScalar(0.6);
+    for (let i = 0; i < 170 * scale; i++) {
+      const s = rand(1.5, 6.5);
+      const dx = rand(-1, 1), dy = rand(-0.6, 1.2), dz = rand(-1, 1);
+      const l = Math.hypot(dx, dy, dz) || 1;
+      this.particles.spawn(centre.x + rand(-0.04, 0.04), centre.y + rand(-0.04, 0.04), centre.z + rand(-0.04, 0.04),
+        (dx / l + _n.x) * s + vel.x, (dy / l + _n.y) * s + vel.y + 0.6, (dz / l + _n.z) * s + vel.z,
+        { size: rand(0.012, 0.04), life: 3.5, color: this.bc(rand(0.3, 0.5)), volume: 2.2 });
+    }
+    for (let i = 0; i < 60 * scale; i++) {
+      const s = rand(0.5, 2.5);
+      this.particles.spawn(centre.x, centre.y, centre.z, rand(-1, 1) * s + dir.x * 2, rand(-0.4, 1) * s, rand(-1, 1) * s + dir.z * 2,
+        { size: rand(0.006, 0.012), life: 1.5, color: this.bc(0.45), volume: 0.3 });
+    }
+    // Chunks: meat, bone shards and (if enabled) organ bits.
+    const n = Math.round((torso ? 7 : partName === 'head' ? 9 : 5) * Math.min(1.2, scale));
+    for (let i = 0; i < n; i++) {
+      const v = new THREE.Vector3(rand(-3, 3), rand(1, 4.5), rand(-3, 3)).addScaledVector(dir, 3).add(vel);
+      const roll = Math.random();
+      let mat = MAT.meat;
+      if (roll < 0.3) mat = MAT.bone;
+      else if (roll < 0.6 && organs) mat = partName === 'head' ? MAT.brain : torso ? (partName === 'chest' ? MAT.lung : MAT.gut) : MAT.meatDark;
+      else if (roll < 0.75) mat = MAT.meatDark;
+      this.spawnGib(centre, v, mat, mat === MAT.bone ? rand(0.01, 0.02) : rand(0.018, 0.04));
+    }
+    this.audio.play('splat'); this.audio.play('bone');
+
+    if (torso) {
+      // Gutted in place: big ragged cavities front and back, ribs/guts showing.
+      const half = def.size[2] / 2;
+      for (const z of [1, -1]) {
+        const w = { pos: new THREE.Vector3(rand(-0.03, 0.03), rand(-0.03, 0.03), z * half), normal: new THREE.Vector3(0, 0, z) };
+        this.openPart(ragdoll, partName, w);
+        const vis = this.decals.addWound(part.group, this.surfacePoint(part, w.pos, w.normal).point, w.normal, true, 0.09);
+        vis.stain.scale.setScalar(0.08);
+      }
+      return;
+    }
+    // Limb/head gone: ragged stump on the parent, and on any child segment that fell off.
+    if (out.wasAttached && def.parent) {
+      const r = def.shape === 'sphere' ? 0.05 : Math.min(def.size[0], def.size[2]) * 0.5;
+      this.addStump(ragdoll.parts[def.parent].group, part.pivotParent, new THREE.Vector3(...def.joint.axis), r);
+    }
+    for (const c of out.detached) {
+      const cd = PART_BY_NAME[c];
+      const r = Math.min(cd.size[0], cd.size[2]) * 0.5;
+      this.addStump(ragdoll.parts[c].group, ragdoll.parts[c].pivotChild, new THREE.Vector3(...cd.joint.axis).negate(), r);
+    }
+  }
+
+  /** Blood from blunt impacts (bone breaks when slammed). */
+  impactBlood(point, speed) {
+    const n = Math.min(40, Math.round(speed * 3));
+    this.spray(point, new THREE.Vector3(0, 0.6, 0), n, { speed: 1 + speed * 0.15, spread: 0.9, size: 0.016, volume: 0.8 });
   }
 
   // ---------------------------------------------------------------- gibs
@@ -242,7 +332,7 @@ export class Gore {
     const pulse = h.heartRate > 1 && beat < 0.18; // systole window
     for (const w of h.wounds) {
       const part = ragdoll.parts[w.part];
-      if (!part) continue;
+      if (!part || part.removed) continue;
       const flow = w.rate * press;            // ml/s
       if (flow < 0.02) continue;
       // world position & outward normal of this wound
@@ -250,7 +340,14 @@ export class Gore {
         const child = Object.values(ragdoll.parts).find((p) => p.def.joint?.name === w.joint);
         _v.copy(child.pivotParent);
         _n.set(...child.def.joint.axis);
-      } else { _v.copy(w.pos); _n.copy(w.normal); }
+      } else if (w.pos) { _v.copy(w.pos); _n.copy(w.normal); }
+      else {
+        // burst (blown-open torso) or blunt trauma: bleeds from all over the part
+        const sz = part.def.size, sph = part.def.shape === 'sphere';
+        _n.set(rand(-1, 1), rand(-0.3, 1), rand(-1, 1)).normalize();
+        if (sph) _v.copy(_n).multiplyScalar(sz[0]);
+        else _v.set(_n.x * sz[0] * 0.5, _n.y * sz[1] * 0.45, _n.z * sz[2] * 0.5);
+      }
       _v.applyQuaternion(part.group.quaternion).add(part.group.position);
       _n.applyQuaternion(part.group.quaternion);
 
@@ -259,7 +356,7 @@ export class Gore {
       while (w.acc > 1.5) {
         w.acc -= 1.5;
         this.particles.spawn(_v.x + rand(-0.01, 0.01), _v.y, _v.z + rand(-0.01, 0.01), _n.x * 0.3 + rand(-0.1, 0.1), _n.y * 0.3, _n.z * 0.3 + rand(-0.1, 0.1),
-          { size: 0.012 + Math.min(0.02, flow * 0.002), life: 4, color: [0.36, 0.01, 0.01], volume: 1.5 });
+          { size: 0.012 + Math.min(0.02, flow * 0.002), life: 4, color: this.bc(0.36), volume: 1.5 });
       }
       // Arterial spurts pulse with the heartbeat
       if (w.arterial && pulse && flow > 1.5) {
@@ -268,7 +365,7 @@ export class Gore {
         while (w.spurt > 1) {
           w.spurt -= 1;
           this.particles.spawn(_v.x, _v.y, _v.z, _n.x * sp + rand(-0.25, 0.25), _n.y * sp + 0.4 + rand(-0.2, 0.2), _n.z * sp + rand(-0.25, 0.25),
-            { size: 0.016, life: 3, color: [0.48, 0.02, 0.02], volume: 1.6 });
+            { size: 0.016, life: 3, color: this.bc(0.48), volume: 1.6 });
         }
       }
       // blood run stain on the body grows with flow
@@ -290,7 +387,7 @@ export class Gore {
       if (g.bleed > 0) {
         g.bleed -= dt;
         g.acc += dt * 6;
-        if (g.acc > 1) { g.acc -= 1; this.particles.spawn(g.body.position.x, g.body.position.y, g.body.position.z, 0, 0, 0, { size: 0.012, life: 2, color: [0.35, 0.01, 0.01], volume: 1.2 }); }
+        if (g.acc > 1) { g.acc -= 1; this.particles.spawn(g.body.position.x, g.body.position.y, g.body.position.z, 0, 0, 0, { size: 0.012, life: 2, color: this.bc(0.35), volume: 1.2 }); }
       }
     }
   }

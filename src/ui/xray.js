@@ -128,7 +128,8 @@ export class XRayRig {
       const m = new THREE.Mesh(new THREE.SphereGeometry(w.stump ? 0.03 : 0.012, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff3020, fog: false, depthTest: false, transparent: true }));
       m.renderOrder = 20;
       if (w.stump) { const child = Object.values(this.r.parts).find((p) => p.def.joint?.name === w.joint); m.position.copy(child.pivotParent); }
-      else m.position.copy(w.pos);
+      else if (w.pos) m.position.copy(w.pos);
+      else m.scale.setScalar(w.burst ? 4 : 1.5); // burst / blunt trauma: whole part
       m.layers.set(XRAY_LAYER);
       part.group.add(m);
       this.markers.push({ m, w });

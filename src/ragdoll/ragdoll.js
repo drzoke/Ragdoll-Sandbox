@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { RoundedBoxGeometry } from 'three/addons/RoundedBoxGeometry.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { PARTS, PART_BY_NAME } from './skeleton.js';
 import { Health } from './health.js';
 import { Brain } from './brain.js';
@@ -106,14 +106,29 @@ export class Ragdoll {
       p.ball = ball;
     }
 
-    // Impact trauma (falls, getting slammed into things)
-    for (const name of ['head', 'chest', 'pelvis']) {
-      const body = this.parts[name].body;
-      body.addEventListener('collide', (e) => {
-        const v = Math.abs(e.contact.getImpactVelocityAlongNormal());
-        if (v > 6) this.health.impact(name, v);
+    // Impact trauma (falls, being thrown or slammed with the grab tool). Collisions are only
+    // recorded here (inside the physics step) and processed in update().
+    this.impacts = [];         // queued { part, speed, point }
+    this.impactCooldown = {};
+    for (const def of PARTS) {
+      const name = def.name;
+      this.impactCooldown[name] = 0;
+      this.parts[name].body.addEventListener('collide', (e) => {
+        if (this.removed || this.parts[name].removed) return;
+        const other = e.body === this.parts[name].body ? e.target : e.body;
+        if (other?.userData?.ragdoll === this) return; // own limbs flopping against each other
+        // Normal impact speed, capped near the body's own speed so a limb flicked by a muscle
+        // doesn't count as a 40 m/s crash.
+        const bv = this.parts[name].body.velocity;
+        const v = Math.min(Math.abs(e.contact.getImpactVelocityAlongNormal()), Math.hypot(bv.x, bv.y, bv.z) * 1.25 + 2);
+        if (v < 4 || this.impactCooldown[name] > 0) return;
+        this.impactCooldown[name] = 0.12;
+        const c = e.contact, bi = c.bi;
+        const point = new THREE.Vector3(bi.position.x + c.ri.x, bi.position.y + c.ri.y, bi.position.z + c.ri.z);
+        this.impacts.push({ part: name, speed: v, point, other });
       });
     }
+    this.grabbed = false;      // held by the grab tool (Brain curls up)
 
     // Muscle targets (written by Brain each frame, applied each physics step)
     this.targetQ = {};
@@ -210,6 +225,10 @@ export class Ragdoll {
     const KP = 20, KD = 40;
     for (const name in this.parts) {
       const p = this.parts[name];
+      if (p.removed) continue;
+      // Safety net against solver blow-ups (body pinned against the floor by the grab beam etc.)
+      const av = p.body.angularVelocity, wl = av.x * av.x + av.y * av.y + av.z * av.z;
+      if (wl > 1600) av.scale(40 / Math.sqrt(wl), av);
       let s = this.strength[name] || 0;
       if (this.flinch[name] > 0) s *= 1 - clamp(this.flinch[name] / 0.35) * 0.92;
       if (s <= 0.001) continue;
@@ -295,8 +314,40 @@ export class Ragdoll {
     return this.health.sever(partName);
   }
 
+  /**
+   * Blow a body part apart. Limbs and the head are removed from the simulation entirely (their
+   * children fall off as separate chunks); torso parts stay (they hold the skeleton together) and
+   * are gutted visually by Gore. Returns { removed: [names], detached: [names] }.
+   */
+  explodePart(partName) {
+    const p = this.parts[partName];
+    const out = { removed: [], detached: [] };
+    if (!p || p.removed) return out;
+    const wasAttached = this.health.parts[partName].attached;
+    const list = this.health.explode(partName);
+    if (/chest|abdomen|pelvis/.test(partName)) return out;
+    // Remove the part's own joint, and the joints of its direct children.
+    if (p.constraint) { this.physics.world.removeConstraint(p.constraint); p.constraint = null; }
+    for (const def of PARTS) {
+      if (def.parent !== partName) continue;
+      const c = this.parts[def.name];
+      if (c.constraint) { this.physics.world.removeConstraint(c.constraint); c.constraint = null; }
+      if (c.ball) c.ball.visible = false;
+      out.detached.push(def.name);
+    }
+    this.physics.world.removeBody(p.body);
+    p.removed = true;
+    p.group.visible = false;
+    out.removed.push(partName);
+    out.wasAttached = wasAttached;
+    out.list = list;
+    this.meshesDirty = true;
+    return out;
+  }
+
   update(dt) {
     for (const n in this.flinch) if (this.flinch[n] > 0) this.flinch[n] -= dt;
+    for (const n in this.impactCooldown) if (this.impactCooldown[n] > 0) this.impactCooldown[n] -= dt;
     this.health.update(dt);
     this.brain.update(dt);
     this.sync();
@@ -304,20 +355,21 @@ export class Ragdoll {
 
   sync() {
     for (const name in this.parts) {
-      const { body, group } = this.parts[name];
+      const { body, group, removed } = this.parts[name];
+      if (removed) continue;
       group.position.set(body.position.x, body.position.y, body.position.z);
       group.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
     }
   }
 
-  meshes() { return Object.values(this.parts).flatMap((p) => (p.ball ? [p.mesh, p.ball] : [p.mesh])); }
+  meshes() { return Object.values(this.parts).filter((p) => !p.removed).flatMap((p) => (p.ball && p.ball.visible ? [p.mesh, p.ball] : [p.mesh])); }
 
   dispose() {
     this.removed = true;
     this._unsub();
     for (const p of Object.values(this.parts)) {
       if (p.constraint) this.physics.world.removeConstraint(p.constraint);
-      this.physics.world.removeBody(p.body);
+      if (!p.removed) this.physics.world.removeBody(p.body);
     }
     this.scene.remove(this.root);
     this.root.traverse((o) => { if (o.userData.disposable) { o.geometry?.dispose(); } });

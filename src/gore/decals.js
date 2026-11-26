@@ -33,8 +33,8 @@ function woundTexture(exit) {
     const R = w * 0.46;
     // bruise/blood ring
     let grd = g.createRadialGradient(0, 0, 0, 0, 0, R);
-    grd.addColorStop(0, 'rgba(20,0,0,1)'); grd.addColorStop(exit ? 0.35 : 0.22, 'rgba(40,0,0,1)');
-    grd.addColorStop(exit ? 0.55 : 0.4, 'rgba(120,8,8,0.95)'); grd.addColorStop(0.8, 'rgba(110,10,10,0.45)'); grd.addColorStop(1, 'rgba(100,10,10,0)');
+    grd.addColorStop(0, 'rgba(20,20,20,1)'); grd.addColorStop(exit ? 0.35 : 0.22, 'rgba(40,40,40,1)');
+    grd.addColorStop(exit ? 0.55 : 0.4, 'rgba(120,120,120,0.95)'); grd.addColorStop(0.8, 'rgba(110,110,110,0.45)'); grd.addColorStop(1, 'rgba(100,100,100,0)');
     g.fillStyle = grd; g.beginPath();
     for (let i = 0; i <= 40; i++) {
       const a = (i / 40) * Math.PI * 2, r = R * (exit ? 0.75 + Math.random() * 0.25 : 0.9 + Math.random() * 0.1);
@@ -42,7 +42,7 @@ function woundTexture(exit) {
     }
     g.fill();
     // hole
-    g.fillStyle = '#080000'; g.beginPath(); g.arc(0, 0, exit ? R * 0.28 : R * 0.16, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#080808'; g.beginPath(); g.arc(0, 0, exit ? R * 0.28 : R * 0.16, 0, Math.PI * 2); g.fill();
   });
 }
 
@@ -50,14 +50,14 @@ function stainTexture() {
   return canvasTexture(128, 256, (g, w, h) => {
     // a run of blood downward from the top-centre
     const grd = g.createLinearGradient(0, 0, 0, h);
-    grd.addColorStop(0, 'rgba(110,5,5,0.9)'); grd.addColorStop(0.7, 'rgba(90,4,4,0.6)'); grd.addColorStop(1, 'rgba(90,4,4,0)');
+    grd.addColorStop(0, 'rgba(110,110,110,0.9)'); grd.addColorStop(0.7, 'rgba(90,90,90,0.6)'); grd.addColorStop(1, 'rgba(90,90,90,0)');
     g.fillStyle = grd;
     for (let i = 0; i < 5; i++) {
       const x = w / 2 + (Math.random() - 0.5) * w * 0.5, ww = 6 + Math.random() * 12, len = h * (0.4 + Math.random() * 0.6);
       g.beginPath(); g.ellipse(x, len / 2, ww / 2, len / 2, 0, 0, Math.PI * 2); g.fill();
     }
     const r = g.createRadialGradient(w / 2, h * 0.12, 0, w / 2, h * 0.12, w * 0.45);
-    r.addColorStop(0, 'rgba(110,5,5,0.9)'); r.addColorStop(1, 'rgba(110,5,5,0)');
+    r.addColorStop(0, 'rgba(110,110,110,0.9)'); r.addColorStop(1, 'rgba(110,110,110,0)');
     g.fillStyle = r; g.fillRect(0, 0, w, h);
   });
 }
@@ -106,6 +106,7 @@ export class Decals {
       map: t, transparent: true, depthWrite: false, roughness: 0.3, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
     }));
     this.stainMat = new THREE.MeshStandardMaterial({ map: stainTexture(), transparent: true, depthWrite: false, roughness: 0.35, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
+    this.poolHue = [1, 0.03, 0.03];
     this.woundGeo = new THREE.PlaneGeometry(1, 1);
     this.stainGeo = new THREE.PlaneGeometry(1, 2).translate(0, -0.8, 0);
   }
@@ -153,10 +154,18 @@ export class Decals {
       mesh.setMatrixAt(i, _m);
       // fresh blood bright red, older pools darker
       const k = Math.min(1, p.age / 90);
-      color.setRGB(0.2 - 0.1 * k, 0.006, 0.006);
+      const v = 0.2 - 0.1 * k, hue = this.poolHue;
+      color.setRGB(v * hue[0], v * hue[1], v * hue[2]);
       mesh.setColorAt(i, color);
     }
     this.poolMeshes.forEach((m, t) => { m.count = counts[t]; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+  }
+
+  /** Blood colour setting: decal hue multiplies the grayscale wound/stain textures. */
+  setBloodTint(blood) {
+    this.poolHue = blood.pool;
+    for (const m of [...this.woundMat, this.stainMat]) m.color.setRGB(...blood.decal);
+    this.poolDirty = true;
   }
 
   // ---------------------------------------------------------------- bullet holes

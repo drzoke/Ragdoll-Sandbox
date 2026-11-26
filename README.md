@@ -25,17 +25,29 @@ python3 -m http.server 8000      # or: npx serve .
 | Mouse | Look |
 | Shift | Sprint |
 | Space | Jump |
-| C (hold) | Crouch |
-| Left click | Fire |
-| Right click (hold) | Aim down sights |
-| R | Reload (tactical, or slide-lock reload when empty) |
-| F | Inspect pistol |
+| C (hold) | Crouch (Ctrl also works in fullscreen on Chrome/Edge) |
+| 1 / 2, Q, mouse wheel | Switch tool (M1911, Grab) |
+| Tab | Open the toolbox |
+| Z / V | Slow time down / speed it up (0.05× to 3×) |
 | E | Press the button you're looking at |
 | X | Toggle the X-ray / vitals panel |
+| H | Hide the weapon-controls panel on the left |
 | F3 | Debug overlay |
-| Esc | Pause |
+| Esc | Pause (menu has Settings) |
+
+**M1911:** left click fires, right click (hold) aims down sights, R reloads, F inspects.
+
+**Grab:** right click grabs or drops a body part (or a gib), left click throws what you hold or punts things in front of you, the wheel or R / F pulls it closer or pushes it away. The held point trails your aim, and the further away it is the more it lags. Slamming a ragdoll into the floor or walls breaks bones. A held ragdoll curls up into a fetal ball.
 
 There are two buttons next to the spawn point: **RESPAWN** (new ragdoll) and **CLEAN UP** (removes blood, gibs and casings). Shooting a button also presses it.
+
+## Settings
+
+- **Graphics**: Low (no shadows, lower resolution, fewer droplets), Medium (the standard look), High (GTAO ambient occlusion, soft 4096 shadows, bloom). Browsers can't do hardware ray tracing, so High uses screen-space ambient occlusion as the closest substitute.
+- **Gore**: organs on or off, red or purple blood, dismemberment and exploding body parts on or off.
+- **HUD**: show or hide the weapon controls panel.
+
+Settings are saved in the browser (localStorage).
 
 ## What's in it
 
@@ -43,6 +55,9 @@ There are two buttons next to the spawn point: **RESPAWN** (new ragdoll) and **C
 - **Behaviour** (`ragdoll/brain.js`): idle and short wanders around home → limping (one leg hurt) → falls when support is lost → gets back up if it can, otherwise **crawls** (both legs out) or **writhes** on the ground in pain → unconscious → dead. It also hunches and clutches wounds when hurt, and shivers when in shock.
 - **Damage** (`ragdoll/health.js` + `ragdoll/anatomy.js`): each hit is ray-traced through the body part in local space against organs (ellipsoids), arteries and bones (capsules), and rib cage/skull/pelvis shells. Bullets can pass through limbs into the next part. Outcomes include fractures, a shattered bone, severed arteries, destroyed organs, spinal injury (paralysis), a torso torn open (exposed organs) and limb loss.
 - **Physiology**: blood volume, bleeding with clotting, arterial pressure, heart rate, SpO₂, breathing, pain (adrenaline masks it), hypovolemic shock classes, consciousness, cardiac arrest and brain death. Nothing dies instantly: even a brain hit or decapitation takes seconds.
+- **Exploding parts**: keep shooting a destroyed body part and it bursts. Heads and limbs vanish in a spray of blood, bone and flesh chunks (limbs below it fall off), and torso parts are gutted in place.
+- **Bullets** (`weapon/ballistics.js`): real projectiles at 260 m/s with drop and penetration, a tracer streak and a glowing slug, so in slow motion you can watch them fly and hit.
+- **Grab tool** (`weapon/grab.js`): a force-limited joint to a kinematic anchor that trails the aim point, a pulsing white beam drawn as a camera-facing Bézier ribbon, throw, punt and drop. Collisions on every body part feed blunt trauma and bone breaks (`Health.impact`).
 - **Gore** (`gore/`): blood particles that pool on the floor (instanced decals that grow and darken), arterial spurts that pulse with the heartbeat, entry and exit wound decals with blood runs, stumps with bone, exposed intestines, ribs and brain, and physical gibs.
 - **M1911** (`weapon/`): procedural model (extruded slide/frame profiles, checkered wood grips, hammer, sights, mag). Recoil uses camera springs plus partial permanent muzzle climb, and the viewmodel kicks and flips around the grip. The slide cycles, the hammer drops and re-cocks, the slide locks back on empty, casings eject, and there's a muzzle flash and light. Reload (tactical and empty) and inspect are keyframed clips in `weapon/anim.js`.
 - **X-ray panel** (`ui/xray.js`, `ui/hud.js`): a second renderer draws the targeted ragdoll's bones, organs, arteries and wounds on their own render layer, colour-coded by damage. The panel also shows vitals bars, an ECG trace, damaged bones and organs, and an event log.
@@ -53,13 +68,15 @@ There are two buttons next to the spawn point: **RESPAWN** (new ragdoll) and **C
 
 ```
 index.html, css/style.css
-lib/                     three.js, cannon-es, two three addons
+lib/                     three.js, cannon-es, three addons (post-processing etc.)
 src/main.js              boot + game loop
 src/config.js            every tunable number lives here
 src/core/                input, physics wrapper (fixed 120 Hz step), procedural audio, utils
 src/world/               map, physical buttons
 src/player/              first-person controller + camera effects
-src/weapon/              M1911 model, animation clips, weapon logic, ballistics, casings
+src/weapon/              M1911 model, animation clips, weapon logic, ballistics, casings, grab tool, toolbox
+src/settings.js          saved player settings (graphics, gore, HUD)
+src/graphics.js          Low / Medium / High presets and post-processing
 src/ragdoll/             skeleton layout, anatomy data, health/physiology, brain/AI, ragdoll body, manager
 src/gore/                particles, decals/pools, gore orchestration (stumps, organs, gibs, bleeding)
 src/ui/                  HUD + X-ray

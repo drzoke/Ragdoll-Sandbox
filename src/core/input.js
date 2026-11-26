@@ -8,6 +8,7 @@ export class Input {
     this.mousePressed = [false, false, false];
     this.mouseDX = 0;
     this.mouseDY = 0;
+    this.wheel = 0;          // accumulated wheel steps this frame (+ = down/towards user)
     this.locked = false;
     this.enabled = false; // only true while the game is being played
     this.keyboardLocked = false; // true when Keyboard Lock is active (fullscreen, Chrome/Edge)
@@ -34,6 +35,10 @@ export class Input {
       this.mouseDX += e.movementX || 0;
       this.mouseDY += e.movementY || 0;
     });
+    addEventListener('wheel', (e) => {
+      if (!this.enabled) return;
+      this.wheel += Math.sign(e.deltaY);
+    }, { passive: true });
     addEventListener('blur', () => this.clear());
   }
 
@@ -50,6 +55,7 @@ export class Input {
     this.pressed.clear();
     this.released.clear();
     this.mousePressed = [false, false, false];
+    this.wheel = 0;
   }
 
   clear() {

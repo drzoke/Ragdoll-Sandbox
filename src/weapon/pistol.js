@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
-import { clamp, damp, Spring, lerp } from '../core/util.js';
-import { buildM1911, muzzleFlashTexture } from './model1911.js';
+import { clamp, damp, Spring, lerp, viewmodelToWorld } from '../core/util.js';
+import { buildM1911, muzzleFlashTexture, flameTexture, smokeTexture } from './model1911.js';
 import { ClipPlayer, CLIPS } from './anim.js';
 import { Casings } from './casings.js';
 
@@ -38,6 +38,20 @@ export class Pistol {
     this.flash.position.set(0, 0, -0.035);
     this.flash.visible = false;
     this.gun.muzzle.add(this.flash);
+    // Side-on flame: crossed additive planes along the barrel, visible from the side.
+    const flameMat = new THREE.MeshBasicMaterial({ map: flameTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, side: THREE.DoubleSide });
+    const flameGeo = new THREE.PlaneGeometry(0.05, 0.13).translate(0, 0.065, 0).rotateX(-Math.PI / 2);
+    this.flame = new THREE.Group();
+    for (let i = 0; i < 3; i++) { const m = new THREE.Mesh(flameGeo, flameMat); m.rotation.z = (i / 3) * Math.PI; this.flame.add(m); }
+    this.flame.position.set(0, 0, -0.01);
+    this.flame.visible = false;
+    this.gun.muzzle.add(this.flame);
+    // Smoke puffs drift in the world after each shot.
+    this.mainScene = mainScene;
+    this.smokeMat = new THREE.SpriteMaterial({ map: smokeTexture(), transparent: true, depthWrite: false, color: 0xd8dade, opacity: 0 });
+    this.smoke = [];
+    this.raise = 1;          // 0 = holstered, 1 = up (set by the toolbox)
+    this.name = 'M1911';
 
     // World-side muzzle light + casings
     this.worldFlash = new THREE.PointLight(0xffa850, 0, 9, 2);
@@ -72,8 +86,17 @@ export class Pistol {
 
   refill() { this.reserve = W.startReserve; }
 
-  update(dt, input, active) {
+  get controls() {
+    return [
+      ['Left click', 'Fire'], ['Right click', 'Aim down sights'], ['R', 'Reload'], ['F', 'Inspect'],
+    ];
+  }
+
+  status() { return null; }
+
+  update(dt, input, active, worldDt = dt) {
     const p = this.player;
+    active = active && this.raise > 0.9;
     this.cooldown -= dt;
     this.fireT += dt;
 
@@ -92,7 +115,39 @@ export class Pistol {
     this.anim.update(dt);
     this.animateGun(dt);
     this.updateDropMags(dt);
-    this.casings.update(dt);
+    this.casings.update(worldDt);
+    this.updateSmoke(worldDt);
+  }
+
+  muzzleWorld(out = new THREE.Vector3()) {
+    this.pivot.updateMatrixWorld(true);
+    return viewmodelToWorld(this.gun.muzzle.getWorldPosition(_v), this.camera, this.mainCamera, out);
+  }
+
+  spawnSmoke(pos, dir) {
+    for (let i = 0; i < 4; i++) {
+      const s = new THREE.Sprite(this.smokeMat.clone());
+      s.position.copy(pos).addScaledVector(dir, 0.05 + i * 0.06);
+      s.material.rotation = Math.random() * Math.PI * 2;
+      const v = dir.clone().multiplyScalar(0.6 + i * 0.5).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.15 + Math.random() * 0.15, (Math.random() - 0.5) * 0.2));
+      this.mainScene.add(s);
+      this.smoke.push({ s, v, age: 0, life: 1.3 + Math.random() * 0.8, size: 0.06 + i * 0.03 });
+    }
+  }
+
+  updateSmoke(dt) {
+    for (const p of this.smoke) {
+      p.age += dt;
+      p.v.multiplyScalar(Math.exp(-dt * 3));
+      p.v.y += dt * 0.25;
+      p.s.position.addScaledVector(p.v, dt);
+      const k = p.age / p.life;
+      p.s.scale.setScalar(p.size * (1 + k * 4));
+      p.s.material.opacity = 0.32 * (1 - k) * Math.min(1, p.age * 20);
+      p.s.material.rotation += dt * 0.3;
+      if (k >= 1) { this.mainScene.remove(p.s); p.s.material.dispose(); }
+    }
+    this.smoke = this.smoke.filter((p) => p.age < p.life);
   }
 
   tryFire() {
@@ -113,7 +168,9 @@ export class Pistol {
     const right = _v.set(1, 0, 0).applyQuaternion(cam.quaternion), up = _v2.set(0, 1, 0).applyQuaternion(cam.quaternion);
     const a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random()) * spread;
     dir.addScaledVector(right, Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r).normalize();
-    this.onFire(origin, dir);
+    const muzzle = this.muzzleWorld(new THREE.Vector3());
+    this.onFire(origin, dir, muzzle);
+    this.spawnSmoke(muzzle, dir);
 
     // Recoil: camera + viewmodel
     const rc = W.recoil, adsMul = lerp(1, 0.7, this.ads);
@@ -126,7 +183,9 @@ export class Pistol {
     this.audio.play('shot');
     this.flash.visible = true;
     this.flash.material.rotation = Math.random() * Math.PI * 2;
-    this.flash.scale.setScalar(0.07 + Math.random() * 0.05);
+    this.flash.scale.setScalar(0.08 + Math.random() * 0.06);
+    this.flame.rotation.z = Math.random() * Math.PI;
+    this.flame.scale.set(0.8 + Math.random() * 0.5, 0.8 + Math.random() * 0.6, 1);
     this.hammer = 0;
     this.ejected = false;
   }
@@ -228,9 +287,11 @@ export class Pistol {
     // ---- muzzle flash ----
     const flashOn = ft < 0.035;
     this.flash.visible = flashOn;
+    this.flame.visible = ft < 0.022;
+    this.flash.material.opacity = flashOn ? 1 - ft / 0.035 * 0.5 : 0;
     this.flashLightVM.intensity = flashOn ? 3 : 0;
     this.flashLightVM.position.set(0.1, -0.05, -0.55);
-    this.worldFlash.intensity = flashOn ? 40 : 0;
+    this.worldFlash.intensity = flashOn ? 55 * (1 - ft / 0.035) + 10 : 0;
     if (flashOn) this.worldFlash.position.copy(this.mainCamera.position).addScaledVector(this.mainCamera.getWorldDirection(_v), 0.8);
 
     // ---- sway (lags behind mouse look) ----
@@ -254,13 +315,14 @@ export class Pistol {
     const pos = a.sample('pos', [0, 0, 0]), rot = a.sample('rot', [0, 0, 0]);
     const sp = this.sprint;
     const crouchDip = p.crouch * 0.01;
+    const lower = 1 - this.raise;
     this.pivot.position.set(
       lerp(hip[0], ads[0], this.ads) + this.swayX + bobX + pos[0] - sp * 0.04 + ks * 0.003,
-      lerp(hip[1], ads[1], this.ads) + this.swayY + bobY + idle + pos[1] - sp * 0.035 - crouchDip + kr * 0.004,
+      lerp(hip[1], ads[1], this.ads) + this.swayY + bobY + idle + pos[1] - sp * 0.035 - crouchDip + kr * 0.004 - lower * 0.26,
       lerp(hip[2], ads[2], this.ads) + pos[2] + kb * 0.01 + sp * 0.02
     );
     this.pivot.rotation.set(
-      rot[0] + kr * 0.06 - sp * 0.45 + this.swayY * 1.5,
+      rot[0] + kr * 0.06 - sp * 0.45 + this.swayY * 1.5 - lower * 0.9,
       rot[1] + lerp(0.035, 0, this.ads) + sp * 0.55 + this.swayX * 1.5 + ks * 0.02,
       rot[2] + kroll * 0.02 + this.swayX * 1.2 + sp * 0.15,
       'YXZ'
