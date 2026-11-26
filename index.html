@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ragdoll Sandbox</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./lib/three.module.js",
+    "three/addons/": "./lib/addons/",
+    "cannon-es": "./lib/cannon-es.js"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
+  <div id="hitmarker"></div>
+  <div id="prompt"></div>
+  <div id="ammo"><span id="ammo-mag">7</span><span id="ammo-chamber">+1</span><span class="sep">/</span><span id="ammo-reserve">56</span><div id="ammo-name">M1911 · .45 ACP</div></div>
+  <div id="debug"></div>
+  <div id="toast"></div>
+</div>
+
+<aside id="xray" class="hidden">
+  <header>
+    <div>
+      <div class="xr-title">X-RAY · <span id="xr-name">No target</span></div>
+      <div class="xr-state" id="xr-state">Look at a ragdoll</div>
+    </div>
+    <div class="xr-key">X</div>
+  </header>
+  <div id="xr-view"><canvas id="ecg" width="300" height="46"></canvas></div>
+  <section id="xr-vitals"></section>
+  <section id="xr-lists">
+    <div><h4>Bones</h4><ul id="xr-bones"></ul></div>
+    <div><h4>Organs</h4><ul id="xr-organs"></ul></div>
+  </section>
+  <section><h4>Events</h4><ul id="xr-log"></ul></section>
+</aside>
+
+<div id="menu">
+  <div class="card">
+    <h1>Ragdoll Sandbox</h1>
+    <p class="sub">Draft build · physics test map</p>
+    <button id="play">Click to play</button>
+    <div id="lockwarn" class="hidden">Mouse lock was blocked here. Open this page in its own browser tab for full mouse look.</div>
+    <table class="controls">
+      <tr><td>WASD</td><td>Move</td></tr>
+      <tr><td>Mouse</td><td>Look</td></tr>
+      <tr><td>Shift</td><td>Sprint</td></tr>
+      <tr><td>Space</td><td>Jump</td></tr>
+      <tr><td>C</td><td>Crouch (hold)</td></tr>
+      <tr><td>Left click</td><td>Fire</td></tr>
+      <tr><td>Right click</td><td>Aim down sights</td></tr>
+      <tr><td>R</td><td>Reload</td></tr>
+      <tr><td>F</td><td>Inspect pistol</td></tr>
+      <tr><td>E</td><td>Press button</td></tr>
+      <tr><td>X</td><td>X-ray panel</td></tr>
+      <tr><td>F3</td><td>Debug info</td></tr>
+      <tr><td>Esc</td><td>Pause</td></tr>
+    </table>
+  </div>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
