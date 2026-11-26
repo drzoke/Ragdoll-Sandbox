@@ -15,6 +15,8 @@ import { GrabTool } from './weapon/grab.js';
 import { Toolbox } from './weapon/toolbox.js';
 import { Graphics } from './graphics.js';
 import { settings } from './settings.js';
+import { trackMaterials } from './materials.js';
+import { GRAY as RAGDOLL_GRAY, BLACK as RAGDOLL_BLACK } from './ragdoll/ragdoll.js';
 
 // ------------------------------------------------------------------ loading screen
 const loader = window.__loader || { set() {} };
@@ -48,7 +50,6 @@ const gore = new Gore(scene, physics, map, audio);
 const ragdolls = new RagdollManager(scene, physics, gore);
 const hud = new HUD(scene);
 const graphics = new Graphics({ renderer, scene, camera, map, gore });
-graphics.apply(settings.get('graphics'));
 
 const buttons = [
   new PressButton({ scene, physics, map, position: [-3, 0, 4], label: 'RESPAWN', sub: 'Press E · new ragdoll', color: 0xd8302a,
@@ -64,6 +65,13 @@ const pistol = new Pistol({
   onFire: (o, d, muzzle) => ballistics.fire(o, d, muzzle),
 });
 const grab = new GrabTool({ mainScene: scene, mainCamera: camera, player, audio, environment: scene.environment, physics, ragdolls, gore, hud });
+// Materials whose detail follows the graphics preset
+trackMaterials(RAGDOLL_GRAY); trackMaterials(RAGDOLL_BLACK, { grime: false });
+trackMaterials(pistol.gun.root); trackMaterials(grab.gadget.root);
+for (const m of map.solidMeshes) trackMaterials(m);
+for (const b of buttons) for (const m of b.meshes) trackMaterials(m, { grime: false });
+graphics.apply(settings.get('graphics'));
+grab.setQuality(settings.get('graphics'));
 const toolbox = new Toolbox([pistol, grab], { audio, onOpenChange: (open) => onToolboxChange(open) });
 
 await stage(0.86, 'Spawning ragdoll');
@@ -122,16 +130,25 @@ for (const b of menu.querySelectorAll('.tabs button')) {
   });
 }
 const GFX_NOTES = {
-  low: 'Low: no shadows, lower resolution, fewer blood droplets. Best for school laptops.',
-  medium: 'Medium: the standard look, with sharp sun shadows.',
-  high: 'High: ambient occlusion (screen-space ray marching), soft 4K shadows and bloom. Browsers can\'t do real hardware ray tracing; this is the closest look. Needs a decent GPU.',
+  low: 'No shadows, lower resolution and fewer blood drops. Runs on almost anything.',
+  medium: 'Sharp sun shadows and full resolution.',
+  high: 'Adds soft shadows, ambient occlusion (darkening where objects meet), glow on bright lights, and dirt and wear on models.',
+  ultra: 'Everything in High, plus reflections on the floor, fine surface detail on models and stronger reflections.',
+};
+const GFX_GPU = {
+  low: ['Any graphics chip from the last 10 years (Intel HD 4000, Chromebooks)', 'Intel UHD 620 or better'],
+  medium: ['Intel UHD 620 / AMD Radeon Vega 8', 'Intel Iris Xe / NVIDIA GTX 1050'],
+  high: ['NVIDIA GTX 1050 Ti / AMD RX 570', 'NVIDIA GTX 1660 / AMD RX 5600 XT'],
+  ultra: ['NVIDIA GTX 1660 Super / AMD RX 5600 XT', 'NVIDIA RTX 3060 / AMD RX 6700 XT or better'],
 };
 function syncSettingsUI() {
   for (const seg of menu.querySelectorAll('.seg[data-setting]')) {
     for (const b of seg.querySelectorAll('button')) b.classList.toggle('on', b.dataset.v === settings.get(seg.dataset.setting));
   }
   for (const cb of menu.querySelectorAll('input[data-setting]')) cb.checked = !!settings.get(cb.dataset.setting);
-  document.getElementById('gfx-note').textContent = GFX_NOTES[settings.get('graphics')];
+  const lvl = settings.get('graphics');
+  document.getElementById('gfx-note').textContent = GFX_NOTES[lvl];
+  document.getElementById('gfx-gpu').innerHTML = `<div><span>Minimum GPU</span><b>${GFX_GPU[lvl][0]}</b></div><div><span>Recommended GPU</span><b>${GFX_GPU[lvl][1]}</b></div>`;
 }
 for (const seg of menu.querySelectorAll('.seg[data-setting]')) {
   seg.addEventListener('click', (e) => {
@@ -142,7 +159,7 @@ for (const seg of menu.querySelectorAll('.seg[data-setting]')) {
 for (const cb of menu.querySelectorAll('input[data-setting]')) cb.addEventListener('change', () => settings.set(cb.dataset.setting, cb.checked));
 settings.onChange((k, v) => {
   syncSettingsUI();
-  if (k === 'graphics') { graphics.apply(v); resize(); }
+  if (k === 'graphics') { graphics.apply(v); grab.setQuality(v); toolbox.setQuality(v); resize(); }
 });
 syncSettingsUI();
 
@@ -202,7 +219,7 @@ let target = null;
 let fps = 60;
 
 // ---- time warp: world time scale (the player and weapons stay real-time) ----
-const TIME_STEPS = [0.05, 0.1, 0.25, 0.5, 1, 1.5, 2, 3];
+const TIME_STEPS = [0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1, 1.5, 2, 3];
 let timeIndex = TIME_STEPS.indexOf(1);
 const world = { get timeScale() { return TIME_STEPS[timeIndex]; } };
 function setTimeIndex(i) {

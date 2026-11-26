@@ -7,8 +7,8 @@ import { Brain } from './brain.js';
 import { GROUP } from '../core/physics.js';
 import { clamp } from '../core/util.js';
 
-const GRAY = new THREE.MeshStandardMaterial({ color: 0x7f8286, roughness: 0.7, metalness: 0.0 });
-const BLACK = new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.35, metalness: 0.1 });
+export const GRAY = new THREE.MeshStandardMaterial({ color: 0x7f8286, roughness: 0.7, metalness: 0.0 });
+export const BLACK = new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.35, metalness: 0.1 });
 
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qa = new THREE.Quaternion();
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();

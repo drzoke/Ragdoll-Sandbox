@@ -1,51 +1,82 @@
-import { damp } from '../core/util.js';
 import { settings } from '../settings.js';
+import { ItemPreview } from '../ui/preview.js';
 
 const $ = (id) => document.getElementById(id);
 
-// Small inline SVG silhouettes for the hotbar / toolbox cards.
+// Pictures of the items (used on the hotbar, and in the toolbox on the Low preset).
 const ICONS = {
-  M1911: `<svg viewBox="0 0 64 40"><path d="M4 9h50l3 3v6H31l-2 3h-6l-3 15H8l5-18H4z" fill="currentColor"/><rect x="20" y="17" width="9" height="2" fill="#0000"/></svg>`,
+  M1911: `<svg viewBox="0 0 64 40"><path d="M4 9h50l3 3v6H31l-2 3h-6l-3 15H8l5-18H4z" fill="currentColor"/></svg>`,
   Grab: `<svg viewBox="0 0 64 40"><path d="M8 13h30v12H20l-3 11h-8l3-11H8z" fill="currentColor"/><rect x="38" y="15" width="8" height="8" fill="currentColor"/><path d="M46 12l10-4v4l-7 3zM46 26l10 4v-4l-7-3z" fill="currentColor"/><circle cx="52" cy="19" r="3" fill="#fff"/></svg>`,
 };
-const BLURB = {
-  M1911: 'Semi-auto .45 pistol. 7+1 rounds, real bullet travel.',
-  Grab: 'Gravity-field manipulator. Grab, swing, slam and throw ragdolls.',
+const INFO = {
+  M1911: { category: 'weapons', type: 'Pistol', text: 'Semi-automatic .45 pistol with 7 rounds plus one in the chamber. Left click fires, right click aims, R reloads.' },
+  Grab: { category: 'tools', type: 'Tool', text: 'Picks up ragdolls and loose body parts from a distance. Right click grabs or drops, left click throws. Swing them into things to break bones.' },
 };
+const CATEGORIES = [['all', 'All'], ['weapons', 'Weapons'], ['tools', 'Tools']];
 
 /**
- * Inventory of tools ("toolbox"): hotbar at the bottom, Tab opens the full toolbox, number keys
- * or the mouse wheel switch. Handles the holster → draw animation between tools and the
- * per-tool controls panel on the left.
+ * Inventory of tools ("toolbox"): hotbar at the bottom, Tab opens the full toolbox (a square
+ * window with a scrolling item grid and categories on the right). Number keys, Q or the mouse
+ * wheel switch tools. Also handles the holster → draw animation and the controls panel.
  */
 export class Toolbox {
   constructor(tools, { audio, onOpenChange }) {
     this.tools = tools;
     this.audio = audio;
     this.index = 0;
-    this.pending = -1;       // tool we're switching to
+    this.pending = -1;
     this.isOpen = false;
     this.onOpenChange = onOpenChange;
+    this.category = 'all';
+    this.hover = -1;
+    this.time = 0;
+    this.quality = settings.get('graphics');
+    this.preview = null; // created the first time it's needed (Medium and up)
     for (const t of tools) t.raise = 0;
-    tools[0].raise = 0;
 
-    this.el = { hotbar: $('hotbar'), box: $('toolbox'), grid: $('toolbox-grid'), controls: $('controls'), ctlList: $('controls-list'), ctlTitle: $('controls-title') };
+    this.el = { hotbar: $('hotbar'), box: $('toolbox'), grid: $('toolbox-grid'), cats: $('toolbox-cats'), info: $('tb-info'),
+      controls: $('controls'), ctlList: $('controls-list'), ctlTitle: $('controls-title') };
     this.el.hotbar.innerHTML = tools.map((t, i) => `<div class="slot" data-i="${i}"><span class="key">${i + 1}</span>${ICONS[t.name] || ''}<span class="nm">${t.name}</span></div>`).join('');
-    this.el.grid.innerHTML = tools.map((t, i) => `<button class="tool-card" data-i="${i}"><span class="key">${i + 1}</span>${ICONS[t.name] || ''}<b>${t.name}</b><small>${BLURB[t.name] || ''}</small></button>`).join('')
-      + `<div class="tool-card empty"><b>Empty slot</b><small>More tools coming</small></div>`.repeat(2);
+    this.el.grid.innerHTML = tools.map((t, i) => `<button class="tool-card" data-i="${i}" data-cat="${INFO[t.name]?.category || 'tools'}">
+        <span class="key">${i + 1}</span>
+        <div class="pv"><canvas width="240" height="180"></canvas><div class="icon">${ICONS[t.name] || ''}</div></div>
+        <b>${t.name}</b><small>${INFO[t.name]?.type || ''}</small></button>`).join('');
+    this.cards = [...this.el.grid.querySelectorAll('.tool-card')].map((el) => ({ el, i: Number(el.dataset.i), ctx: el.querySelector('canvas').getContext('2d') }));
+    this.el.cats.innerHTML = CATEGORIES.map(([id, label]) => `<button data-cat="${id}">${label}<span>${id === 'all' ? tools.length : tools.filter((t) => INFO[t.name]?.category === id).length}</span></button>`).join('');
+
     this.el.grid.addEventListener('click', (e) => {
-      const card = e.target.closest('.tool-card[data-i]');
+      const card = e.target.closest('.tool-card');
       if (!card) return;
       this.select(Number(card.dataset.i));
       this.close();
     });
+    this.el.grid.addEventListener('mouseover', (e) => { const c = e.target.closest('.tool-card'); if (c) { this.hover = Number(c.dataset.i); this.renderInfo(); } });
+    this.el.grid.addEventListener('mouseleave', () => { this.hover = -1; this.renderInfo(); });
+    this.el.cats.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) this.setCategory(b.dataset.cat); });
+
     this.controlsKey = '';
     this.applyControlsVisibility();
     settings.onChange((k) => { if (k === 'showControls') this.applyControlsVisibility(); });
+    this.setCategory('all');
+    this.setQuality(this.quality);
     this.renderHotbar();
   }
 
   get active() { return this.tools[this.index]; }
+
+  setCategory(cat) {
+    this.category = cat;
+    for (const b of this.el.cats.querySelectorAll('button')) b.classList.toggle('on', b.dataset.cat === cat);
+    for (const c of this.cards) c.el.classList.toggle('hidden', cat !== 'all' && c.el.dataset.cat !== cat);
+  }
+
+  /** Low: pictures. Medium: spinning models. High / Very High: spinning models with effects. */
+  setQuality(level) {
+    this.quality = level;
+    this.el.box.classList.toggle('icons', level === 'low');
+    if (level !== 'low' && this.isOpen && !this.preview) this.preview = new ItemPreview();
+    this.preview?.setQuality(level);
+  }
 
   select(i) {
     if (i < 0 || i >= this.tools.length) return;
@@ -55,7 +86,14 @@ export class Toolbox {
     this.renderHotbar();
   }
 
-  open() { if (this.isOpen) return; this.isOpen = true; this.el.box.classList.remove('hidden'); this.onOpenChange?.(true); }
+  open() {
+    if (this.isOpen) return;
+    this.isOpen = true;
+    if (this.quality !== 'low' && !this.preview) { this.preview = new ItemPreview(); this.preview.setQuality(this.quality); }
+    this.el.box.classList.remove('hidden');
+    this.renderInfo();
+    this.onOpenChange?.(true);
+  }
   close() { if (!this.isOpen) return; this.isOpen = false; this.el.box.classList.add('hidden'); this.onOpenChange?.(false); }
   toggle() { if (this.isOpen) this.close(); else this.open(); }
 
@@ -64,16 +102,31 @@ export class Toolbox {
   renderHotbar() {
     const sel = this.pending >= 0 ? this.pending : this.index;
     this.el.hotbar.querySelectorAll('.slot').forEach((s, i) => s.classList.toggle('active', i === sel));
-    this.el.grid.querySelectorAll('.tool-card[data-i]').forEach((s, i) => s.classList.toggle('active', i === sel));
+    for (const c of this.cards) c.el.classList.toggle('active', c.i === sel);
+    this.renderInfo();
+  }
+
+  renderInfo() {
+    const i = this.hover >= 0 ? this.hover : (this.pending >= 0 ? this.pending : this.index);
+    const t = this.tools[i], info = INFO[t.name] || {};
+    const equipped = i === this.index && this.pending < 0;
+    this.el.info.innerHTML = `<b>${t.name}</b><span class="tag">${info.type || ''}</span>${equipped ? '<span class="tag on">Equipped</span>' : ''}<p>${info.text || ''}</p>`;
   }
 
   update(dt, input, playing, worldDt) {
+    this.time += dt;
     if (playing && !this.isOpen) {
       for (let i = 0; i < this.tools.length; i++) if (input.wasPressed(`Digit${i + 1}`)) this.select(i);
       if (input.wasPressed('KeyQ')) this.select((this.index + 1) % this.tools.length);
-      // wheel switches tools unless the grab tool is using it for distance
+      // the wheel switches tools unless the grab tool is using it to move what it holds
       if (input.wheel && !this.active.held) this.select((this.index + (input.wheel > 0 ? 1 : this.tools.length - 1)) % this.tools.length);
       if (input.wasPressed('KeyH')) settings.set('showControls', !settings.get('showControls'));
+    }
+    if (this.isOpen) {
+      for (let i = 0; i < this.tools.length; i++) if (input.wasPressed(`Digit${i + 1}`)) { this.select(i); this.close(); }
+      if (this.preview && this.quality !== 'low') {
+        for (const c of this.cards) if (!c.el.classList.contains('hidden')) this.preview.draw(this.tools[c.i].name, c.ctx, this.time + c.i * 1.3, c.i === this.hover);
+      }
     }
     // holster → draw
     const cur = this.active;
@@ -92,7 +145,7 @@ export class Toolbox {
 
   renderControls() {
     const t = this.active;
-    const rows = [...t.controls, ['1 / 2 · Q · wheel', 'Switch tool'], ['Tab', 'Toolbox'], ['Z / V', 'Slow down / speed up time'], ['H', 'Hide this panel']];
+    const rows = [...t.controls, ['1, 2 or Q', 'Switch tool'], ['Tab', 'Open toolbox'], ['Z', 'Slow down time'], ['V', 'Speed up time'], ['H', 'Hide this list']];
     const key = t.name + JSON.stringify(rows);
     if (key === this.controlsKey) return;
     this.controlsKey = key;

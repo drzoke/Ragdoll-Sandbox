@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { clamp, damp, Spring, lerp, viewmodelToWorld } from '../core/util.js';
-import { buildM1911, muzzleFlashTexture, flameTexture, smokeTexture } from './model1911.js';
+import { buildM1911, muzzleFlashTexture, flameTexture } from './model1911.js';
 import { ClipPlayer, CLIPS } from './anim.js';
 import { Casings } from './casings.js';
 
@@ -46,10 +46,6 @@ export class Pistol {
     this.flame.position.set(0, 0, -0.01);
     this.flame.visible = false;
     this.gun.muzzle.add(this.flame);
-    // Smoke puffs drift in the world after each shot.
-    this.mainScene = mainScene;
-    this.smokeMat = new THREE.SpriteMaterial({ map: smokeTexture(), transparent: true, depthWrite: false, color: 0xd8dade, opacity: 0 });
-    this.smoke = [];
     this.raise = 1;          // 0 = holstered, 1 = up (set by the toolbox)
     this.name = 'M1911';
 
@@ -116,38 +112,11 @@ export class Pistol {
     this.animateGun(dt);
     this.updateDropMags(dt);
     this.casings.update(worldDt);
-    this.updateSmoke(worldDt);
   }
 
   muzzleWorld(out = new THREE.Vector3()) {
     this.pivot.updateMatrixWorld(true);
     return viewmodelToWorld(this.gun.muzzle.getWorldPosition(_v), this.camera, this.mainCamera, out);
-  }
-
-  spawnSmoke(pos, dir) {
-    for (let i = 0; i < 4; i++) {
-      const s = new THREE.Sprite(this.smokeMat.clone());
-      s.position.copy(pos).addScaledVector(dir, 0.05 + i * 0.06);
-      s.material.rotation = Math.random() * Math.PI * 2;
-      const v = dir.clone().multiplyScalar(0.6 + i * 0.5).add(new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.15 + Math.random() * 0.15, (Math.random() - 0.5) * 0.2));
-      this.mainScene.add(s);
-      this.smoke.push({ s, v, age: 0, life: 1.3 + Math.random() * 0.8, size: 0.06 + i * 0.03 });
-    }
-  }
-
-  updateSmoke(dt) {
-    for (const p of this.smoke) {
-      p.age += dt;
-      p.v.multiplyScalar(Math.exp(-dt * 3));
-      p.v.y += dt * 0.25;
-      p.s.position.addScaledVector(p.v, dt);
-      const k = p.age / p.life;
-      p.s.scale.setScalar(p.size * (1 + k * 4));
-      p.s.material.opacity = 0.32 * (1 - k) * Math.min(1, p.age * 20);
-      p.s.material.rotation += dt * 0.3;
-      if (k >= 1) { this.mainScene.remove(p.s); p.s.material.dispose(); }
-    }
-    this.smoke = this.smoke.filter((p) => p.age < p.life);
   }
 
   tryFire() {
@@ -170,7 +139,6 @@ export class Pistol {
     dir.addScaledVector(right, Math.cos(a) * r).addScaledVector(up, Math.sin(a) * r).normalize();
     const muzzle = this.muzzleWorld(new THREE.Vector3());
     this.onFire(origin, dir, muzzle);
-    this.spawnSmoke(muzzle, dir);
 
     // Recoil: camera + viewmodel
     const rc = W.recoil, adsMul = lerp(1, 0.7, this.ads);

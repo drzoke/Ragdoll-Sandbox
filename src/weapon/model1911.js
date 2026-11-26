@@ -212,17 +212,3 @@ export function flameTexture() {
   });
   return flameTex;
 }
-
-let smokeTex = null;
-export function smokeTexture() {
-  if (smokeTex) return smokeTex;
-  smokeTex = canvasTexture(64, 64, (g, w, h) => {
-    for (let i = 0; i < 8; i++) {
-      const x = w / 2 + (Math.random() - 0.5) * 18, y = h / 2 + (Math.random() - 0.5) * 18, r = 12 + Math.random() * 12;
-      const grd = g.createRadialGradient(x, y, 0, x, y, r);
-      grd.addColorStop(0, 'rgba(255,255,255,0.35)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
-      g.fillStyle = grd; g.fillRect(0, 0, w, h);
-    }
-  });
-  return smokeTex;
-}

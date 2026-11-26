@@ -44,6 +44,18 @@ const beamMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
 });
 
+// White outline around whatever is held: back faces pushed out along the normals.
+const outlineMat = new THREE.ShaderMaterial({
+  uniforms: { thickness: { value: 0.011 }, time: { value: 0 }, bright: { value: 1 } },
+  vertexShader: /* glsl */`
+    uniform float thickness;
+    void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position + normalize(normal) * thickness, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform float time; uniform float bright;
+    void main() { float p = 0.85 + 0.15 * sin(time * 9.0); gl_FragColor = vec4(vec3(bright * p), 1.0); }`,
+  side: THREE.BackSide, fog: false,
+});
+
 class Beam {
   constructor(scene, segments = 48, width = 0.008, glow = false) {
     this.n = segments;
@@ -166,6 +178,8 @@ function buildGadget() {
  * what you hold, or punts things in front of you. The held point is pulled by a force-limited
  * joint to an anchor that trails behind your aim; the further away, the more it lags.
  */
+export { buildGadget };
+
 export class GrabTool {
   constructor({ mainScene, mainCamera, player, audio, environment, physics, ragdolls, gore, hud }) {
     this.name = 'Grab';
@@ -193,6 +207,9 @@ export class GrabTool {
 
     this.beam = new Beam(mainScene, 48, 0.0055, false);
     this.glow = new Beam(mainScene, 48, 0.035, true);
+    this.halo = new Beam(mainScene, 32, 0.1, true);   // wide soft glow (Very High)
+    this.outlines = [];
+    this.quality = 'medium';
 
     // anchor: kinematic body the held point is jointed to
     this.anchor = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, collisionFilterGroup: 0, collisionFilterMask: 0 });
@@ -217,6 +234,40 @@ export class GrabTool {
 
   resize(aspect) { this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); }
 
+  /** Beam glow and outline strength follow the graphics preset. */
+  setQuality(level) {
+    this.quality = level;
+    this.glow.width = level === 'ultra' ? 0.06 : level === 'high' ? 0.05 : 0.035;
+    outlineMat.uniforms.bright.value = level === 'ultra' ? 1.5 : level === 'high' ? 1.3 : 1.0;
+    outlineMat.uniforms.thickness.value = level === 'low' ? 0.008 : 0.011;
+  }
+
+  addOutlines(held) {
+    const add = (src, parent) => {
+      if (!src || !src.visible) return;
+      const o = new THREE.Mesh(src.geometry, outlineMat);
+      o.position.copy(src.position); o.quaternion.copy(src.quaternion); o.scale.copy(src.scale);
+      o.renderOrder = -1;
+      o.userData.outline = true;
+      o.raycast = () => {};
+      parent.add(o);
+      this.outlines.push(o);
+    };
+    if (held.kind === 'ragdoll') {
+      for (const b of held.set) {
+        const part = held.ragdoll.parts[b.userData.part];
+        if (!part) continue;
+        add(part.mesh, part.group);
+        if (part.ball?.visible) add(part.ball, part.group);
+      }
+    } else add({ geometry: held.gib.mesh.geometry, position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), scale: new THREE.Vector3(1, 1, 1), visible: true }, held.gib.mesh);
+  }
+
+  removeOutlines() {
+    for (const o of this.outlines) o.parent?.remove(o);
+    this.outlines = [];
+  }
+
   get ads() { return 0; }
   get busy() { return false; }
 
@@ -224,9 +275,8 @@ export class GrabTool {
   get controls() {
     return [
       ['Right click', this.held ? 'Drop' : 'Grab'],
-      ['Left click', this.held ? 'Throw' : 'Punt (push)'],
-      ['Scroll / R F', 'Pull closer / push away'],
-      ['Swing the mouse', 'Slam it into things to break bones'],
+      ['Left click', this.held ? 'Throw' : 'Push away'],
+      ['Wheel or R / F', 'Pull closer / push away'],
     ];
   }
 
@@ -293,6 +343,7 @@ export class GrabTool {
     this.dist = clamp(t.distance, G.minDist, G.maxDist);
     if (t.kind === 'ragdoll' && t.ragdoll.health.parts[t.part].attached) t.ragdoll.grabbed = true;
     for (const body of this.held.set) body.wakeUp?.();
+    this.addOutlines(this.held);
     this.audio.play('grab');
     this.kick.kick(-4);
   }
@@ -301,6 +352,7 @@ export class GrabTool {
     const h = this.held;
     if (!h) return;
     this.physics.world.removeConstraint(h.joint);
+    this.removeOutlines();
     if (h.kind === 'ragdoll') h.ragdoll.grabbed = false;
     this.held = null;
   }
@@ -435,8 +487,12 @@ export class GrabTool {
 
   updateBeam(dt, origin, dir) {
     const on = this.held || this.pulse > 0;
-    const vis = on && this.raise > 0.5;
-    this.beam.mesh.visible = this.glow.mesh.visible = !!vis;
+    const vis = !!(on && this.raise > 0.5);
+    const q = this.quality;
+    outlineMat.uniforms.time.value = this.time;
+    this.beam.mesh.visible = vis;
+    this.glow.mesh.visible = vis && q !== 'low';
+    this.halo.mesh.visible = vis && q === 'ultra';
     this.worldLight.intensity = 0;
     this.audio.hum(this.held && this.raise > 0.5 ? 1 : 0, this.held ? 1 + Math.min(1, this.held.body.velocity.length() / 12) * 0.8 : 1);
     if (!vis) return;
@@ -454,13 +510,16 @@ export class GrabTool {
     const p1 = p0.clone().addScaledVector(dir, len * 0.55);
     const camPos = origin;
     const inten = this.held ? 0.9 + 0.1 * Math.sin(this.time * 30) : this.pulse;
-    this.beam.mat.uniforms.intensity.value = inten;
-    this.glow.mat.uniforms.intensity.value = inten * 0.55;
+    const boost = q === 'ultra' ? 1.8 : q === 'high' ? 1.5 : 1;
+    this.beam.mat.uniforms.intensity.value = inten * boost;
+    this.glow.mat.uniforms.intensity.value = inten * 0.55 * boost;
+    this.halo.mat.uniforms.intensity.value = inten * 0.35;
     const jit = this.held ? 0.004 + Math.min(0.03, this.held.body.velocity.length() * 0.0015) : 0.01;
     this.beam.set(p0, p1, p2, camPos, this.time, jit);
     this.glow.set(p0, p1, p2, camPos, this.time, jit * 0.5);
+    if (this.halo.mesh.visible) this.halo.set(p0, p1, p2, camPos, this.time, 0);
     this.worldLight.position.copy(p2);
-    this.worldLight.intensity = inten * 1.6;
+    this.worldLight.intensity = inten * (q === 'ultra' ? 3 : q === 'high' ? 2.2 : 1.6);
   }
 
   animate(dt) {

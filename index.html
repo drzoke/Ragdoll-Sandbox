@@ -28,8 +28,12 @@
 <script>
   // Loading screen progress while the game's modules download (main.js takes over afterwards).
   (function () {
-    var tips = ['Press X for the X-ray panel: bones, organs, blood and oxygen.', 'Slam a ragdoll into the floor with the Grab tool to break bones.',
-      'Z slows time down, V speeds it up. Watch the bullets fly.', 'Tab opens the toolbox. 1 and 2 switch tools.', 'Settings has gore options: purple blood, organs, dismemberment.'];
+    var tips = ['Press X to open the X-ray panel. It shows the bones, organs, blood and oxygen of the ragdoll you look at.',
+      'Grab a ragdoll and swing it into the floor or a wall to break its bones.',
+      'Press Z to slow time down and V to speed it up.',
+      'Press Tab to open the toolbox. Press 1 or 2 to switch tools.',
+      'Press Esc and open Settings to change the graphics and gore options.',
+      'Press E on the red button to get a new ragdoll, and on the blue button to clean up the blood.'];
     document.getElementById('ld-tip').textContent = tips[(Math.random() * tips.length) | 0];
     var expected = 38, seen = 0;
     window.__loader = { p: 0, set: function (p, text) {
@@ -64,8 +68,12 @@
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
-    <header><h2>Toolbox</h2><span>Click a tool or press its number · Tab to close</span></header>
-    <div id="toolbox-grid"></div>
+    <header><h2>Toolbox</h2><span>Click an item to equip it · Tab or Esc to close</span></header>
+    <div class="tb-body">
+      <div id="toolbox-grid"></div>
+      <nav id="toolbox-cats"></nav>
+    </div>
+    <footer id="tb-info"></footer>
   </div>
 </div>
 
@@ -89,25 +97,26 @@
 <div id="menu" class="hidden">
   <div class="card">
     <h1>Ragdoll Sandbox</h1>
-    <p class="sub">Draft build · physics test map</p>
+    <p class="sub">Physics sandbox</p>
     <nav class="tabs"><button data-tab="play" class="on">Play</button><button data-tab="settings">Settings</button><button data-tab="keys">Controls</button></nav>
 
     <section class="tab" id="tab-play">
       <button id="play">Click to play</button>
-      <p class="note">Plays fullscreen so Ctrl and other browser shortcuts can't close the game (Chrome/Edge). Hold Esc to leave fullscreen. In other browsers, crouch with C.</p>
-      <div id="lockwarn" class="hidden">Mouse lock was blocked here. Open this page in its own browser tab for full mouse look.</div>
+      <p class="note">The game plays in fullscreen so keys like Ctrl+W can't close it by accident. Hold Esc to leave fullscreen.</p>
+      <div id="lockwarn" class="hidden">This page can't lock the mouse. Open the game in its own browser tab to look around with the mouse.</div>
     </section>
 
     <section class="tab hidden" id="tab-settings">
       <h3>Graphics</h3>
-      <div class="seg" data-setting="graphics"><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button></div>
+      <div class="seg" data-setting="graphics"><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button><button data-v="ultra">Very High</button></div>
       <p class="note" id="gfx-note"></p>
+      <div class="gpu" id="gfx-gpu"></div>
       <h3>Gore</h3>
       <label class="row"><span>Show organs</span><input type="checkbox" data-setting="showOrgans"><i class="sw"></i></label>
       <label class="row"><span>Dismemberment &amp; exploding parts</span><input type="checkbox" data-setting="dismemberment"><i class="sw"></i></label>
       <div class="row"><span>Blood colour</span><div class="seg small" data-setting="bloodColor"><button data-v="red">Red</button><button data-v="purple">Purple</button></div></div>
       <h3>HUD</h3>
-      <label class="row"><span>Show weapon controls (left side)</span><input type="checkbox" data-setting="showControls"><i class="sw"></i></label>
+      <label class="row"><span>Show tool controls (left side)</span><input type="checkbox" data-setting="showControls"><i class="sw"></i></label>
     </section>
 
     <section class="tab hidden" id="tab-keys">
@@ -117,16 +126,18 @@
         <tr><td>Shift</td><td>Sprint</td></tr>
         <tr><td>Space</td><td>Jump</td></tr>
         <tr><td>C / Ctrl</td><td>Crouch (hold)</td></tr>
-        <tr><td>1 / 2 · Q · wheel</td><td>Switch tool (M1911, Grab)</td></tr>
-        <tr><td>Tab</td><td>Toolbox</td></tr>
-        <tr><td>Z / V</td><td>Slow down / speed up time</td></tr>
+        <tr><td>1, 2 or Q</td><td>Switch tool</td></tr>
+        <tr><td>Mouse wheel</td><td>Switch tool (or move what you're holding with Grab)</td></tr>
+        <tr><td>Tab</td><td>Open toolbox</td></tr>
+        <tr><td>Z</td><td>Slow down time</td></tr>
+        <tr><td>V</td><td>Speed up time</td></tr>
         <tr><td>E</td><td>Press button</td></tr>
         <tr><td>X</td><td>X-ray panel</td></tr>
-        <tr><td>H</td><td>Hide weapon controls</td></tr>
+        <tr><td>H</td><td>Hide the tool controls list</td></tr>
         <tr><td>F3</td><td>Debug info</td></tr>
         <tr><td>Esc</td><td>Pause</td></tr>
       </table>
-      <p class="note">Weapon-specific keys are listed on the left side of the screen while playing.</p>
+      <p class="note">The controls for the tool you're holding are listed on the left side of the screen.</p>
     </section>
   </div>
 </div>
