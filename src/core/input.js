@@ -10,6 +10,7 @@ export class Input {
     this.mouseDY = 0;
     this.locked = false;
     this.enabled = false; // only true while the game is being played
+    this.keyboardLocked = false; // true when Keyboard Lock is active (fullscreen, Chrome/Edge)
 
     addEventListener('keydown', (e) => {
       if (!this.enabled) return;

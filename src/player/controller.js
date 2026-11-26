@@ -82,8 +82,9 @@ export class PlayerController {
     const wishZ = -fx * sin + fz * cos;
     const moving = fx !== 0 || fz !== 0;
 
-    // Crouch is C only: Ctrl+W/Ctrl+S etc. are browser shortcuts (Ctrl+W closes the tab).
-    this.wantsCrouch = active && input.isDown('KeyC');
+    // Ctrl only crouches when the keyboard is locked (fullscreen in Chrome/Edge); otherwise
+    // Ctrl+W would close the tab, so C is the always-safe crouch key.
+    this.wantsCrouch = active && (input.isDown('KeyC') || (input.keyboardLocked && input.isDown('ControlLeft')));
     this.sprinting = active && moving && input.isDown('ShiftLeft') && fz < 0 && !this.aiming && this.crouch < 0.5;
     let speed = this.sprinting ? P.sprintSpeed : P.walkSpeed;
     if (this.crouch > 0.5) speed = P.crouchSpeed;

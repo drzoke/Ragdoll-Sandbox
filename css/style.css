@@ -69,6 +69,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #9aa0a6; fon
 #menu .sub { margin: 4px 0 18px; color: #9fb0bf; }
 #play { width: 100%; padding: 12px; font: inherit; font-size: 16px; font-weight: 700; border: 0; border-radius: 8px; background: #e8edf2; color: #15191d; cursor: pointer; }
 #play:hover { background: #fff; }
+#menu .note { margin: 10px 0 0; font-size: 12px; color: #9fb0bf; }
 #lockwarn { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: rgba(255, 170, 80, .15); color: #ffcf9a; }
 .controls { width: 100%; margin-top: 16px; border-collapse: collapse; font-size: 13px; }
 .controls td { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.06); }

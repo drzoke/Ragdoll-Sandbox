@@ -65,9 +65,23 @@ function setPlaying(p) {
   if (!p) input.clear();
 }
 
+// Fullscreen + Keyboard Lock (Chrome/Edge): lets the game receive Ctrl, Ctrl+W, Esc etc.
+// instead of the browser acting on them. Silently skipped where unsupported (Firefox, iframes).
+async function enterFullscreenWithKeyLock() {
+  try {
+    if (!document.fullscreenElement) await document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+    if (navigator.keyboard?.lock) { await navigator.keyboard.lock(); input.keyboardLocked = true; }
+  } catch { /* not allowed here */ }
+}
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement) { input.keyboardLocked = false; navigator.keyboard?.unlock?.(); }
+});
+
 document.getElementById('play').addEventListener('click', async () => {
   audio.unlock();
+  const fs = enterFullscreenWithKeyLock(); // must start inside the click
   try {
+    await fs;
     const req = canvas.requestPointerLock();
     if (req && req.then) await req;
     freeMouse = false;
@@ -83,7 +97,13 @@ document.addEventListener('pointerlockchange', () => {
 });
 document.addEventListener('pointerlockerror', () => { freeMouse = true; lockWarn.classList.remove('hidden'); setPlaying(true); });
 addEventListener('keydown', (e) => {
-  if (e.code === 'Escape' && freeMouse && playing) setPlaying(false);
+  if (!playing) return;
+  // With the keyboard locked the browser no longer handles Esc for us.
+  if (e.code === 'Escape') {
+    if (document.pointerLockElement) document.exitPointerLock();
+    else setPlaying(false);
+  }
+  if (e.ctrlKey || e.metaKey) e.preventDefault();
 });
 // Safety net: browsers won't let a page block Ctrl+W, but they will ask before closing it.
 addEventListener('beforeunload', (e) => { if (playing) { e.preventDefault(); e.returnValue = ''; } });
