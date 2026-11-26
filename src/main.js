@@ -85,6 +85,8 @@ document.addEventListener('pointerlockerror', () => { freeMouse = true; lockWarn
 addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && freeMouse && playing) setPlaying(false);
 });
+// Safety net: browsers won't let a page block Ctrl+W, but they will ask before closing it.
+addEventListener('beforeunload', (e) => { if (playing) { e.preventDefault(); e.returnValue = ''; } });
 
 // ------------------------------------------------------------------ resize
 function resize() {
