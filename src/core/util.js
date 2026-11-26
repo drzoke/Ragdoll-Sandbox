@@ -86,3 +86,34 @@ export function viewmodelToWorld(local, vmCamera, mainCamera, out = new THREE.Ve
   const t = depth / Math.max(0.05, out.dot(_fw));
   return out.multiplyScalar(t).add(_cp);
 }
+
+/**
+ * Viewmodel offset for drawing / holstering a tool. raise: 0 = holstered, 1 = ready.
+ * Drawing follows: grab (low, tilted down) → pull up → pull up a little past the rest pose →
+ * settle down → rest. Holstering just drops the tool out of view.
+ */
+const DRAW_KEYS = [
+  // t,    x,      y,      z,     rx,    rz
+  [0.00, 0.03, -0.30, 0.06, -1.00, 0.35],
+  [0.30, 0.012, -0.075, 0.02, -0.30, 0.12],   // grab + pull up
+  [0.56, 0.0, 0.018, -0.006, 0.10, -0.03],    // pulled up a bit too far
+  [0.80, 0.0, -0.006, 0.002, -0.03, 0.01],    // settle down
+  [1.00, 0, 0, 0, 0, 0],                       // rest
+];
+const _draw = { x: 0, y: 0, z: 0, rx: 0, rz: 0 };
+export function drawOffset(raise, drawing) {
+  const t = Math.max(0, Math.min(1, raise));
+  if (!drawing) {
+    const k = 1 - t, e = k * k * (3 - 2 * k);
+    _draw.x = 0.02 * e; _draw.y = -0.28 * e; _draw.z = 0.04 * e; _draw.rx = -0.9 * e; _draw.rz = 0.2 * e;
+    return _draw;
+  }
+  let i = 0;
+  while (i < DRAW_KEYS.length - 2 && t > DRAW_KEYS[i + 1][0]) i++;
+  const a = DRAW_KEYS[i], b = DRAW_KEYS[i + 1];
+  let u = (t - a[0]) / (b[0] - a[0]);
+  u = u * u * (3 - 2 * u);
+  _draw.x = a[1] + (b[1] - a[1]) * u; _draw.y = a[2] + (b[2] - a[2]) * u; _draw.z = a[3] + (b[3] - a[3]) * u;
+  _draw.rx = a[4] + (b[4] - a[4]) * u; _draw.rz = a[5] + (b[5] - a[5]) * u;
+  return _draw;
+}

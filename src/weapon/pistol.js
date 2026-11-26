@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
-import { clamp, damp, Spring, lerp, viewmodelToWorld } from '../core/util.js';
+import { clamp, damp, Spring, lerp, viewmodelToWorld, drawOffset } from '../core/util.js';
 import { buildM1911, muzzleFlashTexture, flameTexture } from './model1911.js';
 import { ClipPlayer, CLIPS } from './anim.js';
 import { Casings } from './casings.js';
@@ -283,16 +283,16 @@ export class Pistol {
     const pos = a.sample('pos', [0, 0, 0]), rot = a.sample('rot', [0, 0, 0]);
     const sp = this.sprint;
     const crouchDip = p.crouch * 0.01;
-    const lower = 1 - this.raise;
+    const dr = drawOffset(this.raise, this.drawing);
     this.pivot.position.set(
-      lerp(hip[0], ads[0], this.ads) + this.swayX + bobX + pos[0] - sp * 0.04 + ks * 0.003,
-      lerp(hip[1], ads[1], this.ads) + this.swayY + bobY + idle + pos[1] - sp * 0.035 - crouchDip + kr * 0.004 - lower * 0.26,
-      lerp(hip[2], ads[2], this.ads) + pos[2] + kb * 0.01 + sp * 0.02
+      lerp(hip[0], ads[0], this.ads) + this.swayX + bobX + pos[0] - sp * 0.04 + ks * 0.003 + dr.x,
+      lerp(hip[1], ads[1], this.ads) + this.swayY + bobY + idle + pos[1] - sp * 0.035 - crouchDip + kr * 0.004 + dr.y,
+      lerp(hip[2], ads[2], this.ads) + pos[2] + kb * 0.01 + sp * 0.02 + dr.z
     );
     this.pivot.rotation.set(
-      rot[0] + kr * 0.06 - sp * 0.45 + this.swayY * 1.5 - lower * 0.9,
+      rot[0] + kr * 0.06 - sp * 0.45 + this.swayY * 1.5 + dr.rx,
       rot[1] + lerp(0.035, 0, this.ads) + sp * 0.55 + this.swayX * 1.5 + ks * 0.02,
-      rot[2] + kroll * 0.02 + this.swayX * 1.2 + sp * 0.15,
+      rot[2] + kroll * 0.02 + this.swayX * 1.2 + sp * 0.15 + dr.rz,
       'YXZ'
     );
     const fov = W.weaponFov * lerp(1, 0.86, this.ads);

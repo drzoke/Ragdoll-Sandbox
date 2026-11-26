@@ -32,7 +32,7 @@ export class Toolbox {
     this.time = 0;
     this.quality = settings.get('graphics');
     this.preview = null; // created the first time it's needed (Medium and up)
-    for (const t of tools) t.raise = 0;
+    for (const t of tools) { t.raise = 0; t.drawing = true; }
 
     this.el = { hotbar: $('hotbar'), box: $('toolbox'), grid: $('toolbox-grid'), cats: $('toolbox-cats'), info: $('tb-info'),
       controls: $('controls'), ctlList: $('controls-list'), ctlTitle: $('controls-title') };
@@ -131,13 +131,17 @@ export class Toolbox {
     // holster → draw
     const cur = this.active;
     if (this.pending >= 0 && this.pending !== this.index) {
+      // holster: drops straight down out of view
+      cur.drawing = false;
       cur.raise = Math.max(0, cur.raise - dt / 0.16);
       if (cur.raise <= 0) { this.index = this.pending; this.pending = -1; this.renderHotbar(); }
     } else {
       this.pending = -1;
-      cur.raise = Math.min(1, cur.raise + dt / 0.24);
+      // draw: grab, pull up, a little too far, settle (about half a second)
+      if (cur.raise < 1) cur.drawing = true;
+      cur.raise = Math.min(1, cur.raise + dt / 0.55);
     }
-    for (const t of this.tools) if (t !== this.active) t.raise = 0;
+    for (const t of this.tools) if (t !== this.active) { t.raise = 0; t.drawing = true; }
     const usable = playing && !this.isOpen;
     for (const t of this.tools) t.update(dt, input, usable && t === this.active, worldDt);
     this.renderControls();

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { CONFIG } from '../config.js';
-import { clamp, damp, lerp, Spring, viewmodelToWorld } from '../core/util.js';
+import { clamp, damp, lerp, Spring, viewmodelToWorld, drawOffset } from '../core/util.js';
 import { PARTS } from '../ragdoll/skeleton.js';
 
 const W = CONFIG.weapon;
@@ -118,56 +118,68 @@ function buildGadget() {
   const glowMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xdff0ff, emissiveIntensity: 1.5, roughness: 0.2 });
   const coilMat = new THREE.MeshStandardMaterial({ color: 0x8fb8d8, emissive: 0x9fd4ff, emissiveIntensity: 0.4, roughness: 0.3, metalness: 0.3 });
 
+  // Big, chunky "physics gun" proportions: heavy base, wide emitter and long claws.
   const root = new THREE.Group();
-  const body = new THREE.Mesh(new RoundedBoxGeometry(0.072, 0.075, 0.24, 3, 0.018), white);
-  body.position.set(0, 0, -0.06);
+  const body = new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.105, 0.28, 3, 0.024), white);
+  body.position.set(0, 0, -0.05);
   root.add(body);
-  const top = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.022, 0.16, 2, 0.008), gray);
-  top.position.set(0, 0.045, -0.04);
+  const rear = new THREE.Mesh(new RoundedBoxGeometry(0.088, 0.092, 0.06, 3, 0.02), gray);
+  rear.position.set(0, 0, 0.11);
+  root.add(rear);
+  const top = new THREE.Mesh(new RoundedBoxGeometry(0.062, 0.03, 0.2, 2, 0.01), gray);
+  top.position.set(0, 0.064, -0.04);
   root.add(top);
-  const grip = new THREE.Mesh(new RoundedBoxGeometry(0.042, 0.115, 0.055, 2, 0.012), dark);
-  grip.position.set(0, -0.075, 0.02); grip.rotation.x = 0.28;
+  for (const sx of [1, -1]) {
+    const panel = new THREE.Mesh(new RoundedBoxGeometry(0.008, 0.06, 0.17, 2, 0.003), dark);
+    panel.position.set(sx * 0.051, -0.008, -0.05);
+    root.add(panel);
+  }
+  const grip = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.13, 0.065, 2, 0.014), dark);
+  grip.position.set(0, -0.1, 0.045); grip.rotation.x = 0.28;
   root.add(grip);
-  const trigGuard = new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.004, 6, 14, Math.PI), dark);
-  trigGuard.position.set(0, -0.04, -0.03); trigGuard.rotation.set(0, Math.PI / 2, Math.PI);
+  const trigGuard = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.005, 6, 14, Math.PI), dark);
+  trigGuard.position.set(0, -0.055, -0.01); trigGuard.rotation.set(0, Math.PI / 2, Math.PI);
   root.add(trigGuard);
   // barrel + coils
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.11, 18).rotateX(Math.PI / 2), gray);
-  barrel.position.set(0, 0, -0.215);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.04, 0.12, 22).rotateX(Math.PI / 2), gray);
+  barrel.position.set(0, 0, -0.245);
   root.add(barrel);
   const coils = [];
   for (let i = 0; i < 3; i++) {
-    const c = new THREE.Mesh(new THREE.TorusGeometry(0.029, 0.0045, 8, 22), coilMat.clone());
-    c.position.set(0, 0, -0.18 - i * 0.025);
+    const c = new THREE.Mesh(new THREE.TorusGeometry(0.043, 0.007, 8, 26), coilMat.clone());
+    c.position.set(0, 0, -0.205 - i * 0.034);
     root.add(c); coils.push(c);
   }
-  const emitterRing = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.006, 8, 24), dark);
-  emitterRing.position.set(0, 0, -0.272);
+  const emitterRing = new THREE.Mesh(new THREE.TorusGeometry(0.047, 0.009, 10, 28), dark);
+  emitterRing.position.set(0, 0, -0.31);
   root.add(emitterRing);
-  // three prongs that open while grabbing
+  // three big claws that open while grabbing
   const prongs = [];
   for (let i = 0; i < 3; i++) {
     const hinge = new THREE.Group();
     const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
-    hinge.position.set(Math.cos(a) * 0.03, Math.sin(a) * 0.03, -0.27);
+    hinge.position.set(Math.cos(a) * 0.05, Math.sin(a) * 0.05, -0.305);
     hinge.rotation.z = a - Math.PI / 2;
-    const prong = new THREE.Mesh(new RoundedBoxGeometry(0.012, 0.01, 0.075, 2, 0.003), white);
-    prong.position.set(0, 0, -0.033);
-    const tip = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.016, 0.01), dark);
-    tip.position.set(0, -0.006, -0.068);
+    const prong = new THREE.Mesh(new RoundedBoxGeometry(0.034, 0.024, 0.17, 2, 0.007), white);
+    prong.position.set(0, 0.008, -0.075);
+    const knuckle = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.04, 12).rotateZ(Math.PI / 2), gray);
+    knuckle.position.set(0, -0.004, 0.075);
+    prong.add(knuckle);
+    const tip = new THREE.Mesh(new RoundedBoxGeometry(0.034, 0.046, 0.028, 2, 0.006), dark);
+    tip.position.set(0, -0.018, -0.084);
     prong.add(tip);
     hinge.add(prong);
     root.add(hinge); prongs.push(hinge);
   }
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.014, 16, 12), glowMat);
-  core.position.set(0, 0, -0.275);
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.022, 18, 14), glowMat);
+  core.position.set(0, 0, -0.31);
   root.add(core);
   // display strip
-  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.012, 0.09), coilMat.clone());
-  strip.position.set(0.037, 0.012, -0.06);
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.014, 0.12), coilMat.clone());
+  strip.position.set(0.056, 0.02, -0.05);
   root.add(strip);
   const muzzle = new THREE.Object3D();
-  muzzle.position.set(0, 0, -0.29);
+  muzzle.position.set(0, 0, -0.33);
   root.add(muzzle);
   root.traverse((o) => { if (o.isMesh) o.castShadow = false; });
   return { root, prongs, core, coils, strip, muzzle, glowMat };
@@ -195,7 +207,7 @@ export class GrabTool {
     const rim = new THREE.DirectionalLight(0xbcd4ff, 0.9); rim.position.set(-1, 0.3, -0.6); this.scene.add(rim);
     this.pivot = new THREE.Group(); this.scene.add(this.pivot);
     this.gadget = buildGadget();
-    this.gadget.root.scale.setScalar(0.55);
+    this.gadget.root.scale.setScalar(0.5);
     this.gadget.root.position.set(0, 0, 0.04);
     this.pivot.add(this.gadget.root);
     this.vmLight = new THREE.PointLight(0xcfe6ff, 0, 0.6, 2);
@@ -544,10 +556,10 @@ export class GrabTool {
     const bobY = -Math.abs(Math.sin(p.bobPhase)) * 0.011 * bobA;
     const idle = Math.sin(this.time * 1.3) * 0.0015;
     const k = this.kick.update(dt);
-    const lower = 1 - this.raise;
+    const dr = drawOffset(this.raise, this.drawing);
     const strain = this.held ? Math.sin(this.time * 31) * 0.0008 * (1 + this.dist / 6) : 0;
-    this.pivot.position.set(0.16 + this.swayX + bobX + strain, -0.145 + this.swayY + bobY + idle - lower * 0.28 - p.crouch * 0.01, -0.4 + k * 0.004);
-    this.pivot.rotation.set(-k * 0.01 + this.swayY * 1.5 - lower * 0.9, 0.05 + this.swayX * 1.5, this.swayX * 1.2, 'YXZ');
+    this.pivot.position.set(0.16 + this.swayX + bobX + strain + dr.x, -0.165 + this.swayY + bobY + idle + dr.y - p.crouch * 0.01, -0.44 + k * 0.004 + dr.z);
+    this.pivot.rotation.set(-k * 0.01 + this.swayY * 1.5 + dr.rx, 0.05 + this.swayX * 1.5, this.swayX * 1.2 + dr.rz, 'YXZ');
   }
 
   dispose() { this.release(); }

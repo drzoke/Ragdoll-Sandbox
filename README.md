@@ -41,6 +41,8 @@ python3 -m http.server 8000      # or: npx serve .
 
 **Grab:** right click grabs or drops a body part (or a gib), left click throws what you hold or pushes things in front of you away, and the wheel or R / F pulls it closer or pushes it away. Whatever you hold gets a white outline. The held point trails your aim, and the farther away it is the more it lags. Slamming a ragdoll into the floor or walls breaks bones. A held ragdoll curls up into a fetal position.
 
+Switching tools plays a draw animation: the tool comes up from below, rises a little past its resting spot, then settles.
+
 **Toolbox (Tab):** a square window listing every item in a scrolling grid, with categories on the right (All, Weapons, Tools). Click an item, or press its number, to equip it. Item previews follow the graphics preset: a picture on Low, a spinning 3D model on Medium, and a spinning model with its own effects (the pistol cycles and flashes, the grab tool pulses) on High and Very High, plus a glossy reflection on Very High.
 
 There are two buttons next to the spawn point: **RESPAWN** (new ragdoll) and **CLEAN UP** (removes blood, gibs and casings). Shooting a button also presses it.
