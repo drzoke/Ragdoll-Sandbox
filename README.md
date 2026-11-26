@@ -1,6 +1,6 @@
 # Ragdoll Sandbox (draft)
 
-**Play:** https://drzoke.github.io/ragdoll-sandbox/
+**Play:** https://drzoke.github.io/Ragdoll-Sandbox/
 
 ![screenshot](screenshot.png)
 
