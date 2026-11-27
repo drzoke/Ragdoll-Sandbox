@@ -198,6 +198,7 @@ function loadMap(id) {
   settings.set('map', id);
   target = null; ballistics.lastTarget = null;
   vitals.reset();
+  resetDrs();
 }
 
 // ---- your health: zombies, long falls and blasts hurt; at 0 you respawn at the map start ----
@@ -617,6 +618,38 @@ function watchFps(_dt, now) {
   }
 }
 
+// ---- dynamic resolution: when the frame rate drops, draw fewer pixels (down to 60%) ----
+// Steps down 10% at a time while below 48 FPS, and back up after a while above 57. If a step down
+// didn't help (the game is held back by something other than drawing pixels, or the screen runs at
+// 30 Hz), it goes back up and stops trying until the preset or the map changes.
+const drs = { t: 0, frames: 0, warm: 0, good: 0, lastDownFps: 0, stuck: false, wait: 0 };
+const resetDrs = () => { Object.assign(drs, { t: 0, frames: 0, warm: 0, good: 0, lastDownFps: 0, stuck: false, wait: 0 }); graphics.setResScale(1); };
+settings.onChange((k, v) => { if (k === 'graphics' || (k === 'dynamicRes' && !v)) resetDrs(); });
+function watchResolution(now) {
+  const dt = drs.last ? Math.min(1, (now - drs.last) / 1000) : 0;
+  drs.last = now;
+  if (!settings.get('dynamicRes') || !playing || document.hidden || debug.timeScale === 0) { drs.warm = 0; return; }
+  drs.warm += dt;
+  if (drs.warm < 3) { drs.t = 0; drs.frames = 0; return; }
+  drs.t += dt; drs.frames++;
+  if (drs.t < 1.5) return;
+  const fps = drs.frames / drs.t;
+  drs.t = 0; drs.frames = 0;
+  if (drs.wait > 0) { drs.wait--; return; }
+  const s = graphics.resScale;
+  if (fps < 48) {
+    drs.good = 0;
+    if (drs.stuck || s <= 0.61) return;
+    if (drs.lastDownFps && fps < drs.lastDownFps * 1.04) { drs.stuck = true; graphics.setResScale(s + 0.1); drs.wait = 1; return; }
+    drs.lastDownFps = fps;
+    graphics.setResScale(s - 0.1);
+    drs.wait = 1;               // let it settle for one window before judging the new size
+  } else {
+    drs.lastDownFps = 0;
+    if (fps > 57 && s < 1 && ++drs.good >= 4) { drs.good = 0; graphics.setResScale(s + 0.1); drs.wait = 1; }
+  }
+}
+
 // ------------------------------------------------------------------ loop
 let last = performance.now();
 function frame() {
@@ -664,13 +697,15 @@ function frame() {
       `particles ${gore.particles.alive.size}  pools ${gore.decals.pools.length}  gibs ${gore.gibs.length}`,
       r0 ? `${r0.name}: ${r0.brain.state} / ${r0.brain.activity}  pelvis y ${r0.pelvis.position.y.toFixed(2)}` : '',
       `pistol ${pistol.state}  mag ${pistol.mag}  chamber ${pistol.chambered}  shotgun ${shotgun.state} ${shotgun.tube}+${shotgun.chamber}  bullets ${ballistics.bullets.length}  grenades ${explosives.live.length}`,
-      `time ${world.timeScale}x  gfx ${graphics.level}  tool ${toolbox.active.name}${grab.held ? ' holding ' + (grab.held.part || 'gib') : ''}`,
+      `time ${world.timeScale}x  gfx ${graphics.level} res ${(graphics.resScale * 100).toFixed(0)}%  tool ${toolbox.active.name}${grab.held ? ' holding ' + (grab.held.part || 'gib') : ''}`,
     ].join('\n') : null,
   });
 
   watchFps(dt, now);
+  watchResolution(now);
   const t = toolbox.active;
   vitals.update(dt, { input, playing: playing && !toolboxOpen, show: !titleMode && ragdolls.list.some((r) => r.zombie && !r.hidden) });
+  map.cull(camera);
   if (titleMode || vitals.dead) graphics.render(null, null);
   else graphics.render(t.scene, t.camera);
   input.endFrame();

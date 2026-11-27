@@ -358,6 +358,7 @@ export class GrabTool {
     this.held = { ...t, local: local.clone(), joint };
     this.held.set = t.kind === 'ragdoll' ? this.connectedSet(t.ragdoll, t.part) : [b];
     this.dist = clamp(t.distance, G.minDist, G.maxDist);
+    if (t.kind === 'ragdoll') t.ragdoll.wake?.();   // a resting body comes back into the simulation
     if (t.kind === 'ragdoll' && t.ragdoll.health.parts[t.part].attached) t.ragdoll.grabbed = true;
     for (const body of this.held.set) body.wakeUp?.();
     this.addOutlines(this.held);

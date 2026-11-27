@@ -100,19 +100,15 @@ export class Elevator {
     }
     this.drawScreen();
     this.place();
-    map.updaters.push((dt, focus, ctx) => { this.cull(focus); this.update(dt, ctx); });
+    map.updaters.push((dt, focus, ctx) => this.update(dt, ctx));
   }
 
   get ctx() { return this.map.ctx; }
 
-  /** Only draw the doors, buttons and screens on the floors next to you. */
-  cull(focus) {
-    let k = 0, best = Infinity;
-    for (let i = 0; i < this.levels; i++) { const d = Math.abs(focus.y - this.floorY(i)); if (d < best) { best = d; k = i; } }
-    if (k === this.lastK) return;
-    this.lastK = k;
-    this.landing.forEach((ld, i) => { const v = Math.abs(i - k) <= 1; ld.L.visible = ld.R.visible = v; for (const m of ld.extra) m.visible = v; });
-    this.car.visible = Math.abs(this.level - k) <= 1;
+  /** Only draw the doors, buttons and screens (and the car) on the floors the map says can be seen. */
+  showLevels(shown) {
+    this.landing.forEach((ld, i) => { const v = !!shown[i]; if (ld.L.visible !== v) { ld.L.visible = ld.R.visible = v; for (const m of ld.extra) m.visible = v; } });
+    this.car.visible = !!shown[this.level];
   }
 
   callPrompt(i) {

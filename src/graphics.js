@@ -33,6 +33,7 @@ export class Graphics {
     this.renderer = renderer; this.scene = scene; this.camera = camera; this.map = map; this.gore = gore;
     this.level = null;
     this.composer = null;
+    this.resScale = 1;
   }
 
   apply(level) {
@@ -103,7 +104,20 @@ export class Graphics {
    * laptop or a 4K monitor doesn't render 2-4x the pixels of a 1080p screen (post-processing
    * cost grows with every pixel). Phones get a slightly lower cap.
    */
-  pixelRatio(level = this.level) {
+  pixelRatio(level = this.level) { return this.basePixelRatio(level) * (this.resScale || 1); }
+
+  /**
+   * Dynamic resolution: a scale (0.6 .. 1) on top of the preset's resolution, lowered while the
+   * frame rate is low and raised again when there's room (see watchResolution in main.js).
+   */
+  setResScale(s) {
+    s = Math.round(Math.max(0.6, Math.min(1, s)) * 100) / 100;
+    if (Math.abs(s - (this.resScale || 1)) < 0.01) return;
+    this.resScale = s;
+    if (this.level) this.resize();
+  }
+
+  basePixelRatio(level = this.level) {
     const dpr = window.devicePixelRatio || 1;
     if (level === 'verylow') return Math.min(dpr, 1) * (IS_TOUCH ? 0.6 : 0.55);
     if (level === 'low') return Math.min(dpr, IS_TOUCH ? 1.25 : 1) * 0.75;

@@ -163,5 +163,9 @@ export class TitleScene {
     if (Math.abs(cam.fov - 48) > 0.01) { cam.fov = 48; cam.updateProjectionMatrix(); }
   }
 
-  setActive(on) { this.prop.root.visible = on; }
+  /** The set (corpse, machete) is only drawn on the title screen: while you play it's far away. */
+  setActive(on) {
+    this.prop.root.visible = on;
+    if (this.corpse) this.corpse.root.visible = on;
+  }
 }

@@ -86,7 +86,7 @@
 <div id="vignette"></div>
 <!-- Alpha: one step per full update (feature batch). Patch: small fixes shipped on that version
      (back to 0 when the Alpha number goes up). -->
-<div id="version">Alpha 0.9<small>Patch 0</small></div>
+<div id="version">Alpha 0.9<small>Patch 1</small></div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
@@ -149,6 +149,7 @@
       <p class="note" id="gfx-note"></p>
       <div class="gpu" id="gfx-gpu"></div>
       <div class="gpu rec" id="gfx-rec"></div>
+      <label class="row"><span>Dynamic resolution (a little softer while the game is busy, smoother frame rate)</span><input type="checkbox" data-setting="dynamicRes"><i class="sw"></i></label>
       <h3>Gore</h3>
       <label class="row"><span>Show organs</span><input type="checkbox" data-setting="showOrgans"><i class="sw"></i></label>
       <label class="row"><span>Dismemberment &amp; exploding parts</span><input type="checkbox" data-setting="dismemberment"><i class="sw"></i></label>
@@ -221,6 +222,11 @@
           <li><b>Zombies.</b> Spawn them from the spawn menu. They shamble after the nearest living person on their floor, you included, and claw and bite. They feel no pain and don't bleed out, so only a shot that destroys the brain or takes the head off puts them down. Anyone they bite is infected and gets back up as a zombie after they die.</li>
           <li><b>New spawn menu.</b> It now looks like the toolbox: pick the Ragdoll (gray head) or the Zombie (green head) card, set how many, armour, behaviour and where, then Spawn. Double click a card to spawn straight away.</li>
           <li><b>Your health.</b> Zombies, long falls and grenades going off near you hurt now. Health comes back slowly when you stop getting hurt, and if it runs out you respawn at the start of the map.</li>
+          <li><span class="patch">Patch 1</span> <b>Getting off the roof.</b> Look at the hatch on the skyscraper's roof and press E to climb back down the ladder to floor 20. The hatch has a handle and a LADDER DOWN sign, and you get a reminder the first time you come up.</li>
+          <li><span class="patch">Patch 1</span> <b>Only what you can see is drawn.</b> Inside the skyscraper only the floor you're on is drawn (with its furniture, elevator doors and ragdolls), since the floors above and below can't be seen. On the roof nothing inside the tower is drawn, and the far-off city no longer goes through the shadow pass. Inside an office floor that's about a third of the drawing work it was.</li>
+          <li><span class="patch">Patch 1</span> <b>Faster physics.</b> Each body part is now only checked against the walls and furniture right around it, instead of against most of the map every step. With 10 ragdolls the physics takes about half the time it did.</li>
+          <li><span class="patch">Patch 1</span> <b>Resting bodies cost nothing.</b> A dead body that has stopped moving is taken out of the simulation until something touches it: a bullet, a blast, the grab tool, another body or you walking into it. Lots of bodies lying around no longer slow the game down.</li>
+          <li><span class="patch">Patch 1</span> <b>Dynamic resolution</b> (Settings, on by default). When the frame rate drops, the game draws a little fewer pixels (down to 60%) to keep it smooth, and goes back to full sharpness when there's room.</li>
         </ul>
         <h3>Alpha 0.8</h3>
         <ul>

@@ -9,6 +9,19 @@ import { makeGridTexture } from './build.js';
 import { WORLD } from './world.js';
 
 const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+const _cam = new THREE.Vector3();
+
+/**
+ * Static boxes are grouped into compound bodies by area as well as by name: a ragdoll part is
+ * only tested against the boxes of the bodies whose bounds it touches, so one body per 16 m cell
+ * (instead of one per floor or one for the whole street) keeps the collision checks local.
+ * Boxes bigger than a cell (slabs, the plaza) go into one body of their own per name.
+ */
+const CELL = 16;
+function cellKey(body, x, y, z, w, h, d) {
+  if (Math.max(w, d) > CELL * 1.5 || h > CELL * 1.5) return `${body}|big`;
+  return `${body}|${Math.floor(x / CELL)},${Math.floor(y / CELL)},${Math.floor(z / CELL)}`;
+}
 const PROXY_MAT = new THREE.MeshBasicMaterial({ visible: false });
 const TITLE_FOG = [35, 170];
 
@@ -33,6 +46,9 @@ export class GameMap {
     scene.add(this.root);
     this.bodies = [];
     this.updaters = [];
+    this.cullers = [];
+    this.distanceCulled = [];
+    this.farScale = 1;           // distance culling: set per graphics preset
     this.interactables = [];
     this.areas = [];
     this.tracked = [];
@@ -112,7 +128,6 @@ export class GameMap {
     this.playerSpawn = def.playerSpawn;
     this.ragdollSpawn = def.ragdollSpawn;
     this.buttonSpots = def.buttons || [];
-    this.physics.world.broadphase.axisIndex = def.sapAxis ?? 0;
     this.fill.intensity = def.fill || 0;
     this.hemi.intensity = def.hemi ?? 0.85;
     this.sun.intensity = def.sun ?? 1.9;
@@ -139,6 +154,9 @@ export class GameMap {
     this.solidMeshes.length = 0;
     this.grid.clear();
     this.updaters = [];
+    this.cullers = [];
+    this.distanceCulled = [];
+    this.view = null;
     this.interactables.length = 0;
     this.areas = [];
     this.floor = null;
@@ -150,6 +168,7 @@ export class GameMap {
   /** Title screen: its own fog, so the set looks the same whatever map is loaded. */
   setTitleMode(on) {
     this.titleMode = on;
+    for (const m of this.titleMeshes) m.visible = on;
     const sky = on ? CONFIG.map.skyColor : this.def?.sky ?? CONFIG.map.skyColor;
     const [near, far] = on ? TITLE_FOG : this.def?.fog || TITLE_FOG;
     this.sky.set(sky);
@@ -227,7 +246,7 @@ export class GameMap {
     if (player) out.collider = this.addCollider(new THREE.Vector3(x - w / 2, y - h / 2, z - d / 2), new THREE.Vector3(x + w / 2, y + h / 2, z + d / 2), { walk, surface });
     if (physics) {
       const shape = new CANNON.Box(new CANNON.Vec3(w / 2, h / 2, d / 2));
-      const b = this.compound(body);
+      const b = this.compound(cellKey(body, x, y, z, w, h, d));
       b.addShape(shape, new CANNON.Vec3(x, y, z));
       out.shape = shape; out.body = b;
     }
@@ -300,6 +319,35 @@ export class GameMap {
   }
 
   inBounds(x, z, m = 0) { const b = this.bounds; return x > b.minX + m && x < b.maxX - m && z > b.minZ + m && z < b.maxZ - m; }
+
+  /**
+   * Right before drawing: hide what can't be seen from the camera (the map's own rules, e.g. the
+   * tower's other floors) and small things that are far away (see cullDistance).
+   */
+  cull(camera) {
+    camera.getWorldPosition(_cam);
+    for (const c of this.cullers) c(_cam, this.ctx);
+    const far = this.farScale;
+    for (const o of this.distanceCulled) {
+      const d = o.userData.cullDist * far, c = o.userData.cullCentre;
+      const dx = c.x - _cam.x, dy = c.y - _cam.y, dz = c.z - _cam.z;
+      const v = dx * dx + dy * dy + dz * dz < d * d;
+      if (o.visible !== v) o.visible = v;
+    }
+  }
+
+  /**
+   * Draw a (merged) object only within `dist` metres of the camera (scaled by the graphics preset).
+   * Its centre is its bounding sphere's centre.
+   */
+  cullDistance(obj, dist) {
+    obj.updateMatrixWorld(true);
+    if (!obj.geometry.boundingSphere) obj.geometry.computeBoundingSphere();
+    obj.userData.cullDist = dist + obj.geometry.boundingSphere.radius;
+    obj.userData.cullCentre = obj.geometry.boundingSphere.center.clone().applyMatrix4(obj.matrixWorld);
+    this.distanceCulled.push(obj);
+    return obj;
+  }
 
   /** Keep the sun's shadow box on the player, and run the map's moving parts (elevators...). */
   update(focus, dt = 0, ctx = null) {

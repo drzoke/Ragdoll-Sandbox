@@ -130,13 +130,14 @@ export class BoxBatch {
     return this;
   }
   addGeo(mat, geo, matrix) { if (!this.groups.has(mat)) this.groups.set(mat, []); this.groups.get(mat).push({ geo, matrix }); return this; }
-  build({ castShadow = true, receiveShadow = true } = {}) {
+  /** noShadow: materials of flat things (paint, paving) that would only waste the shadow pass. */
+  build({ castShadow = true, receiveShadow = true, noShadow = null } = {}) {
     const meshes = [];
     for (const [mat, items] of this.groups) {
       // split very big batches so the index buffer stays reasonable
       for (let s = 0; s < items.length; s += 4000) {
         const mesh = new THREE.Mesh(mergeGeometries(items.slice(s, s + 4000)), mat);
-        mesh.castShadow = castShadow; mesh.receiveShadow = receiveShadow;
+        mesh.castShadow = castShadow && !noShadow?.includes(mat); mesh.receiveShadow = receiveShadow;
         meshes.push(mesh);
       }
     }
