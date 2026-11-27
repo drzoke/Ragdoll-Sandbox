@@ -42,6 +42,8 @@ const ICONS = {
   syringe: '<svg viewBox="0 0 24 24"><path d="M15 3l6 6M18 6l-9 9-4 1 1-4 9-9M3 21l3-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   blood: '<svg viewBox="0 0 24 24"><path d="M12 3c3 4.5 6 7.5 6 11a6 6 0 01-12 0c0-3.5 3-6.5 6-11z" fill="currentColor"/></svg>',
   bolt: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6z" fill="currentColor"/></svg>',
+  zoom: '<svg viewBox="0 0 24 24"><circle cx="10" cy="10" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15 15l6 6M7 10h6M10 7v6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  breath: '<svg viewBox="0 0 24 24"><path d="M3 9h11a3 3 0 10-3-3M3 13h15a3 3 0 11-3 3M3 17h7" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg>',
   xray: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.6" fill="currentColor"/><path d="M12 8v8M7 10h10M8 13h8M12 16l-3 5M12 16l3 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
 };
 
@@ -80,7 +82,11 @@ LAYOUTS.lefty = {
 function toolButtons(tool) {
   switch (tool?.name) {
     case 'Fists': return { fire: ['Jab', 'fist'], alt: ['Hook', 'hook'] };
+    case 'M24 Sniper': return tool.scoped
+      ? { fire: ['Fire', 'fire'], alt: ['Scope', 'aim', 'aim'], reload: ['Breath', 'breath', 'hold', 'ShiftLeft'], inspect: ['Zoom', 'zoom'] }
+      : { fire: ['Fire', 'fire'], alt: ['Scope', 'aim', 'aim'], reload: ['Reload', 'reload'], inspect: ['Inspect', 'inspect'] };
     case 'M1911':
+    case 'Flintlock Musket':
     case 'Remington 870': return { fire: ['Fire', 'fire'], alt: ['Aim', 'aim', 'aim'], reload: ['Reload', 'reload'], inspect: ['Inspect', 'inspect'] };
     case 'Grenade': return { fire: ['Throw', 'throw'], alt: ['Lob', 'lob'] };
     case 'Machete': return { fire: ['Slash', 'slash'], alt: ['Stab', 'stab'] };
@@ -344,8 +350,10 @@ export class TouchControls {
     } else if (b.kind === 'toggle') {
       this.crouchLatched = !this.crouchLatched; this.btnState(id, this.crouchLatched);
     } else {
-      inp.pressed.add(b.code); inp.down.add(b.code);
-      this.keyHolds.set(pid, { id, code: b.code });
+      // an item can send another key from a button (the sniper's Breath button holds Shift)
+      const code = spec[id]?.[3] || b.code;
+      inp.pressed.add(code); inp.down.add(code);
+      this.keyHolds.set(pid, { id, code });
       this.btnState(id, true);
     }
     navigator.vibrate?.(8);

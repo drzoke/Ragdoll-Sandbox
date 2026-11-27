@@ -1,6 +1,6 @@
 // Procedural WebAudio sounds: no asset files needed. Swap these out for samples later.
 export class Audio {
-  constructor() { this.ctx = null; this.master = null; }
+  constructor() { this.ctx = null; this.master = null; this._vol = 1; }
 
   unlock() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
@@ -33,7 +33,7 @@ export class Audio {
     const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
     const g = ctx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(gain, t + attack);
+    g.gain.linearRampToValueAtTime(gain * this._vol, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0008, t + decay);
     src.connect(f).connect(g).connect(this.master);
     if (toReverb) g.connect(this.reverb);
@@ -46,7 +46,7 @@ export class Audio {
     o.frequency.setValueAtTime(freq, t);
     o.frequency.exponentialRampToValueAtTime(Math.max(20, endFreq), t + dur);
     const g = ctx.createGain();
-    g.gain.setValueAtTime(gain, t);
+    g.gain.setValueAtTime(Math.max(0.001, gain * this._vol), t);
     g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
     o.connect(g).connect(this.master);
     o.start(t); o.stop(t + dur + 0.02);
@@ -112,9 +112,15 @@ export class Audio {
     for (let i = 0; i < 6; i++) this._noise(t + 0.3 + Math.random() * 0.9, 0.05, { type: 'bandpass', freq: 1800 + Math.random() * 2000, q: 2, gain: 0.12 * near, decay: 0.04 });
   }
 
-  play(name) {
+  /** Play a sound by name; vol (0..1) scales it (e.g. a zombie groaning far away). */
+  play(name, vol = 1) {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
+    this._vol = typeof vol === 'number' ? Math.max(0, vol) : 1;
+    try { this.playNamed(name, t); } finally { this._vol = 1; }
+  }
+
+  playNamed(name, t) {
     switch (name) {
       case 'shot':
         this._noise(t, 0.35, { freq: 5200, gain: 1.0, decay: 0.28, toReverb: true });
@@ -174,6 +180,68 @@ export class Audio {
       case 'clink': { const f = 600 + Math.random() * 250; this._tone(t, f, 0.12, { gain: 0.12, type: 'triangle', endFreq: f * 0.85 }); this._noise(t, 0.05, { type: 'bandpass', freq: 1500, q: 2, gain: 0.3, decay: 0.04 }); break; }
       case 'timeSlow': this._tone(t, 520, 0.45, { gain: 0.14, endFreq: 130 }); break;
       case 'timeFast': this._tone(t, 180, 0.3, { gain: 0.12, endFreq: 720 }); break;
+      // ---- sniper rifle ----
+      case 'sniper':
+        this._noise(t, 0.9, { freq: 6500, gain: 1.25, decay: 0.55, toReverb: true });
+        this._noise(t, 0.08, { type: 'highpass', freq: 3000, gain: 0.9, decay: 0.05 });
+        this._tone(t, 120, 0.35, { gain: 1.2, endFreq: 30 });
+        this._tone(t, 60, 0.6, { gain: 0.7, endFreq: 25 });
+        // the crack rolling back off the buildings
+        this._noise(t + 0.42, 1.1, { freq: 1400, gain: 0.32, decay: 0.95, toReverb: true });
+        this._noise(t + 0.9, 0.9, { freq: 900, gain: 0.16, decay: 0.8, toReverb: true });
+        break;
+      case 'boltUp': this._noise(t, 0.06, { type: 'bandpass', freq: 2100, q: 3, gain: 0.6, decay: 0.05 }); this._tone(t, 900, 0.04, { gain: 0.05, type: 'square' }); break;
+      case 'boltBack': this._noise(t, 0.12, { type: 'bandpass', freq: 1700, q: 2, gain: 0.65, decay: 0.1 }); this._noise(t + 0.09, 0.04, { type: 'bandpass', freq: 3600, q: 5, gain: 0.5, decay: 0.03 }); break;
+      case 'boltFwd': this._noise(t, 0.1, { type: 'bandpass', freq: 2000, q: 2, gain: 0.65, decay: 0.09 }); this._noise(t + 0.07, 0.05, { type: 'bandpass', freq: 3000, q: 5, gain: 0.55, decay: 0.04 }); break;
+      case 'boltDown': this._noise(t, 0.05, { type: 'bandpass', freq: 2600, q: 4, gain: 0.6, decay: 0.04 }); this._tone(t + 0.01, 650, 0.04, { gain: 0.07, type: 'square' }); break;
+      case 'roundIn': this._noise(t, 0.06, { type: 'bandpass', freq: 1500, q: 3, gain: 0.45, decay: 0.05 }); this._tone(t + 0.02, 1200, 0.05, { gain: 0.04, type: 'triangle' }); break;
+      case 'clipIn': this._noise(t, 0.18, { type: 'bandpass', freq: 1300, q: 1.6, gain: 0.55, attack: 0.02, decay: 0.16 }); this._tone(t + 0.15, 520, 0.05, { gain: 0.08, type: 'square' }); break;
+      case 'scope': this._noise(t, 0.08, { type: 'bandpass', freq: 800, q: 2, gain: 0.25, decay: 0.07 }); break;
+      case 'breath': this._noise(t, 0.6, { type: 'bandpass', freq: 700, q: 0.8, gain: 0.12, attack: 0.2, decay: 0.55 }); break;
+      // ---- flintlock musket ----
+      case 'flint': this._noise(t, 0.05, { type: 'highpass', freq: 4000, gain: 0.7, decay: 0.04 }); this._tone(t, 2400, 0.03, { gain: 0.05, type: 'square', endFreq: 1800 }); break;
+      case 'pan': this._noise(t, 0.22, { type: 'bandpass', freq: 1800, q: 0.8, gain: 0.55, attack: 0.005, decay: 0.2 }); this._noise(t, 0.12, { freq: 600, gain: 0.35, decay: 0.1 }); break;
+      case 'musket':
+        this._noise(t, 1.4, { freq: 2600, gain: 1.35, decay: 1.0, toReverb: true });
+        this._noise(t, 0.2, { type: 'highpass', freq: 1200, gain: 0.6, decay: 0.12 });
+        this._tone(t, 70, 0.7, { gain: 1.3, endFreq: 24 });
+        this._tone(t, 160, 0.25, { gain: 0.5, type: 'triangle', endFreq: 45 });
+        this._noise(t + 0.5, 1.3, { freq: 700, gain: 0.3, decay: 1.1, toReverb: true });
+        break;
+      case 'hammer': this._noise(t, 0.05, { type: 'bandpass', freq: 2400, q: 4, gain: 0.55, decay: 0.04 }); this._tone(t, 1100, 0.04, { gain: 0.05, type: 'square' }); break;
+      case 'frizzen': this._noise(t, 0.05, { type: 'bandpass', freq: 3000, q: 5, gain: 0.45, decay: 0.04 }); break;
+      case 'paper': this._noise(t, 0.18, { type: 'bandpass', freq: 3800, q: 1.2, gain: 0.3, attack: 0.02, decay: 0.16 }); break;
+      case 'powder': this._noise(t, 0.35, { type: 'bandpass', freq: 5200, q: 1, gain: 0.16, attack: 0.05, decay: 0.32 }); break;
+      case 'ramrod': this._noise(t, 0.32, { type: 'bandpass', freq: 2300, q: 2.5, gain: 0.35, attack: 0.03, decay: 0.3 }); this._tone(t + 0.28, 800, 0.08, { gain: 0.06, type: 'triangle', endFreq: 600 }); break;
+      case 'ramTap': this._noise(t, 0.05, { freq: 500, gain: 0.5, decay: 0.04 }); this._tone(t, 180, 0.05, { gain: 0.12, endFreq: 120 }); break;
+      // ---- zombies and the player ----
+      case 'groan': {
+        const f = 70 + Math.random() * 40, d = 0.9 + Math.random() * 0.7;
+        this._tone(t, f, d, { gain: 0.16, type: 'sawtooth', endFreq: f * (0.7 + Math.random() * 0.2) });
+        this._tone(t, f * 1.5, d * 0.8, { gain: 0.06, type: 'sawtooth', endFreq: f * 1.1 });
+        this._noise(t, d, { type: 'bandpass', freq: 500 + Math.random() * 300, q: 2.5, gain: 0.18, attack: 0.15, decay: d * 0.95 });
+        break;
+      }
+      case 'snarl': this._tone(t, 140, 0.35, { gain: 0.18, type: 'sawtooth', endFreq: 90 }); this._noise(t, 0.35, { type: 'bandpass', freq: 900, q: 2, gain: 0.3, attack: 0.03, decay: 0.3 }); break;
+      case 'bite': this._noise(t, 0.12, { freq: 800, gain: 0.8, decay: 0.1 }); this._noise(t + 0.06, 0.18, { freq: 400, gain: 0.6, decay: 0.15 }); this._tone(t, 100, 0.1, { gain: 0.3, endFreq: 50 }); break;
+      case 'hurt': this._noise(t, 0.14, { freq: 500, gain: 0.7, decay: 0.12 }); this._tone(t, 160, 0.18, { gain: 0.25, type: 'triangle', endFreq: 90 }); break;
+      case 'heartbeat': this._tone(t, 55, 0.12, { gain: 0.5, endFreq: 40 }); this._tone(t + 0.18, 50, 0.12, { gain: 0.35, endFreq: 38 }); break;
+      case 'flatline': this._tone(t, 1000, 1.6, { gain: 0.06, type: 'square', endFreq: 1000 }); break;
+      // ---- the skyscraper ----
+      case 'ding': this._tone(t, 1318, 0.9, { gain: 0.12, endFreq: 1318 }); this._tone(t + 0.28, 1046, 1.1, { gain: 0.11, endFreq: 1046 }); break;
+      case 'liftDoor': this._noise(t, 1.1, { type: 'bandpass', freq: 600, q: 1.2, gain: 0.22, attack: 0.15, decay: 1.0 }); this._tone(t + 0.95, 140, 0.1, { gain: 0.12, endFreq: 100 }); break;
+      case 'liftGo': this._tone(t, 60, 1.2, { gain: 0.2, type: 'sawtooth', endFreq: 90 }); this._noise(t, 1.4, { freq: 300, gain: 0.25, attack: 0.4, decay: 1.3 }); break;
+      case 'liftStop': this._tone(t, 90, 0.8, { gain: 0.18, type: 'sawtooth', endFreq: 55 }); this._noise(t, 0.3, { freq: 250, gain: 0.3, decay: 0.28 }); break;
+      case 'glass':
+        for (let i = 0; i < 9; i++) { const f = 2500 + Math.random() * 4500; this._tone(t + i * 0.018 + Math.random() * 0.03, f, 0.25 + Math.random() * 0.3, { gain: 0.05, type: 'triangle', endFreq: f * 0.95 }); }
+        this._noise(t, 0.5, { type: 'highpass', freq: 2800, gain: 0.8, decay: 0.45 });
+        this._noise(t, 0.12, { freq: 900, gain: 0.4, decay: 0.1 });
+        for (let i = 0; i < 6; i++) this._noise(t + 0.25 + Math.random() * 0.8, 0.05, { type: 'bandpass', freq: 4000 + Math.random() * 3000, q: 3, gain: 0.12, decay: 0.04 });
+        break;
+      case 'glassHit': this._noise(t, 0.08, { type: 'highpass', freq: 3500, gain: 0.4, decay: 0.07 }); this._tone(t, 3200, 0.15, { gain: 0.04, type: 'triangle', endFreq: 3000 }); break;
+      case 'ladder': { const f = 500 + Math.random() * 120; this._tone(t, f, 0.12, { gain: 0.07, type: 'triangle', endFreq: f * 0.9 }); this._noise(t, 0.05, { type: 'bandpass', freq: 1400, q: 3, gain: 0.25, decay: 0.04 }); break; }
+      case 'hatch': this._noise(t, 0.3, { freq: 700, gain: 0.55, decay: 0.25 }); this._tone(t, 220, 0.3, { gain: 0.15, type: 'triangle', endFreq: 120 }); this._noise(t + 0.25, 0.1, { type: 'bandpass', freq: 1800, q: 3, gain: 0.3, decay: 0.08 }); break;
+      case 'slideDoor': this._noise(t, 0.8, { type: 'bandpass', freq: 900, q: 1, gain: 0.16, attack: 0.1, decay: 0.75 }); break;
     }
   }
 }

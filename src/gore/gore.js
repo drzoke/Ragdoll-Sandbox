@@ -38,7 +38,7 @@ const MED = {
 export class Gore {
   constructor(scene, physics, map, audio) {
     this.scene = scene; this.physics = physics; this.audio = audio;
-    this.particles = new Particles(scene, G.maxParticles, map.colliders);
+    this.particles = new Particles(scene, G.maxParticles, map);
     this.decals = new Decals(scene, G.maxPools, G.maxDecals);
     this.particles.onLand = (x, y, z, vol, size) => this.decals.addDrop(x, y, z, vol, size);
     this.particles.onWall = (x, y, z, nx, ny, nz, vx, vy, vz, vol, size) =>

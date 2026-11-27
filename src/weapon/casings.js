@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
 import { buildCasing } from './model1911.js';
+import { WORLD } from '../world/world.js';
 
 // Lightweight ballistic casings (no physics engine needed): gravity, floor bounces, spin.
 export class Casings {
@@ -28,8 +29,10 @@ export class Casings {
       c.vel.y -= 9.81 * dt;
       c.mesh.position.addScaledVector(c.vel, dt);
       c.mesh.rotation.x += c.spin.x * dt; c.mesh.rotation.y += c.spin.y * dt; c.mesh.rotation.z += c.spin.z * dt;
-      if (c.mesh.position.y < this.rest) {
-        c.mesh.position.y = this.rest;
+      const p = c.mesh.position;
+      const floor = WORLD.surfaceHeight(p.x, p.y, p.z) + this.rest;
+      if (p.y < floor) {
+        p.y = floor;
         if (Math.abs(c.vel.y) > 0.6 && c.bounces < 4) {
           if (c.bounces === 0) this.audio.play(this.sound);
           c.vel.y = -c.vel.y * 0.35; c.vel.x *= 0.6; c.vel.z *= 0.6; c.spin.multiplyScalar(0.5); c.bounces++;

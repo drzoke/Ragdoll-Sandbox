@@ -3,6 +3,7 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { buildM1911, muzzleFlashTexture } from '../weapon/model1911.js';
 import { buildGadget } from '../weapon/grab.js';
 import { buildRemington870 } from '../weapon/model870.js';
+import { buildSniper, buildMusket } from '../weapon/modelRifles.js';
 import { buildGrenade } from '../weapon/grenadeModel.js';
 import { buildMachete, buildMedkit, buildPaddle, buildAED } from '../weapon/modelsMedical.js';
 import { ARM_MATERIALS } from '../weapon/arms.js';
@@ -62,6 +63,8 @@ export class ItemPreview {
     this.items.Grab = this.makeGrab();
     this.items.Fists = this.makeFists();
     this.items['Remington 870'] = this.makeShotgun();
+    this.items['M24 Sniper'] = this.makeSniper();
+    this.items['Flintlock Musket'] = this.makeMusket();
     this.items.Grenade = this.makeGrenade();
     this.items.Machete = this.makeMachete();
     this.items.Medkit = this.makeMedkit();
@@ -186,6 +189,51 @@ export class ItemPreview {
         const pr = ft > 0.3 && ft < 0.75 ? Math.sin(((ft - 0.3) / 0.45) * Math.PI) : 0;
         gun.pump.position.z = pr * 0.085;
         return ft < 0.08 ? 1 : 0;
+      },
+    };
+  }
+
+  makeSniper() {
+    const gun = buildSniper();
+    gun.root.rotation.y = Math.PI / 2;
+    const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: muzzleFlashTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    flash.scale.setScalar(0.24); flash.position.set(0, 0, -0.06); flash.visible = false;
+    const f = this.frame(gun.root, 1.22);
+    gun.muzzle.add(flash);
+    return {
+      ...f, effects: (t, on) => {
+        // fire, then work the bolt: up, back, forward, down
+        const ft = on ? (t % 3) : 9;
+        flash.visible = ft < 0.06;
+        flash.material.rotation = t * 5;
+        const u = (a, b) => Math.min(1, Math.max(0, (ft - a) / (b - a)));
+        gun.handle.rotation.z = (u(0.35, 0.45) - u(0.95, 1.05)) * 1.25;
+        gun.bolt.position.z = (u(0.48, 0.62) - u(0.7, 0.85)) * 0.09;
+        return ft < 0.08 ? 1 : 0;
+      },
+    };
+  }
+
+  makeMusket() {
+    const gun = buildMusket();
+    gun.root.rotation.y = Math.PI / 2;
+    const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: muzzleFlashTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    flash.scale.setScalar(0.34); flash.position.set(0, 0, -0.1); flash.visible = false;
+    const pan = new THREE.Sprite(new THREE.SpriteMaterial({ map: muzzleFlashTexture(), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, color: 0xffd27a }));
+    pan.scale.setScalar(0.1); pan.visible = false;
+    const f = this.frame(gun.root, 1.25);
+    gun.muzzle.add(flash); gun.panPoint.add(pan);
+    return {
+      ...f, effects: (t, on) => {
+        // the cock falls, the pan flashes, then the shot; cocked again a while later
+        const ft = on ? (t % 3.4) : 9;
+        const fell = ft < 2.4;
+        gun.cock.rotation.x = fell ? -0.8 : 0;
+        gun.frizzen.rotation.x = fell ? -1.1 : 0;
+        pan.visible = ft < 0.07;
+        flash.visible = ft > 0.17 && ft < 0.24;
+        flash.material.rotation = t * 5;
+        return ft < 0.25 ? 1 : 0;
       },
     };
   }

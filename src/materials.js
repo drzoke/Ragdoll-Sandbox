@@ -121,3 +121,9 @@ export function setMaterialQuality(l) {
   level = l;
   for (const m of tracked.keys()) applyTo(m);
 }
+
+/** Stop tracking materials (a map being unloaded). */
+export function untrackMaterials(target) {
+  if (target.isMaterial) { tracked.delete(target); return; }
+  target.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) tracked.delete(m); });
+}

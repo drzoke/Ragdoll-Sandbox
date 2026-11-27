@@ -4,7 +4,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #9aa0a6; fon
 .hidden { display: none !important; }
 
 /* ---------- HUD ---------- */
-#hud { position: fixed; inset: 0; pointer-events: none; }
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
 #crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --gap: 6px; transition: opacity .15s; }
 #crosshair i { position: absolute; background: rgba(255,255,255,.9); box-shadow: 0 0 2px rgba(0,0,0,.8); }
 #crosshair .t, #crosshair .b { width: 2px; height: 7px; left: -1px; }
@@ -251,8 +251,8 @@ body.fastfwd #vignette { opacity: .7; background: radial-gradient(ellipse at cen
 body:not(.touch) .touch-only, body.touch .desk-only { display: none !important; }
 html, body { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
 body.touch #game { touch-action: none; }
-#tb-close { margin-left: auto; width: 32px; height: 32px; flex: none; border: 0; border-radius: 8px; background: rgba(255,255,255,.08); color: #e8edf2; font: inherit; font-size: 15px; cursor: pointer; }
-#tb-close:hover { background: rgba(255,255,255,.16); }
+#tb-close, #sm-close { margin-left: auto; width: 32px; height: 32px; flex: none; border: 0; border-radius: 8px; background: rgba(255,255,255,.08); color: #e8edf2; font: inherit; font-size: 15px; cursor: pointer; }
+#tb-close:hover, #sm-close:hover { background: rgba(255,255,255,.16); }
 
 #touch { position: fixed; inset: 0; z-index: 5; touch-action: none; user-select: none; -webkit-user-select: none; --tc-op: .55; }
 #touch .tc-area { position: absolute; top: env(safe-area-inset-top); right: env(safe-area-inset-right); bottom: env(safe-area-inset-bottom); left: env(safe-area-inset-left); }
@@ -423,3 +423,118 @@ body.touch .tb-acts button { padding: 9px 16px; font-size: 14px; }
 #update-note.hidden { display: none; }
 #update-note span { flex: 1; }
 #update-note button { padding: 5px 12px; font: inherit; font-weight: 800; border: 0; border-radius: 6px; background: #e8edf2; color: #15191d; cursor: pointer; }
+
+/* ---------- Elevator floor picker ---------- */
+#floor-picker { position: fixed; inset: 0; z-index: 21; display: grid; place-items: center; background: rgba(20,24,30,.4); }
+#floor-picker.hidden { display: none; }
+.fp-card { width: min(420px, 92vw); max-height: 92vh; overflow-y: auto; padding: 16px 18px; border-radius: 12px; background: rgba(20,24,30,.95); box-shadow: 0 10px 40px rgba(0,0,0,.45); color: #e8edf2; }
+.fp-card header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.fp-card h2 { margin: 0; font-size: 20px; }
+.fp-card header span { font-size: 12px; color: #9fb0bf; }
+.fp-x { margin-left: auto; width: 32px; height: 32px; flex: none; border: 0; border-radius: 8px; background: rgba(255,255,255,.08); color: #e8edf2; font: inherit; font-size: 15px; cursor: pointer; }
+.fp-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.fp-grid button { position: relative; aspect-ratio: 1; display: grid; place-items: center; border-radius: 50%; border: 2px solid rgba(255,255,255,.22); background: radial-gradient(circle at 40% 35%, #3a4048, #22262b); color: #f0f3f6; font: inherit; font-size: 17px; font-weight: 700; cursor: pointer; }
+.fp-grid button:hover { border-color: #ff9a3c; color: #ffb366; box-shadow: 0 0 12px rgba(255,140,40,.35); }
+.fp-grid button.here { border-color: #4fa3ff; background: radial-gradient(circle at 40% 35%, #2f5a86, #1d3550); }
+.fp-grid button small { position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 8px; font-weight: 600; color: #bfe0ff; }
+.fp-grid button.lobby { grid-column: span 5; aspect-ratio: auto; height: 46px; border-radius: 23px; }
+.fp-note { margin: 12px 0 0; font-size: 12px; color: #9fb0bf; }
+@media (max-height: 520px) { .fp-grid { grid-template-columns: repeat(7, 1fr); gap: 6px; } .fp-grid button { font-size: 14px; } .fp-grid button.lobby { grid-column: span 7; height: 38px; } .fp-card { padding: 10px 14px; } }
+
+/* ---- sniper scope ---- */
+#scope { position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; --sx: 0px; --sy: 0px; }
+#scope.hidden { display: none; }
+#scope .sc-ring { position: absolute; left: 50%; top: 50%; width: 300vmax; height: 300vmax; transform: translate(-50%, -50%) translate(var(--sx), var(--sy));
+  background: radial-gradient(circle at center, transparent 0, transparent calc(43vmin), rgba(0,0,0,.55) calc(44.5vmin), rgba(0,0,0,.96) calc(45.6vmin), #000 calc(47vmin)); }
+#scope .sc-ring::after { content: ''; position: absolute; left: 50%; top: 50%; width: 91vmin; height: 91vmin; transform: translate(-50%, -50%); border-radius: 50%;
+  box-shadow: inset 0 0 6vmin 1.5vmin rgba(0,0,0,.55), inset 0 0 0 .4vmin rgba(40,60,80,.35); }
+#scope .sc-ret { position: absolute; left: 50%; top: 50%; width: 90vmin; height: 90vmin; transform: translate(-50%, -50%); opacity: .92; }
+#scope .sc-info { position: absolute; left: 50%; bottom: calc(50% - 45vmin + 2.4vmin); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; color: #fff; text-shadow: 0 1px 2px #000; }
+#scope .sc-zoom { font-size: 13px; letter-spacing: .06em; opacity: .85; }
+#scope .sc-breath { width: 90px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.18); overflow: hidden; }
+#scope .sc-breath i { display: block; height: 100%; background: rgba(220,235,255,.85); transform-origin: left center; }
+#scope .sc-breath.winded i { background: #e0605a; }
+#scope .sc-hint { font-size: 10.5px; opacity: .55; white-space: nowrap; }
+body.touch #scope .sc-info { bottom: calc(50% - 45vmin + 1vmin); }
+body.scoped #hotbar { opacity: 0; transition: opacity .15s; }
+
+/* ---- your health (zombies, falls, blasts) ---- */
+#health { position: absolute; left: 22px; bottom: 26px; display: flex; align-items: center; gap: 8px; color: #e8edf2; text-shadow: 0 1px 3px rgba(0,0,0,.7); transition: opacity .3s; }
+#health.off { opacity: 0; }
+#health svg { width: 18px; height: 18px; color: #e25b5b; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+#health .hb { position: relative; width: 150px; height: 8px; border-radius: 4px; background: rgba(16,20,24,.6); overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+#health .hb i, #health .hb u { position: absolute; inset: 0; transform-origin: left center; }
+#health .hb u { background: rgba(255,210,200,.55); }
+#health .hb i { background: linear-gradient(#f1f4f6, #c9d2da); z-index: 1; }
+#health.low .hb i { background: linear-gradient(#ff7a70, #d2403a); }
+#health b { font-size: 15px; min-width: 28px; }
+body.touch #health { left: 50%; bottom: auto; top: calc(env(safe-area-inset-top) + 12px); transform: translateX(-50%); }
+body.touch #health .hb { width: 120px; }
+#hurt { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(150,0,0,0) 45%, rgba(150,0,0,.45) 78%, rgba(90,0,0,.85) 100%); }
+#death { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; background: rgba(40,0,0,.35); animation: dfade .6s ease-out; }
+#death .dc { text-align: center; padding: 22px 34px; border-radius: 12px; background: rgba(16,20,24,.72); border: 1px solid rgba(255,255,255,.1); }
+#death h2 { margin: 0 0 4px; font-size: 30px; letter-spacing: .04em; color: #ff8a80; }
+#death p { margin: 0 0 14px; color: #cfd8e2; }
+#death button { font: inherit; font-weight: 700; padding: 9px 26px; border-radius: 8px; border: 0; background: #e8edf2; color: #15191d; cursor: pointer; }
+#death small { display: block; margin-top: 8px; opacity: .6; }
+@keyframes dfade { from { opacity: 0; } }
+
+/* ---- spawn menu (Alpha 0.9): laid out like the toolbox, Ragdoll and Zombie cards ---- */
+.sm-card2 { width: min(660px, 94vw); height: auto; max-height: min(680px, 94vh); }
+.sm-card2 .tb-body { flex: none; }
+#spawn-grid { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); grid-auto-rows: min-content; gap: 10px; padding: 10px; border-radius: 10px; background: rgba(0,0,0,.22); border: 1px solid rgba(255,255,255,.06); }
+#spawn-cats { flex: none; width: 126px; display: flex; flex-direction: column; gap: 4px; }
+#spawn-cats button { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; font: inherit; font-weight: 600; color: #b9c7d4; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 8px; cursor: pointer; text-align: left; }
+#spawn-cats button span { font-size: 11px; opacity: .6; }
+#spawn-cats button:hover { background: rgba(255,255,255,.09); }
+#spawn-cats button.on { background: #e8edf2; color: #15191d; border-color: #e8edf2; }
+.spawn-card .key { left: auto; right: 7px; font-size: 10px; font-weight: 700; color: #bfe0ff; opacity: .85; }
+.spawn-card .pv { display: grid; place-items: center; aspect-ratio: 2 / 1; }
+.spawn-card .head { height: 84%; width: auto !important; }
+.spawn-card .head { width: 62%; aspect-ratio: 1; filter: drop-shadow(0 4px 6px rgba(0,0,0,.45)); transition: transform .15s; }
+.spawn-card .head svg { width: 100%; height: 100%; display: block; }
+.spawn-card:hover .head { transform: scale(1.06) rotate(-4deg); }
+.spawn-card.picked { border-color: rgba(79,163,255,.85); background: rgba(79,163,255,.14); box-shadow: 0 0 0 1px rgba(79,163,255,.6) inset; }
+#sm-info { flex: 1; min-height: 0; overflow-y: auto; margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,.04); }
+#sm-info .sm-desc b { font-size: 15px; margin-right: 8px; }
+#sm-info .tag { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; background: rgba(255,255,255,.1); color: #cfd8e2; }
+#sm-info .sm-desc p { margin: 6px 0 0; font-size: 12px; color: #b9c7d4; }
+.sm-opts2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; }
+.sm-opts2 h3 { margin: 10px 0 5px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: #8fa2b3; }
+.sm-opts2 .seg button { padding: 7px 0; font-size: 12.5px; }
+.sm-opts2 .chips button { padding: 7px 0; }
+#sm-info .note { margin: 6px 0 0; font-size: 12px; color: #9fb0bf; }
+#sm-info .sm-go { margin-top: 12px; }
+body.touch .sm-card2 { width: min(760px, 96vw); max-height: 94vh; padding: 12px 14px; }
+body.touch #spawn-grid { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; padding: 8px; }
+body.touch #spawn-cats { width: 104px; }
+/* short screens (phones sideways): cards on the left, options on the right, Spawn always in view */
+@media (max-height: 520px) {
+  #spawnmenu .sm-card2 { display: grid; grid-template-columns: minmax(170px, 32%) 1fr; grid-template-rows: auto 1fr; column-gap: 12px; height: 94vh; max-height: 94vh; }
+  #spawnmenu .sm-card2 header { grid-column: 1 / -1; margin-bottom: 6px; }
+  #spawnmenu .sm-card2 .tb-body { flex-direction: column; min-height: 0; overflow-y: auto; gap: 8px; }
+  #spawnmenu #spawn-grid { flex: none; grid-template-columns: 1fr 1fr; padding: 6px; gap: 6px; }
+  #spawnmenu .spawn-card { padding: 5px 5px 6px; }
+  #spawnmenu .spawn-card .pv { aspect-ratio: 1.3 / 1; }
+  #spawnmenu .spawn-card .key { font-size: 9px; right: 5px; top: 3px; }
+  #spawnmenu .spawn-card small { display: none; }
+  #spawnmenu #spawn-cats { width: auto; flex-direction: row; flex-wrap: wrap; gap: 4px; } #spawnmenu #spawn-cats button { flex: 1 1 40%; padding: 6px 8px; font-size: 12px; }
+  #spawnmenu #sm-info { margin-top: 0; padding: 8px 10px; }
+  #sm-info .sm-desc p { display: none; }
+  .sm-opts2 h3 { margin: 6px 0 4px; font-size: 10.5px; }
+  #sm-info .sm-go { position: sticky; bottom: -8px; margin-top: 8px; padding: 9px; box-shadow: 0 -8px 16px rgba(20,24,30,.9); }
+}
+
+/* ---- map picker (menu) ---- */
+#map-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.map-card { display: flex; gap: 12px; align-items: stretch; padding: 8px; font: inherit; text-align: left; color: #e8edf2; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); border-radius: 10px; cursor: pointer; transition: background .12s, border-color .12s; }
+.map-card:hover { background: rgba(255,255,255,.09); }
+.map-card.on { border-color: rgba(79,163,255,.75); background: rgba(79,163,255,.12); }
+.map-card .art { flex: none; width: 150px; aspect-ratio: 16 / 9; border-radius: 7px; overflow: hidden; }
+.map-card .art svg { width: 100%; height: 100%; display: block; }
+.map-card .txt { min-width: 0; }
+.map-card b { font-size: 15px; }
+.map-card .cur { margin-left: 6px; padding: 1px 7px; border-radius: 9px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: rgba(79,163,255,.3); color: #cfe6ff; vertical-align: 2px; }
+.map-card p { margin: 4px 0 0; font-size: 12px; color: #b9c7d4; }
+@media (max-height: 520px) { .map-card .art { width: 110px; } .map-card p { font-size: 11px; } }
+body.dead #controls, body.dead #hotbar, body.dead #crosshair, body.dead #ammo, body.dead #toolstatus, body.dead #prompt { opacity: 0 !important; transition: opacity .4s; }

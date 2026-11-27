@@ -70,7 +70,7 @@ export class Graphics {
     let render, ssr = null;
     if (ultra) {
       // Screen-space reflections on the floor (the scene is rendered by the SSR pass itself).
-      ssr = new SSRPass({ renderer: r, scene: this.scene, camera: this.camera, width: size.x, height: size.y, selects: [this.map.floor] });
+      ssr = new SSRPass({ renderer: r, scene: this.scene, camera: this.camera, width: size.x, height: size.y, selects: [this.map.floor].filter(Boolean) });
       ssr.thickness = 0.02; ssr.maxDistance = 6; ssr.opacity = 0.32;
       ssr.infiniteThick = false; ssr.fresnel = true; ssr.distanceAttenuation = true; ssr.blur = true; ssr.bouncing = false;
       render = ssr;

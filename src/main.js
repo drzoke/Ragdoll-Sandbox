@@ -4,6 +4,7 @@ import { Input } from './core/input.js';
 import { Physics } from './core/physics.js';
 import { Audio } from './core/audio.js';
 import { GameMap } from './world/map.js';
+import { MAPS, MAP_BY_ID } from './world/maps.js';
 import { PressButton } from './world/button.js';
 import { PlayerController } from './player/controller.js';
 import { Pistol } from './weapon/pistol.js';
@@ -13,11 +14,14 @@ import { RagdollManager } from './ragdoll/manager.js';
 import { HUD } from './ui/hud.js';
 import { GrabTool } from './weapon/grab.js';
 import { Shotgun } from './weapon/shotgun.js';
+import { Sniper } from './weapon/sniper.js';
+import { Musket } from './weapon/musket.js';
 import { Fists } from './weapon/fists.js';
 import { Machete } from './weapon/machete.js';
 import { Medkit } from './weapon/medkit.js';
 import { Defibrillator } from './weapon/defib.js';
 import { SpawnMenu } from './ui/spawnmenu.js';
+import { FloorPicker } from './ui/floorpicker.js';
 import { TitleScene } from './ui/title.js';
 import { GrenadeTool } from './weapon/grenade.js';
 import { Explosives } from './weapon/explosives.js';
@@ -28,9 +32,10 @@ import { Graphics } from './graphics.js';
 import { watchForUpdates } from './ui/update.js';
 import { settings } from './settings.js';
 import { trackMaterials } from './materials.js';
-import { GRAY as RAGDOLL_GRAY, BLACK as RAGDOLL_BLACK, ARMOR_MATERIALS } from './ragdoll/ragdoll.js';
+import { GRAY as RAGDOLL_GRAY, BLACK as RAGDOLL_BLACK, ZOMBIE_SKIN, ZOMBIE_JOINT, ARMOR_MATERIALS } from './ragdoll/ragdoll.js';
 import { IS_TOUCH, IS_IOS, IS_STANDALONE } from './core/device.js';
 import { TouchControls } from './ui/touch.js';
+import { PlayerVitals } from './player/vitals.js';
 import { benchmark, LEVEL_NAMES, savePerfCap } from './core/bench.js';
 
 const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edg|android).)*safari/i.test(navigator.userAgent);
@@ -70,25 +75,34 @@ scene.add(camera);
 const input = new Input(canvas);
 const audio = new Audio();
 const physics = new Physics();
-await stage(0.68, 'Building the test map');
+const startMap = MAP_BY_ID[settings.get('map')] || MAPS[0];
+await stage(0.68, `Building the map: ${startMap.name}`);
 const map = new GameMap(scene, physics, renderer);
+map.load(startMap);
 const player = new PlayerController(camera, map, physics);
+player.spawnAt(map.playerSpawn.pos, map.playerSpawn.yaw);
 await stage(0.74, 'Preparing blood & gore');
 const gore = new Gore(scene, physics, map, audio);
 const ragdolls = new RagdollManager(scene, physics, gore);
 const hud = new HUD(scene);
 const graphics = new Graphics({ renderer, scene, camera, map, gore });
 
-const buttons = [
-  new PressButton({ scene, physics, map, position: [-3, 0, 4], label: 'RESPAWN', sub: 'Press E · new ragdoll', color: 0xd8302a,
-    onPress: () => { audio.play('button'); grab.release(); ragdolls.respawn(); pistol.refill(); hud.toast('Ragdoll respawned'); } }),
-  new PressButton({ scene, physics, map, position: [-4.2, 0, 4], label: 'CLEAN UP', sub: 'Press E · blood & gibs', color: 0x2a7bd8,
-    onPress: () => { audio.play('button'); cleanUp(); } }),
-];
+// the Respawn and Clean up buttons: rebuilt for each map, at the spots it gives (same array)
+const buttons = [];
+function makeButtons() {
+  buttons.length = 0;
+  const [a, b] = map.buttonSpots;
+  if (a) buttons.push(new PressButton({ map, position: a.pos, yaw: a.yaw, label: 'RESPAWN', sub: 'Press E · new ragdoll', prompt: 'Respawn ragdoll', color: 0xd8302a,
+    onPress: () => { audio.play('button'); grab.release(); ragdolls.respawn(); pistol.refill(); hud.toast('Ragdoll respawned'); } }));
+  if (b) buttons.push(new PressButton({ map, position: b.pos, yaw: b.yaw, label: 'CLEAN UP', sub: 'Press E · blood & gibs', prompt: 'Clean up blood', color: 0x2a7bd8,
+    onPress: () => { audio.play('button'); cleanUp(); } }));
+}
+makeButtons();
 
 function cleanUp(silent = false) {
   if (grab.held?.kind === 'gib') grab.release();
-  gore.clear(); ballistics.clear(); explosives.clear(); pistol.casings.clear(); shotgun.hulls.clear();
+  gore.clear(); ballistics.clear(); explosives.clear(); pistol.casings.clear(); shotgun.hulls.clear(); sniper.casings.clear(); musket.smoke.clear();
+  map.onCleanUp?.();   // e.g. broken windows go back in
   if (title) title.dirty = true;   // the title screen's blood went too: rebuild it next time
   if (!silent) hud.toast('Cleaned up');
 }
@@ -107,6 +121,14 @@ const pistol = new Pistol({
 });
 const grab = new GrabTool({ mainScene: scene, mainCamera: camera, player, audio, environment: scene.environment, physics, ragdolls, gore, hud });
 const shotgun = new Shotgun({
+  mainScene: scene, mainCamera: camera, player, audio, environment: scene.environment,
+  onFire: (o, d, muzzle, opts) => ballistics.fire(o, d, muzzle, opts),
+});
+const sniper = new Sniper({
+  mainScene: scene, mainCamera: camera, player, audio, environment: scene.environment,
+  onFire: (o, d, muzzle, opts) => ballistics.fire(o, d, muzzle, opts),
+});
+const musket = new Musket({
   mainScene: scene, mainCamera: camera, player, audio, environment: scene.environment,
   onFire: (o, d, muzzle, opts) => ballistics.fire(o, d, muzzle, opts),
 });
@@ -135,17 +157,15 @@ const grenade = new GrenadeTool({
   },
 });
 // Materials whose detail follows the graphics preset
-trackMaterials(RAGDOLL_GRAY); trackMaterials(RAGDOLL_BLACK, { grime: false });
-trackMaterials(pistol.gun.root); trackMaterials(grab.gadget.root); trackMaterials(shotgun.gun.root); trackMaterials(grenade.model.root);
+trackMaterials(RAGDOLL_GRAY); trackMaterials(RAGDOLL_BLACK, { grime: false }); trackMaterials(ZOMBIE_SKIN, { grime: false }); trackMaterials(ZOMBIE_JOINT, { grime: false });
+trackMaterials(pistol.gun.root); trackMaterials(grab.gadget.root); trackMaterials(shotgun.gun.root); trackMaterials(sniper.gun.root); trackMaterials(sniper.mag); trackMaterials(musket.gun.root); trackMaterials(grenade.model.root);
 trackMaterials(explosives.template.root);
 trackMaterials(machete.model.root); trackMaterials(medkit.left); trackMaterials(medkit.right); trackMaterials(defib.pr.root); trackMaterials(defib.pl.root);
 for (const m of Object.values(ARMOR_MATERIALS)) trackMaterials(m);
 trackMaterials(ARM_MATERIALS.skin, { grime: false }); trackMaterials(ARM_MATERIALS.sleeve); trackMaterials(ARM_MATERIALS.cuff);
-for (const m of map.solidMeshes) trackMaterials(m);
-for (const b of buttons) for (const m of b.meshes) trackMaterials(m, { grime: false });
 graphics.apply(settings.get('graphics'));
 grab.setQuality(settings.get('graphics'));
-const tools = [fists, pistol, shotgun, grenade, grab, machete, medkit, defib];
+const tools = [fists, pistol, shotgun, sniper, musket, grenade, grab, machete, medkit, defib];
 const toolbox = new Toolbox(tools, { audio, start: 0, onOpenChange: (open) => onToolboxChange(open) });
 
 await stage(0.86, 'Spawning ragdoll');
@@ -155,7 +175,41 @@ await stage(0.88, 'Setting the scene');
 const title = new TitleScene({ scene, ragdolls, gore, ballistics, physics, camera });
 title.ensure();
 title.setActive(true);
+map.setTitleMode(true);
 trackMaterials(title.prop.root);
+
+// ---- maps: switching clears the world and starts you at the new map's entrance ----
+/** Things a map's moving parts need (elevator rides carry you, ragdolls and gibs along). */
+const floorPicker = new FloorPicker({ audio, onOpenChange: (open) => onToolboxChange(open) });
+map.ctx = { player, ragdolls, gore, grab, audio, hud, input, camera, get playing() { return playing && !toolboxOpen; },
+  pickFloor: (opts) => { toolbox.close(); spawnMenu.close(); floorPicker.open(opts); } };
+function loadMap(id) {
+  const def = MAP_BY_ID[id];
+  if (!def) return;
+  grab.release();
+  ragdolls.clear(ragdolls.keep);
+  cleanUp(true);
+  map.load(def);
+  makeButtons();
+  player.spawnAt(map.playerSpawn.pos, map.playerSpawn.yaw);
+  if (graphics.passes?.ssr) graphics.passes.ssr.selects = [map.floor].filter(Boolean);
+  camera.far = def.far || 600; camera.updateProjectionMatrix();
+  ragdolls.respawn();
+  settings.set('map', id);
+  target = null; ballistics.lastTarget = null;
+  vitals.reset();
+}
+
+// ---- your health: zombies, long falls and blasts hurt; at 0 you respawn at the map start ----
+const vitals = new PlayerVitals({
+  player, audio,
+  onDeath: () => { grab.release(); floorPicker.close(); },
+  onRespawn: () => { player.spawnAt(map.playerSpawn.pos, map.playerSpawn.yaw); },
+});
+player.onLand = (speed, height) => { if (height > 4.5 && !player.script && playing && !titleMode) vitals.hurt((height - 4.5) * 7.5, { kind: 'fall' }); };
+player.hurt = (dmg, opts) => { if (playing && !titleMode) vitals.hurt(dmg, opts); };
+ragdolls.hurtPlayer = (dmg, opts) => { if (playing && !titleMode) vitals.hurt(dmg, opts); };
+camera.far = startMap.far || 600; camera.updateProjectionMatrix();
 
 // ------------------------------------------------------------------ menu / pointer lock
 const menu = document.getElementById('menu');
@@ -179,27 +233,49 @@ function setPlaying(p) {
   input.enabled = p;
   menu.classList.toggle('hidden', p);
   if (p) {
-    if (titleMode) { titleMode = false; title.setActive(false); setMenuMode('pause'); }
+    if (titleMode) { titleMode = false; title.setActive(false); map.setTitleMode(false); setMenuMode("pause"); vitals.reset(); }
     closePanel();
-  } else { input.clear(); toolbox.close(); spawnMenu.close(); }
+  } else { input.clear(); toolbox.close(); spawnMenu.close(); floorPicker.close(); }
   touch.setPlaying(p);
 }
 function showTitle() {
   titleMode = true;
+  vitals.reset();
   if (document.pointerLockElement) document.exitPointerLock();
   setPlaying(false);
   title.ensure();
   title.setActive(true);
+  map.setTitleMode(true);
   setMenuMode('title');
   closePanel();
 }
 // side panels: Settings, Controls, What's new
 const panel = document.getElementById('m-panel');
-const PANEL_TITLES = { settings: 'Settings', keys: 'Controls', news: "What's new" };
+const PANEL_TITLES = { maps: 'Maps', settings: 'Settings', keys: 'Controls', news: "What's new" };
+// map picker: a card per map (picture, name, what's there); picking one loads it and starts playing
+const MAP_ART = {
+  range: '<svg viewBox="0 0 160 90"><rect width="160" height="90" fill="#8d949b"/><path d="M0 52h160v38H0z" fill="#6f767d"/><g stroke="#5f666d" stroke-width="1"><path d="M0 60h160M0 70h160M0 82h160M20 52L-10 90M50 52l-15 38M80 52v38M110 52l15 38M140 52l30 38"/></g><rect x="22" y="40" width="22" height="16" fill="#c9ccd0"/><rect x="104" y="34" width="34" height="22" fill="#b8bcc1"/><path d="M60 56h14v-5h12v-5h12v10" fill="#d6d9dc"/><circle cx="78" cy="38" r="4" fill="#7f8286"/><rect x="74" y="42" width="8" height="12" rx="2" fill="#7f8286"/></svg>',
+  tower: '<svg viewBox="0 0 160 90"><defs><linearGradient id="mt-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fb7c9"/><stop offset="1" stop-color="#d4dde3"/></linearGradient></defs><rect width="160" height="90" fill="url(#mt-sky)"/><g fill="#8a96a1"><rect x="4" y="44" width="18" height="40"/><rect x="24" y="52" width="14" height="32"/><rect x="118" y="40" width="16" height="44"/><rect x="136" y="50" width="20" height="34"/></g><rect x="56" y="8" width="44" height="76" fill="#3e5566"/><g fill="#7fa3bb" opacity=".8">' + Array.from({ length: 18 }, (_, i) => `<rect x="59" y="${11 + i * 4}" width="38" height="2.4"/>`).join('') + '</g><rect x="76" y="2" width="2" height="7" fill="#5a6670"/><circle cx="77" cy="2" r="1.4" fill="#e0414f"/><rect x="40" y="62" width="14" height="22" fill="#9aa4ad"/><rect x="102" y="58" width="14" height="26" fill="#9aa4ad"/><rect y="84" width="160" height="6" fill="#4b5157"/></svg>',
+};
+function renderMaps() {
+  const cur = map.def?.id;
+  document.getElementById('map-list').innerHTML = MAPS.map((m) => `<button class="map-card${m.id === cur ? ' on' : ''}" data-map="${m.id}">
+    <div class="art">${MAP_ART[m.id] || ''}</div><div class="txt"><b>${m.name}${m.id === cur ? ' <span class="cur">current</span>' : ''}</b><p>${m.desc}</p></div></button>`).join('');
+}
+document.getElementById('map-list').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-map]');
+  if (!b) return;
+  audio.unlock(); audio.play('click');
+  if (b.dataset.map !== map.def?.id) { loadMap(b.dataset.map); hud.toast(`Loaded ${MAP_BY_ID[b.dataset.map].name}`); }
+  renderMaps();
+  closePanel();
+  document.getElementById('play').click();
+});
 let panelName = null;
 function openPanel(name) {
   if (panelName === name) { closePanel(); return; }
   panelName = name;
+  if (name === 'maps') renderMaps();
   panel.classList.remove('hidden');
   document.getElementById('m-panel-title').textContent = PANEL_TITLES[name];
   for (const t of panel.querySelectorAll('.tab')) t.classList.toggle('hidden', t.id !== `tab-${name}`);
@@ -230,6 +306,7 @@ const touch = new TouchControls({
   onPause: () => setPlaying(false), onXray: cycleXray, onSpawn: () => { toolbox.close(); spawnMenu.toggle(); }, onToolbox: () => { spawnMenu.close(); toolbox.toggle(); },
   onEditDone: () => menu.classList.remove('hidden'),
 });
+sniper.isTouch = () => touch.active;
 // Auto: start from the device check, then follow the input actually used (a finger on the
 // screen turns touch controls on; keys or a real mouse turn them off).
 let autoTouch = IS_TOUCH;
@@ -410,7 +487,7 @@ document.getElementById('play').addEventListener('click', async () => {
 canvas.addEventListener('mousedown', () => { if (!touch.active && playing && !freeMouse && document.pointerLockElement !== canvas) lockPointer(); });
 document.addEventListener('pointerlockchange', () => {
   if (touch.active) return;
-  if (document.pointerLockElement === canvas) { lockFails = 0; lockedAt = performance.now(); lockWarn.classList.add('hidden'); setPlaying(true); if (toolboxOpen) { toolbox.close(); spawnMenu.close(); } }
+  if (document.pointerLockElement === canvas) { lockFails = 0; lockedAt = performance.now(); lockWarn.classList.add('hidden'); setPlaying(true); if (toolboxOpen) { toolbox.close(); spawnMenu.close(); floorPicker.close(); } }
   else if (!freeMouse && !toolboxOpen) {
     setPlaying(false);
     // lost straight away (not by Esc): the browser or the OS took it back, e.g. while switching
@@ -426,7 +503,7 @@ addEventListener('keydown', (e) => {
   if (!playing) return;
   // With the keyboard locked the browser no longer handles Esc for us.
   if (e.code === 'Escape') {
-    if (toolboxOpen) { toolbox.close(); spawnMenu.close(); return; }
+    if (toolboxOpen) { toolbox.close(); spawnMenu.close(); floorPicker.close(); return; }
     if (document.pointerLockElement) document.exitPointerLock();
     else setPlaying(false);
   }
@@ -460,7 +537,8 @@ function updatePlayerInfo() {
   if (titleMode || !playing) { ragdolls.player = null; return; }
   const t = toolbox.active, out = t.raise > 0.6;
   playerInfo.pos.copy(player.pos);
-  playerInfo.armed = out && (t === pistol || t === shotgun || t === machete || t === grenade);
+  playerInfo.alive = !vitals.dead;
+  playerInfo.armed = out && (t === pistol || t === shotgun || t === sniper || t === musket || t === machete || t === grenade);
   playerInfo.melee = out && (t === machete || t === fists);
   playerInfo.aimedAt = lookedRagdoll;
   ragdolls.player = playerInfo;
@@ -481,12 +559,21 @@ function setTimeIndex(i) {
 function updateInteraction(dt) {
   centerRay.setFromCamera(screenCentre, camera);
   centerRay.far = CONFIG.player.interactRange;
-  const bHits = centerRay.intersectObjects(buttons.flatMap((b) => b.meshes), false);
-  const focused = bHits.length ? bHits[0].object.userData.button : null;
-  hud.setPrompt(focused ? `<b>E</b>${focused.label === 'RESPAWN' ? 'Respawn ragdoll' : 'Clean up blood'}` : '');
+  // buttons and the map's own things (elevator, ladder); walls in front of them block the look
+  let focused = null, label = '';
+  if (!titleMode && !player.script) {
+    const meshes = buttons.flatMap((b) => b.meshes);
+    for (const it of map.interactables) if (it.enabled !== false) meshes.push(...it.meshes);
+    const hit = centerRay.intersectObjects([...meshes, ...map.solidMeshes], false)[0];
+    focused = hit ? hit.object.userData.button || hit.object.userData.interact || null : null;
+    label = focused ? (typeof focused.prompt === 'function' ? focused.prompt() : focused.prompt) : '';
+    if (!label) focused = null;
+  }
+  hud.setPrompt(focused ? `<b>E</b>${label}` : '');
   if (focused && input.wasPressed('KeyE')) focused.press();
   lastFocused = focused;
   for (const b of buttons) b.update(dt, b === focused);
+  for (const it of map.interactables) it.update?.(dt, it === focused);
 
   centerRay.far = 60;
   // the title screen's corpse (hidden) never shows up in the X-ray or as a target
@@ -554,16 +641,16 @@ function frame() {
   const wdt = dt * ts;
 
   touch.update(dt, { tool: toolbox.active, useVisible: !!lastFocused, xrayMode: hud.xrayOpen ? settings.get('xrayMode') : 'off' });
-  player.update(dt, input, playing && !toolboxOpen && !touch.portrait);
+  player.update(dt, input, playing && !toolboxOpen && !touch.portrait && !vitals.dead);
   if (titleMode) title.update(dt);         // cinematic camera on the title screen
   player.aiming = false;                   // the gun in your hands sets it again
-  toolbox.update(dt, input, playing, wdt); // tools aim before the physics step
+  toolbox.update(dt, input, playing && !vitals.dead, wdt); // tools aim before the physics step
   physics.update(dt, ts);
   ragdolls.update(wdt);
   ballistics.update(wdt, dt);
   explosives.update(wdt);
   gore.update(wdt, camera, renderer.domElement.height);
-  map.update(titleMode ? title.focus : player.pos);
+  map.update(titleMode ? title.focus : player.pos, dt);
   updateInteraction(dt);
   updatePlayerInfo();
 
@@ -583,7 +670,8 @@ function frame() {
 
   watchFps(dt, now);
   const t = toolbox.active;
-  if (titleMode) graphics.render(null, null);
+  vitals.update(dt, { input, playing: playing && !toolboxOpen, show: !titleMode && ragdolls.list.some((r) => r.zombie && !r.hidden) });
+  if (titleMode || vitals.dead) graphics.render(null, null);
   else graphics.render(t.scene, t.camera);
   input.endFrame();
 }
@@ -602,4 +690,4 @@ setTimeout(() => {
 
 // Exposed for debugging from the console and for automated tests.
 watchForUpdates({ hud });
-window.game = { machete, medkit, defib, spawnMenu, title, showTitle, get titleMode() { return titleMode; }, fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };
+window.game = { vitals, map, loadMap, MAPS, machete, medkit, defib, spawnMenu, title, showTitle, get titleMode() { return titleMode; }, fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, sniper, musket, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };

@@ -5,11 +5,41 @@ import { PARTS, PART_BY_NAME } from './skeleton.js';
 import { Health } from './health.js';
 import { Brain } from './brain.js';
 import { BrainV2 } from './brainV2.js';
+import { ZombieBrain } from './zombie.js';
 import { GROUP } from '../core/physics.js';
-import { clamp } from '../core/util.js';
+import { clamp, canvasTexture } from '../core/util.js';
 
 export const GRAY = new THREE.MeshStandardMaterial({ color: 0x7f8286, roughness: 0.7, metalness: 0.0 });
 export const BLACK = new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.35, metalness: 0.1 });
+
+/** Rotting green skin with dark patches, veins and old blood. */
+function zombieSkinTexture() {
+  return canvasTexture(256, 256, (g, w, h) => {
+    g.fillStyle = '#7a8f66'; g.fillRect(0, 0, w, h);
+    const blot = (x, y, r, col) => { const grd = g.createRadialGradient(x, y, 0, x, y, r); grd.addColorStop(0, col); grd.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = grd; g.fillRect(x - r, y - r, r * 2, r * 2); };
+    for (let i = 0; i < 40; i++) blot(Math.random() * w, Math.random() * h, 10 + Math.random() * 34, `rgba(${40 + Math.random() * 30},${60 + Math.random() * 30},${30 + Math.random() * 20},${0.25 + Math.random() * 0.3})`);
+    for (let i = 0; i < 18; i++) blot(Math.random() * w, Math.random() * h, 8 + Math.random() * 22, `rgba(150,160,110,${0.2 + Math.random() * 0.2})`);
+    // veins
+    g.strokeStyle = 'rgba(40,52,48,.45)'; g.lineWidth = 1.2;
+    for (let i = 0; i < 14; i++) {
+      let x = Math.random() * w, y = Math.random() * h; g.beginPath(); g.moveTo(x, y);
+      for (let k = 0; k < 6; k++) { x += (Math.random() - 0.5) * 30; y += (Math.random() - 0.5) * 30; g.lineTo(x, y); }
+      g.stroke();
+    }
+    // dried blood: splats with drips
+    for (let i = 0; i < 9; i++) {
+      const x = Math.random() * w, y = Math.random() * h, r = 6 + Math.random() * 16;
+      g.fillStyle = `rgba(${90 + Math.random() * 40},${8 + Math.random() * 10},${6 + Math.random() * 8},${0.75 + Math.random() * 0.2})`;
+      g.beginPath(); g.ellipse(x, y, r, r * (0.6 + Math.random() * 0.5), Math.random() * 3, 0, Math.PI * 2); g.fill();
+      for (let k = 0; k < 4; k++) { const a = Math.random() * Math.PI * 2, d = r * (1 + Math.random()); g.beginPath(); g.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, 1 + Math.random() * 3, 0, Math.PI * 2); g.fill(); }
+      g.fillRect(x - 1.5, y, 3, r * (1 + Math.random() * 2));
+    }
+  });
+}
+export const ZOMBIE_SKIN = new THREE.MeshStandardMaterial({ map: zombieSkinTexture(), color: 0xffffff, roughness: 0.8, metalness: 0 });
+export const ZOMBIE_JOINT = new THREE.MeshStandardMaterial({ color: 0x2a1a17, roughness: 0.45, metalness: 0.05 });
+const ZOMBIE_EYE = new THREE.MeshStandardMaterial({ color: 0xe6e2a0, emissive: 0xc9c25a, emissiveIntensity: 0.35, roughness: 0.3 });
+const EYE_GEO = new THREE.SphereGeometry(0.016, 10, 8);
 // Armour: an olive ballistic helmet and a dark plate carrier
 export const ARMOR_MATERIALS = {
   helmet: new THREE.MeshStandardMaterial({ color: 0x4d5434, roughness: 0.78, metalness: 0.05 }),
@@ -50,7 +80,7 @@ function partGeometry(def) {
  * towards a target pose supplied by the Brain. Damage and physiology live in Health.
  */
 export class Ragdoll {
-  constructor({ scene, physics, position, yaw = 0, name = 'Subject', armor = null, behavior = 'classic' }) {
+  constructor({ scene, physics, position, yaw = 0, name = 'Subject', armor = null, behavior = 'classic', zombie = false }) {
     this.scene = scene;
     this.physics = physics;
     this.name = name;
@@ -167,12 +197,41 @@ export class Ragdoll {
 
     // Classic behaviour, or the experimental V2 that notices the player (hands up, fleeing...)
     this.behavior = behavior === 'v2' ? 'v2' : 'classic';
-    this.brain = this.behavior === 'v2' ? new BrainV2(this, origin, yaw) : new Brain(this, origin, yaw);
+    this.zombie = false;
+    if (zombie) this.makeZombie(origin, yaw);
+    else this.brain = this.behavior === 'v2' ? new BrainV2(this, origin, yaw) : new Brain(this, origin, yaw);
     this._unsub = physics.onStep((h) => this.applyMuscles(h));
     this.sync();
   }
 
   get pelvis() { return this.parts.pelvis.body; }
+
+  /**
+   * Turn into a zombie: green rotting skin, dark joints, pale eyes, undead health and the zombie
+   * brain. Used for spawned zombies and for the infected dead getting back up.
+   */
+  makeZombie(at = null, yaw = null) {
+    this.zombie = true;
+    this.behavior = 'zombie';
+    const h = this.health;
+    h.undead = true; h.alive = true; h.infected = false; h.infection = 0;
+    h.cardiacArrest = false; h.brainDeath = 0; h.noCirculationTime = 0; h.deathCause = '';
+    for (const p of Object.values(this.parts)) {
+      p.mesh.material = ZOMBIE_SKIN;
+      if (p.ball) p.ball.material = ZOMBIE_JOINT;
+    }
+    if (!this.eyes) {
+      this.eyes = [];
+      for (const s of [-1, 1]) {
+        const e = new THREE.Mesh(EYE_GEO, ZOMBIE_EYE);
+        e.position.set(s * 0.037, 0.018, 0.093);
+        e.userData = { ragdoll: this, part: 'head', surface: 'flesh' };
+        this.parts.head.group.add(e); this.eyes.push(e);
+      }
+    }
+    const pp = at || this.bodyPos('pelvis');
+    this.brain = new ZombieBrain(this, pp, yaw ?? this.heading());
+  }
 
   /**
    * Put on a helmet or a vest. The shells are real hit targets (bullets, blades and fists hit them
@@ -272,6 +331,22 @@ export class Ragdoll {
 
   bodyQuat(name, out = new THREE.Quaternion()) { const q = this.parts[name].body.quaternion; return out.set(q.x, q.y, q.z, q.w); }
   bodyPos(name, out = new THREE.Vector3()) { const p = this.parts[name].body.position; return out.set(p.x, p.y, p.z); }
+
+  /** Move the whole ragdoll by an offset (elevator rides, carried up a ladder). */
+  translate(dx, dy, dz) {
+    for (const n in this.parts) {
+      const b = this.parts[n].body;
+      if (!b) continue;
+      b.position.x += dx; b.position.y += dy; b.position.z += dz;
+      b.previousPosition?.copy(b.position);
+      b.interpolatedPosition?.copy(b.position);
+    }
+    const br = this.brain;
+    for (const v of [br.root, br.home]) { v.x += dx; v.z += dz; }
+    br.target = null;
+    br.gy += dy;
+    this.sync();
+  }
 
   /** World-space position of a joint pivot (on the child side). */
   jointWorld(partName, out = new THREE.Vector3()) {

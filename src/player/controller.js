@@ -58,7 +58,8 @@ export class PlayerController {
     // ---------- Look ----------
     if (active) {
       const [dx, dy] = input.consumeMouse();
-      const sens = P.mouseSensitivity * (this.aiming ? 0.7 : 1);
+      // a rifle scope zooms in a lot: turn slower to match (aimFov = the scope's FOV multiplier)
+      const sens = P.mouseSensitivity * (this.aiming ? 0.7 * Math.min(1, (this.aimFov ?? 1) / 0.82) : 1);
       this.targetYaw -= dx * sens;
       this.targetPitch -= dy * sens;
       this.targetPitch = clamp(this.targetPitch, -1.53, 1.53);
@@ -66,6 +67,8 @@ export class PlayerController {
     const s = P.lookSmoothing > 0 ? damp(30 * (1 - P.lookSmoothing) + 4, dt) : 1;
     this.yaw += (this.targetYaw - this.yaw) * s;
     this.pitch += (this.targetPitch - this.pitch) * s;
+
+    if (this.script) { this.runScript(dt); this.updateCamera(dt, 0); return; }
 
     // ---------- Wish direction ----------
     let fx = 0, fz = 0;
@@ -124,10 +127,13 @@ export class PlayerController {
     this.onGround = false;
     this.moveAxis('y', this.vel.y * dt);
     if (!wasGround && this.onGround && fallSpeed < -3) this.landSpring.kick(fallSpeed * 0.06);
+    // fall height: from the highest point since last standing (for fall damage)
+    if (!wasGround && this.onGround) this.onLand?.(-fallSpeed, (this.fallStart ?? this.pos.y) - this.pos.y);
+    this.fallStart = this.onGround ? this.pos.y : Math.max(this.fallStart ?? this.pos.y, this.pos.y);
 
-    const B = CONFIG.map.boundary - P.radius;
-    this.pos.x = clamp(this.pos.x, -B, B);
-    this.pos.z = clamp(this.pos.z, -B, B);
+    const b = this.map.bounds, R = P.radius;
+    this.pos.x = clamp(this.pos.x, b.minX + R, b.maxX - R);
+    this.pos.z = clamp(this.pos.z, b.minZ + R, b.maxZ - R);
 
     // ---------- Crouch (with head clearance) ----------
     let crouchTarget = this.wantsCrouch ? 1 : 0;
@@ -146,9 +152,19 @@ export class PlayerController {
     return p.x + r > min.x && p.x - r < max.x && p.z + r > min.z && p.z - r < max.z && p.y + h > min.y && p.y < max.y;
   }
 
+  /** Colliders around the player (copied: the grid's own result array is reused by other queries). */
+  nearby(pad = 0) {
+    const r = P.radius + pad + 0.1, p = this.pos;
+    const src = this.map.near(p.x - r, p.y - 0.6 - pad, p.z - r, p.x + r, p.y + P.height + 0.6 + pad, p.z + r);
+    const out = this._near || (this._near = []);
+    out.length = 0;
+    for (let i = 0; i < src.length; i++) if (!src[i].off) out.push(src[i]);
+    return out;
+  }
+
   blockedAbove(h) {
     const r = P.radius, p = this.pos;
-    for (const c of this.map.colliders) {
+    for (const c of this.nearby()) {
       if (p.x + r > c.min.x && p.x - r < c.max.x && p.z + r > c.min.z && p.z - r < c.max.z && p.y + h > c.min.y && p.y < c.max.y) return true;
     }
     return false;
@@ -158,7 +174,8 @@ export class PlayerController {
     if (delta === 0 && axis !== 'y') return;
     this.pos[axis] += delta;
     if (axis === 'y' && this.pos.y <= 0) { this.pos.y = 0; this.vel.y = Math.max(0, this.vel.y); this.onGround = true; }
-    for (const c of this.map.colliders) {
+    const list = this.nearby(Math.abs(delta)).slice();
+    for (const c of list) {
       if (!this.overlaps(c.min, c.max)) continue;
       if (axis === 'y') {
         if (delta <= 0) { this.pos.y = c.max.y; this.onGround = true; this.vel.y = 0; }
@@ -170,7 +187,7 @@ export class PlayerController {
       if (stepH > 0 && stepH <= P.stepHeight && (this.onGround || this.coyote > 0)) {
         const oldY = this.pos.y;
         this.pos.y = c.max.y + 0.001;
-        if (!this.anyOverlap()) { this.landSpring.kick(-stepH * 1.2); continue; }
+        if (!this.anyOverlap(list)) { this.landSpring.kick(-stepH * 1.2); continue; }
         this.pos.y = oldY;
       }
       const r = P.radius;
@@ -179,7 +196,38 @@ export class PlayerController {
     }
   }
 
-  anyOverlap() { return this.map.colliders.some((c) => this.overlaps(c.min, c.max)); }
+  anyOverlap(list = this.nearby()) { return list.some((c) => !c.off && this.overlaps(c.min, c.max)); }
+
+  /** Put the player somewhere (map spawn, after dying). */
+  spawnAt(pos, yaw = 0) {
+    this.pos.set(pos[0], pos[1], pos[2]);
+    this.vel.set(0, 0, 0);
+    this.yaw = this.targetYaw = yaw;
+    this.pitch = this.targetPitch = 0;
+    this.onGround = true;
+    this.fallStart = this.pos.y;
+  }
+
+  /** Move by an offset (elevator rides, ladders), keeping velocity and view. */
+  teleport(dx, dy, dz) {
+    this.pos.x += dx; this.pos.y += dy; this.pos.z += dz;
+    this.fallStart = this.pos.y;
+    this.body.position.x += dx; this.body.position.y += dy; this.body.position.z += dz;
+  }
+
+  /**
+   * Scripted movement (climbing a ladder): fn(t, dt) moves this.pos itself and returns true when
+   * done. Looking around still works; walking, jumping and gravity are off meanwhile.
+   */
+  play(fn) { this.script = { fn, t: 0 }; this.vel.set(0, 0, 0); }
+
+  runScript(dt) {
+    const s = this.script;
+    s.t += dt;
+    if (s.fn(s.t, dt)) { this.script = null; this.vel.set(0, 0, 0); this.fallStart = this.pos.y; this.onGround = true; }
+    this.body.position.set(this.pos.x, this.pos.y, this.pos.z);
+    this.body.velocity.set(0, 0, 0);
+  }
 
   /** Called by the weapon on each shot. */
   addRecoil(pitch, yaw) {
@@ -218,16 +266,18 @@ export class PlayerController {
 
     const cam = this.camera;
     _v.set(bobX, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.yaw);
-    cam.position.set(this.pos.x + _v.x, this.pos.y + this.eyeHeight + bobY + land, this.pos.z + _v.z);
+    // dead: the view drops to the floor and rolls over
+    const dn = this.down || 0, de = dn * dn * (3 - 2 * dn);
+    cam.position.set(this.pos.x + _v.x, this.pos.y + (this.eyeHeight - 0.3) * (1 - de) + 0.3 + bobY + land, this.pos.z + _v.z);
     cam.rotation.set(
-      this.pitch + rp + (Math.random() - 0.5) * sh + bsx,
+      this.pitch * (1 - de * 0.7) + rp + (Math.random() - 0.5) * sh + bsx + de * 0.15,
       this.yaw + ry + (Math.random() - 0.5) * sh + bsy,
-      this.tilt + bobRoll + bsx * 0.6, 'YXZ'
+      this.tilt + bobRoll + bsx * 0.6 + de * 1.25, 'YXZ'
     );
 
     const fovTarget = P.fov + (this.sprinting ? P.sprintFovBoost : 0);
-    const fov = (this.aiming ? fovTarget * CONFIG.weapon.adsFovMul : fovTarget) + this.fovKick;
+    const fov = (this.aiming ? fovTarget * (this.aimFov ?? CONFIG.weapon.adsFovMul) : fovTarget) + this.fovKick;
     this.fovKick *= 1 - damp(10, dt);
-    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov += (fov - cam.fov) * damp(10, dt); cam.updateProjectionMatrix(); }
+    if (Math.abs(cam.fov - fov) > 0.01) { cam.fov += (fov - cam.fov) * damp(this.aimFov ? 22 : 10, dt); cam.updateProjectionMatrix(); }
   }
 }

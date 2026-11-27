@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CONFIG } from '../config.js';
+import { WORLD } from '../world/world.js';
 import { clamp, lerp, noise1, rand, damp } from '../core/util.js';
 
 const C = CONFIG.ragdoll;
@@ -27,6 +28,7 @@ export class Brain {
     this.r = ragdoll;
     this.home = new THREE.Vector3(home.x, 0, home.z);
     this.root = new THREE.Vector3(home.x, 0, home.z);
+    this.gy = WORLD.groundAt(home.x, home.z, (home.y || 0) + 0.5);   // floor height under the ragdoll
     this.yaw = yaw;
     this.state = 'stand';
     this.stateTime = 0;
@@ -52,6 +54,13 @@ export class Brain {
   }
 
   setState(s) { if (this.state !== s) { this.state = s; this.stateTime = 0; } }
+
+  /** Floor height under the pelvis (multi-storey maps): eased over small steps, instant after a fall. */
+  updateGround(pp, dt) {
+    const g = WORLD.groundAt(pp.x, pp.z, pp.y - 0.05);
+    if (Math.abs(g - this.gy) > 0.6 || !dt) this.gy = g;
+    else this.gy += (g - this.gy) * Math.min(1, dt * 10);
+  }
   hear() {}
   scare() {}
 
@@ -109,6 +118,7 @@ export class Brain {
 
     const pelvisPos = r.bodyPos('pelvis');
     const pelvisUp = Y.clone().applyQuaternion(r.bodyQuat('pelvis', _q));
+    this.updateGround(pelvisPos, dt);
 
     if (r.grabbed) {
       // Held by the grab tool: curl up into a fetal ball. Afterwards it lands "fallen" and decides
@@ -118,7 +128,7 @@ export class Brain {
     } else switch (this.state) {
       case 'stand': {
         const mustFall = support < 0.33 || Math.min(capL, capR) < 0.2 || h.consciousness < 42 || h.pain > 90 || h.paralyzed;
-        const tipped = pelvisPos.y < 0.62 || pelvisUp.y < 0.5;
+        const tipped = pelvisPos.y - this.gy < 0.62 || pelvisUp.y < 0.5;
         if (mustFall || tipped) { this.fall(); break; }
         this.updateStand(dt, pose, { capL, capR, armL, armR, support, awake, painF });
         break;
@@ -180,8 +190,7 @@ export class Brain {
       if (this.idleTimer <= 0) {
         const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * C.wanderRadius;
         this.target = new THREE.Vector3(this.home.x + Math.cos(a) * d, 0, this.home.z + Math.sin(a) * d);
-        const B = CONFIG.map.boundary - 2;
-        this.target.x = clamp(this.target.x, -B, B); this.target.z = clamp(this.target.z, -B, B);
+        WORLD.clampXZ(this.target, 2, this.r.bodyPos('pelvis').y);
       }
     }
     let wantSpeed = 0;
@@ -194,8 +203,8 @@ export class Brain {
       else {
         const want = Math.atan2(dx, dz);
         const diff = wrapAngle(want - this.yaw);
-        this.yaw += clamp(diff, -1.6 * dt, 1.6 * dt);
-        wantSpeed = C.walkSpeed * (Math.abs(diff) < 0.7 ? 1 : 0.25) * (1 - 0.55 * limp) * (1 - 0.4 * painF) * clamp(dist / 0.5, 0.3, 1);
+        this.yaw += clamp(diff, -(this.turnRate ?? 1.6) * dt, (this.turnRate ?? 1.6) * dt);
+        wantSpeed = C.walkSpeed * (this.speedMul ?? 1) * (Math.abs(diff) < 0.7 ? 1 : 0.25) * (1 - 0.55 * limp) * (1 - 0.4 * painF) * clamp(dist / 0.5, 0.3, 1);
       }
     }
     this.walkAmt += ((wantSpeed > 0.05 ? 1 : 0) - this.walkAmt) * damp(4, dt);
@@ -249,7 +258,7 @@ export class Brain {
     }
 
     const height = C.standHeight - limp * weakStance * 0.075 - painF * 0.03 - Math.abs(Math.cos(this.phase)) * 0.015 * w;
-    r.pelvisTarget.set(this.root.x, height, this.root.z);
+    r.pelvisTarget.set(this.root.x, this.gy + height, this.root.z);
     r.pelvisTargetVel.copy(fwd).multiplyScalar(this.speed);
 
     // Foot targets: where each foot should be for this point of the gait cycle.
@@ -262,7 +271,7 @@ export class Brain {
       const sx = s === 'L' ? 0.095 : -0.095;
       r.footTarget[s].set(
         this.root.x + fwd.x * reach + side.x * sx,
-        0.03 + lift,
+        this.gy + 0.03 + lift,
         this.root.z + fwd.z * reach + side.z * sx
       );
     }
@@ -307,20 +316,20 @@ export class Brain {
     const pp = r.bodyPos('pelvis');
     this.root.x = lerp(this.root.x, pp.x, 0.05); this.root.z = lerp(this.root.z, pp.z, 0.05);
     let height, hip, knee;
-    if (t < 0.45) { const u = t / 0.45; height = lerp(this.getup.from.y, 0.52, u); hip = 1.3; knee = 2.0; pose.spine = 0.6; }
+    if (t < 0.45) { const u = t / 0.45; height = lerp(this.getup.from.y - this.gy, 0.52, u); hip = 1.3; knee = 2.0; pose.spine = 0.6; }
     else { const u = (t - 0.45) / 0.55; const e = u * u * (3 - 2 * u); height = lerp(0.52, C.standHeight, e); hip = lerp(1.3, 0.02, e); knee = lerp(2.0, 0.06, e); pose.spine = lerp(0.6, 0.05, e); }
     pose.pelvisPitch = -0.2 * (1 - t);
     pose.hipL = [hip, 0.06]; pose.hipR = [hip, 0.06]; pose.kneeL = knee; pose.kneeR = knee;
     pose.shoulderL = [0.5 * (1 - t), 0.2]; pose.shoulderR = [0.5 * (1 - t), 0.2];
     pose.elbowL = 0.6; pose.elbowR = 0.6;
     const ramp = clamp(this.stateTime / 0.5) * awake;
-    r.pelvisTarget.set(this.root.x, height, this.root.z);
+    r.pelvisTarget.set(this.root.x, this.gy + height, this.root.z);
     r.pelvisPosStrength = ramp * clamp(support + 0.2);
     r.gravityComp = 0.85 * ramp * clamp(support);
     for (const n in r.parts) S[n] = 0.8 * ramp * this.h.partCap(n);
     S.pelvis = ramp;
     if (t >= 1) { this.setState('stand'); this.target = null; this.idleTimer = rand(1, 2); }
-    else if (this.stateTime > 0.9 && (r.bodyPos('pelvis').y < 0.3 || support < 0.4)) this.fall();
+    else if (this.stateTime > 0.9 && (r.bodyPos('pelvis').y - this.gy < 0.3 || support < 0.4)) this.fall();
   }
 
   // ------------------------------------------------------------------ ground behaviours
@@ -355,7 +364,7 @@ export class Brain {
     // Each arm pull gives a surge forward.
     const speed = 0.6 * armPower * (1 - 0.4 * painF) * (0.25 + 0.75 * Math.max(0, -Math.cos(this.phase * 2)));
     const fwd = _v.set(Math.sin(this.crawlYaw), 0, Math.cos(this.crawlYaw));
-    r.chestTarget = new THREE.Vector3(cp.x, 0.2, cp.z);
+    r.chestTarget = new THREE.Vector3(cp.x, this.gy + 0.2, cp.z);
     r.chestTargetVel.copy(fwd).multiplyScalar(speed);
     r.chestPosStrength = 0.6 * armPower * awake;
   }

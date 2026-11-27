@@ -4,7 +4,7 @@
 
 ![screenshot](screenshot.png)
 
-A first-person physics sandbox: humanoid ragdolls, an M1911 pistol, and a dynamic damage / gore / physiology model.
+A first-person physics sandbox: humanoid ragdolls and zombies, guns from a flintlock musket to a scoped sniper rifle, two maps (a test range and a 20-floor skyscraper), and a dynamic damage / gore / physiology model.
 Built with **three.js r187** and **cannon-es 0.20**. Both are bundled locally in `lib/`, so it needs no internet.
 
 ## Running it
@@ -27,22 +27,27 @@ python3 -m http.server 8000      # or: npx serve .
 | Space | Jump |
 | C (hold) | Crouch (Ctrl also works in fullscreen on Chrome/Edge) |
 | 1 – 9 or Q | Switch between the items on your bar (you start with Fists; equip more in the toolbox) |
-| Mouse wheel | Switch item (with Grab: move what you're holding closer or farther) |
+| Mouse wheel | Switch item (with Grab: move what you're holding closer or farther; through the sniper scope: zoom) |
+| Shift (scoped) | Hold your breath to steady the sniper scope |
 | Tab | Open the toolbox (pick an item, then Equip to put it on your bar) |
-| B | Spawn menu (ragdolls and armour) |
+| B | Spawn menu (ragdolls, zombies and armour) |
 | Z | Slow time down (down to 0.01×) |
 | V | Speed time up (up to 3×) |
-| E | Press the button you're looking at |
+| E | Use what you're looking at: buttons, the elevator (call it, pick a floor), the roof ladder |
 | X | X-ray / vitals panel: open, press again for the other view (Dynamic 3D / Flat), again to close (Shift + X also switches) |
 | H | Hide the tool controls list on the left |
 | F3 | Debug overlay |
-| Esc | Pause menu (Resume, Settings, Controls, What's new, Main menu) |
+| Esc | Pause menu (Resume, Maps, Settings, Controls, What's new, Main menu) |
 
 You see your own blocky, Roblox-style hands holding every item. They follow the item through every animation: the support hand fetches a fresh magazine and racks the slide on the M1911, works the pump and loads shells one by one on the shotgun, and pulls the grenade pin.
 
 **Fists:** left click throws quick jabs (left, right, left…), right click a slower, much harder hook. Punches leave purple bruises, make the ragdoll stagger, and a hook to the head can knock it down or out (and give it a bloody nose).
 
 **M1911:** left click fires, right click (hold) aims down sights, R reloads, F inspects.
+
+**M24 Sniper:** a bolt-action rifle with a 5-round magazine and a 4–12× scope. Right click looks through the scope (black ring, mil-dot reticle); scroll or F zooms, and the view drifts in a slow figure eight that gets worse when you move: hold Shift to hold your breath (about 4 seconds, then you gasp and it shakes more for a moment). After each shot the right hand works the bolt (handle up, back, the case flies out, forward, down), which takes you off the scope for a moment. R swaps the magazine. Each round has about three times the energy of a pistol bullet: it goes through bodies, most armour and glass, and a head shot usually ends it.
+
+**Flintlock musket:** a smoothbore musket from the 1700s. Pulling the trigger drops the cock, the flint sparks on the frizzen, the priming flashes in the pan, and after a short random delay the main charge fires a heavy .75 lead ball in a thick cloud of white smoke that hangs in the air for several seconds. About 1 in 25 shots only flashes in the pan (press R to prime it again). It's inaccurate from the hip and still loose when aimed down the barrel. Reloading takes about 6.5 seconds and shows every step: half-cock, bite the paper cartridge, prime the pan, close the frizzen, stand the musket up, pour the powder and the ball, draw the ramrod, ram it home (tap, tap), return the ramrod and cock it.
 
 **Remington 870:** left click fires 8 pellets and the gun pumps itself (the spent red shell flies out). Right click aims, R loads shells one at a time into the tube (6 plus one in the chamber; fire to stop loading early), F inspects. Pellets that stop inside the body still blow blood out of the far side, so a ragdoll shot with its back to a wall paints the wall behind it. Pellets lose power with distance: devastating up close, weak far away. At point blank (under about 4.5 m) four or more pellets on the same body part make one massive wound: a head, hand or foot is blown apart, an arm or leg is torn off, and the chest or belly is ripped open (if dismemberment is on).
 
@@ -60,7 +65,13 @@ You see your own blocky, Roblox-style hands holding every item. They follow the 
 
 **Defibrillator:** hold left click to charge, let go with the paddles on the chest to shock. A stopped heart can restart if the heart is still there and there is enough blood (give a blood bag first after heavy bleeding); each extra shock raises the chance. Shocking a beating heart can stop it. The shock arcs, flashes and makes the whole body jerk.
 
-**Spawn menu (B):** spawn 1, 2, 3, 5 or 8 ragdolls (up to 12 at once) where you look, in front of you or at the spawn point, with a helmet and/or a vest, and with Classic behaviour or the experimental **V2** behaviour (plus a temperament: Brave, Normal, Timid). It can also remove every ragdoll and clean up blood. Armour stops pistol rounds, shotgun pellets and shrapnel until it wears out (dents and sparks), but the body behind it still takes the blow: a helmet hit dazes, a vest hit bruises and can crack a rib. Vests and helmets also soften blasts.
+**Spawn menu (B):** laid out like the toolbox: a **Ragdoll** card (a plain gray head) and a **Zombie** card (a rotting green head with blood), with categories on the right (All, Humans, Undead). Pick one, then choose 1, 2, 3, 5 or 8 (up to 12 bodies at once), where (where you look, in front of you or at the spawn point), a helmet and/or a vest, and for ragdolls Classic behaviour or the experimental **V2** behaviour (plus a temperament: Brave, Normal, Timid). Spawn, or double click a card. It can also remove everyone and clean up blood. Armour stops pistol rounds, shotgun pellets and shrapnel until it wears out (dents and sparks), but the body behind it still takes the blow: a helmet hit dazes, a vest hit bruises and can crack a rib. Vests and helmets also soften blasts.
+
+**Zombies:** green, blood-stained ragdolls with pale eyes. A zombie shambles after the nearest living person on its own floor (you or a ragdoll), arms out in front, groaning; gunshots and explosions draw it in. In reach it lunges and claws you or bites a ragdoll (a ragged wound on an arm, the chest or the throat). Zombies feel no pain and don't need blood, a heart or air: knock one down and it gets back up, take its legs and it crawls after you. Only destroying the brain, blowing the head apart or taking the head off puts one down. A bite infects: a bitten ragdoll gets a fever, dies about a minute later (or sooner from its wounds) and rises again as a zombie 7 to 10 seconds after death, unless the head was destroyed.
+
+**Your health:** zombie hits, falls from higher than about 4.5 m and grenades going off near you (walls and floors soak most of it) cost health. A red edge shows damage, and below 30 a heartbeat thumps. Health comes back after 5 seconds without getting hurt. At 0 the view drops to the floor and a **You died** screen offers Respawn (or Space), back at the start of the map.
+
+**Maps (menu):** **Test Range**, the open concrete floor with test blocks, and **Skyscraper**: a city block with streets, parked cars, traffic lights, trees and a skyline, around a 20-floor glass office tower. Walk in through the sliding doors, call the elevator with the button by its doors, step in and press E on the panel to pick a floor (every floor is an open-plan office with desk pods, a meeting room, a lounge and plants). On floor 20 a ladder in the core climbs through a hatch to the roof, with a helipad, machinery and a beacon on the antenna. The windows are real glass panes: bullets, grenades and bodies thrown into them shatter them, and you (or a ragdoll) can fall out. Ragdolls ride the elevator with you if they're in the car.
 
 **Menus:** the game opens on a title screen with a slow cinematic camera around a dead, badly hurt ragdoll slumped against a wall (on a set far outside the play area, so you never meet it in the game), with Play, Settings, Controls and What's new. Esc opens the pause menu, which adds Resume and Main menu.
 
@@ -132,7 +143,12 @@ Settings are saved in the browser (localStorage).
 - **Medical** (`weapon/medkit.js`, `weapon/defib.js`, `Health.treat`, `giveMorphine`, `giveBlood`, `defibrillate`): treatments change the physiology (bleed rates, pain, breathing, blood volume, heart rhythm) and are drawn on the body (`Gore.bandage`, `tourniquet`, `splint`, `paddleMarks`).
 - **Armour** (`Ragdoll.addArmor`, `Ballistics.armorHit`): helmet and vest meshes with their own hit points; they dent, spark, wear out and then let rounds through. A helmet can be knocked off.
 - **Title scene** (`ui/title.js`): builds the menu corpse with the real damage systems (shots, cuts, a severed forearm, burns) and pre-rolls the physics so it settles before you see it.
-- **Map** (`world/map.js`): 4 m prototype-grid concrete floor, gray sky and fog, a few test blocks, and invisible walls at ±45 m.
+- **Maps** (`world/map.js`, `world/maps.js`): `GameMap` loads a map definition (bounds, spawn points, lights, fog, a `build()` function) and keeps the shared parts (sky, sun, the title set). Map geometry is batched into a few meshes (`world/build.js`), collision boxes live in a uniform grid (`world/grid.js`) so the player, particles and explosions only check nearby boxes, and every system asks the map for the floor height under a point, so ragdolls, blood and casings work on any floor.
+- **Test Range** (`world/range.js`): 4 m prototype-grid concrete floor, a few test blocks, and invisible walls at ±45 m.
+- **Skyscraper** (`world/tower.js`, `world/towerTextures.js`, `world/elevator.js`, `world/glass.js`, `ui/floorpicker.js`): procedural city block and 21-level tower with canvas-painted textures (asphalt, carpet, ceiling tiles, facades, signs), furniture shown only on the floors near you, breakable glass panes (instanced, with flying shards), an elevator with landing doors, call buttons, floor indicators and a floor picker, and a scripted ladder climb to the roof.
+- **Sniper and musket** (`weapon/modelRifles.js`, `weapon/sniper.js`, `weapon/musket.js`): procedural rifle (bolt, scope, magazine, muzzle brake) and musket (lock with cock, frizzen and pan, ramrod, brass fittings); the scope is a DOM overlay and the musket smoke is a pool of world-space sprites.
+- **Zombies** (`ragdoll/zombie.js`, `Health.updateUndead`, `Ragdoll.makeZombie`, `RagdollManager.reanimate`): a brain that hunts the nearest living person on its floor, an undead health mode, the bite infection and reanimation.
+- **Player health** (`player/vitals.js`): health, regeneration, the damage vignette, the death screen and respawn.
 
 ## Layout
 
@@ -142,14 +158,14 @@ lib/                     three.js, cannon-es, three addons (post-processing etc.
 src/main.js              boot + game loop
 src/config.js            every tunable number lives here
 src/core/                input, physics wrapper (fixed 120 Hz step), procedural audio, utils
-src/world/               map, physical buttons
-src/player/              first-person controller + camera effects
-src/weapon/              items (fists, M1911, Remington 870, grenade, grab tool, machete, medkit, defibrillator), their models, hands, animation clips, ballistics, explosives, casings, toolbox
+src/world/               map system, Test Range and Skyscraper maps, elevator, glass, physical buttons
+src/player/              first-person controller + camera effects, your health
+src/weapon/              items (fists, M1911, Remington 870, sniper rifle, flintlock musket, grenade, grab tool, machete, medkit, defibrillator), their models, hands, animation clips, ballistics, explosives, casings, toolbox
 src/settings.js          saved player settings (graphics, gore, HUD)
 src/graphics.js          Low / Medium / High / Very High presets and post-processing
 src/materials.js         material detail (grime, wear, normal maps) per preset
 src/ui/preview.js        spinning item previews for the toolbox
-src/ragdoll/             skeleton layout, anatomy data, health/physiology, brain/AI, ragdoll body, manager
+src/ragdoll/             skeleton layout, anatomy data, health/physiology, brain/AI (Classic, V2, zombie), ragdoll body, manager
 src/gore/                particles, decals/pools, gore orchestration (stumps, organs, gibs, bleeding)
 src/ui/                  HUD, X-ray, touch controls (touch.js), spawn menu, title scene
 src/core/device.js       phone / tablet detection
@@ -160,7 +176,8 @@ sw.js                    service worker: always loads the newest version (no sta
 
 ## Extending
 
-- **More ragdolls**: `ragdolls.spawn([x, 0, z], yaw)` in `main.js`. The respawn button resets to one.
+- **More ragdolls**: `ragdolls.spawn([x, y, z], yaw)` in `main.js` (`{ zombie: true }` for a zombie). The respawn button resets to one.
+- **New map**: write a definition like `world/range.js` (name, bounds, spawn points, `build(map)` using `map.solid`, `map.add`, `map.addCollider`) and add it to `MAPS` in `world/maps.js`; it shows up in the Maps menu.
 - **New weapon**: copy `weapon/pistol.js`, give it a model and clips, and point `onFire` at `Ballistics.fire`. Damage scales with the `energy` argument passed to `Health.bulletHit`.
 - **New organ or bone**: add it to `ragdoll/anatomy.js` (local coordinates). Hit testing, the X-ray and the HUD lists pick it up automatically.
 - **Tuning**: `config.js` (movement, recoil, blood limits, physiology timings). Muscle gains are `KP`/`KD` in `Ragdoll.applyMuscles`, and gait shapes are in `Brain.updateStand`.
@@ -171,4 +188,4 @@ sw.js                    service worker: always loads the newest version (no sta
 - Walking is an "active ragdoll puppet" (hips held up, feet stepped to targets), not a balance controller. It looks right at walking speed, but a big shove makes it fall rather than catch itself.
 - Wound decals are flat quads, so on very curved spots they can sit slightly off the surface.
 - Sounds are synthesized placeholders.
-- No hands or arms on the viewmodel yet.
+- Zombies and ragdolls don't path-find: they walk straight at what they want and slide along walls.

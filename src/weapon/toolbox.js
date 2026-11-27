@@ -7,6 +7,8 @@ const $ = (id) => document.getElementById(id);
 const ICONS = {
   Fists: `<svg viewBox="0 0 64 40"><rect x="10" y="12" width="18" height="18" rx="2" fill="currentColor"/><rect x="2" y="16" width="10" height="10" fill="currentColor" opacity=".75"/><rect x="36" y="10" width="18" height="18" rx="2" fill="currentColor"/><rect x="52" y="14" width="10" height="10" fill="currentColor" opacity=".75"/><path d="M14 17h10M14 21h10M40 15h10M40 19h10" stroke="#000" stroke-opacity=".35" stroke-width="1.5"/></svg>`,
   'Remington 870': `<svg viewBox="0 0 64 40"><path d="M2 15h30v-2h4v2h26v3H36v2h12v3H34l-2 2H22l-3 3-12 6-4-4 9-6v-3H2z" fill="currentColor"/><rect x="38" y="19" width="12" height="5" rx="1" fill="currentColor" opacity=".7"/></svg>`,
+  'M24 Sniper': `<svg viewBox="0 0 64 40"><path d="M1 17h24v-2h22v2h16v2.5H47V21h-5l-3 3H27l-3 2-11 5-5-4 7-5H1z" fill="currentColor"/><rect x="24" y="9" width="17" height="5" rx="2" fill="currentColor"/><rect x="21" y="8" width="5" height="7" rx="1.5" fill="currentColor"/><rect x="39" y="8" width="5" height="7" rx="1.5" fill="currentColor"/><rect x="32" y="21" width="5" height="7" fill="currentColor" opacity=".7"/></svg>`,
+  'Flintlock Musket': `<svg viewBox="0 0 64 40"><path d="M1 18h40l2-2h3l1 2h1v3H33l-3 1-5 3-14 8-5-5 11-6 2-1H1z" fill="currentColor"/><path d="M1 21.5h31" stroke="#000" stroke-opacity=".4" stroke-width="1"/><path d="M43 16l2-5 3 1-1 4" fill="currentColor" opacity=".85"/><rect x="5" y="17" width="2" height="5" fill="#fff" fill-opacity=".35"/><rect x="18" y="17" width="2" height="5" fill="#fff" fill-opacity=".35"/></svg>`,
   Grenade: `<svg viewBox="0 0 64 40"><circle cx="30" cy="24" r="13" fill="currentColor"/><rect x="25" y="6" width="10" height="7" fill="currentColor"/><path d="M35 8h6l3 6-2 12" stroke="currentColor" stroke-width="3" fill="none"/><circle cx="20" cy="10" r="5" stroke="currentColor" stroke-width="2" fill="none"/></svg>`,
   M1911: `<svg viewBox="0 0 64 40"><path d="M4 9h50l3 3v6H31l-2 3h-6l-3 15H8l5-18H4z" fill="currentColor"/></svg>`,
   Machete: `<svg viewBox="0 0 64 40"><path d="M2 27l7-5 4 4-6 6z" fill="currentColor"/><path d="M12 21L50 6c6-2 10 0 11 3-1 3-5 5-11 7L15 26z" fill="currentColor"/><path d="M15 26l35-10c4-1 8-3 10-6" stroke="#fff" stroke-opacity=".45" stroke-width="1.3" fill="none"/><rect x="9" y="19" width="4" height="10" rx="1" transform="rotate(-38 11 24)" fill="currentColor" opacity=".7"/></svg>`,
@@ -17,6 +19,8 @@ const ICONS = {
 const INFO = {
   Fists: { category: 'weapons', type: 'Melee', text: 'Your bare fists. Left click throws quick jabs, right click a hard hook. Punches leave bruises and can knock the ragdoll down or out.' },
   'Remington 870': { category: 'weapons', type: 'Shotgun', text: 'Pump-action 12 gauge: 8 pellets per shot, 6 shells in the tube plus one in the chamber. It pumps itself after each shot. R loads one shell at a time; fire to stop loading.' },
+  'M24 Sniper': { category: 'weapons', type: 'Sniper rifle', text: 'Bolt-action 7.62 mm rifle with a 4–12× scope and 5 rounds in the magazine. Right click looks through the scope; scroll (or F) zooms, Shift holds your breath to steady the drift. It works the bolt after every shot. Each round goes through bodies, armour and glass.' },
+  'Flintlock Musket': { category: 'weapons', type: 'Musket', text: 'A smoothbore flintlock from the 1700s. Pull the trigger, the flint sparks, the pan flashes and a moment later it fires a heavy lead ball in a cloud of white smoke. Not very accurate. One shot, then about 6 seconds to reload: prime the pan, pour the powder, ram the ball, cock it. Now and then it only flashes in the pan.' },
   Grenade: { category: 'weapons', type: 'Explosive', text: 'Green ball grenade. Left click pulls the pin and throws it, right click lobs it underhand. It goes off 3 seconds after it leaves your hand and leaves black scorch marks. Shoot one to set it off early.' },
   M1911: { category: 'weapons', type: 'Pistol', text: 'Semi-automatic .45 pistol with 7 rounds plus one in the chamber. Left click fires, right click aims, R reloads.' },
   Machete: { category: 'weapons', type: 'Melee', text: 'A 40 cm blade. Left click slashes (forehand, then backhand): long cuts that bleed hard and get deeper on the same spot, until they chop through a limb or the neck. Wrist, ankle and hamstring cuts sever tendons. Right click stabs deep into the organs.' },
@@ -199,8 +203,8 @@ export class Toolbox {
     if (playing && !this.isOpen) {
       for (let n = 0; n < BAR_SIZE; n++) if (input.wasPressed(`Digit${n + 1}`)) this.slot(n);
       if (input.wasPressed('KeyQ')) this.cycle(1);
-      // the wheel switches tools unless the grab tool is using it to move what it holds
-      if (input.wheel && !this.active.held) this.cycle(input.wheel > 0 ? 1 : -1);
+      // the wheel switches tools unless the grab tool (moving what it holds) or a scope (zoom) is using it
+      if (input.wheel && !this.active.held && !this.active.wheelLock) this.cycle(input.wheel > 0 ? 1 : -1);
       if (input.wasPressed('KeyH')) settings.set('showControls', !settings.get('showControls'));
     }
     if (this.isOpen) {

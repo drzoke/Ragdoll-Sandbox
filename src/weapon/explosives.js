@@ -12,7 +12,7 @@ const SHRAPNEL = 48;        // random fragments (plus ones that are aimed at nea
 const BURN_RADIUS = 2.6;    // fireball heat (m)
 
 // ---------------------------------------------------------------- textures
-function puffTexture(hot) {
+export function puffTexture(hot) {
   return canvasTexture(128, 128, (g, w, h) => {
     for (let i = 0; i < (hot ? 7 : 11); i++) {
       const a = Math.random() * Math.PI * 2, d = Math.random() * w * 0.17, r = w * (0.2 + Math.random() * 0.17);
@@ -136,6 +136,7 @@ export class Explosives {
     this.effects(c);
     this.scorch(c);
     this.blast(c);
+    this.map.onBlast?.(c);   // windows nearby shatter
     this.ragdolls.alert(c, 45, 0.7, 'blast');
     // shrapnel: the casing breaks into hundreds of fragments. Fire a spread of random ones, plus
     // the share of the cloud that would land on each nearby body part (more the closer it is).
@@ -162,6 +163,14 @@ export class Explosives {
     // camera shake + a shove if you're close
     const k = clamp(1 - dist / 40);
     this.player.addShake?.(k * k * 2 + 0.1);
+    // shrapnel and the blast hurt you too (a floor or wall in between soaks most of it)
+    if (dist < 7.5) {
+      const eye = this.camera.position;
+      this.raycaster.set(c, _d.copy(eye).sub(c).normalize()); this.raycaster.far = dist;
+      const cover = this.raycaster.intersectObjects(this.map.solidMeshes, false).some((hh) => hh.distance < dist - 0.3 && hh.distance > 0.05);
+      this.raycaster.far = Infinity;
+      this.player.hurt?.(Math.pow(1 - dist / 7.5, 1.5) * 140 * (cover ? 0.15 : 1), { kind: 'blast' });
+    }
     if (dist < 4.5) {
       _d.copy(this.player.pos).sub(c).setY(0).normalize();
       const push = (4.5 - dist) * 2.2;
@@ -272,7 +281,7 @@ export class Explosives {
     // sparks / burning bits
     for (let i = 0; i < 150 && this.sparks.length < this.maxSparks; i++) {
       const d = new THREE.Vector3(rand(-1, 1), rand(-0.2, 1.2), rand(-1, 1)).normalize();
-      this.sparks.push({ p: c.clone(), v: d.multiplyScalar(rand(6, 24)), life: rand(0.3, 1.5), age: 0 });
+      this.sparks.push({ p: c.clone(), v: d.multiplyScalar(rand(6, 24)), life: rand(0.3, 1.5), age: 0, floor: ground + 0.01 });
     }
     this.gore.dust(c.clone().setY(ground + 0.02), UP, 70);
   }
@@ -282,7 +291,8 @@ export class Explosives {
     const ground = this.gore.particles.surfaceHeight(c.x, c.y + 0.05, c.z);
     const h = c.y - ground;
     if (h < 1.8) this.gore.decals.addScorch(new THREE.Vector3(c.x, ground, c.z), UP, (1.6 + Math.random() * 0.4) * (1 - h / 2.6), 1 - h / 2);
-    for (const col of this.map.colliders) {
+    for (const col of [...this.map.near(c.x - 2.5, c.y - 2.5, c.z - 2.5, c.x + 2.5, c.y + 2.5, c.z + 2.5)]) {
+      if (col.off) continue;
       const q = _v.set(clamp(c.x, col.min.x, col.max.x), clamp(c.y, col.min.y, col.max.y), clamp(c.z, col.min.z, col.max.z));
       const d = q.distanceTo(c);
       if (d < 1e-4 || d > 2.4) continue;
@@ -303,7 +313,7 @@ export class Explosives {
       for (let a = 0; a < 3; a++) {
         if (a === ax) continue;
         const lo = pt.getComponent(a) - col.min.getComponent(a), hi = col.max.getComponent(a) - pt.getComponent(a);
-        edge = Math.min(edge, hi, a === 1 && col.min.y <= 0.01 ? Infinity : lo);
+        edge = Math.min(edge, hi, a === 1 && col.min.y <= ground + 0.01 ? Infinity : lo);
       }
       const radius = Math.min(0.5 + 1.0 * k, edge + 0.22);
       if (radius > 0.15) this.gore.decals.addScorch(pt, n, radius, k);
@@ -447,7 +457,7 @@ export class Explosives {
       if (s.age >= s.life) continue;
       s.v.y -= 9.81 * dt; s.v.multiplyScalar(1 - dt * 1.5);
       s.p.addScaledVector(s.v, dt);
-      if (s.p.y < 0.01) { s.p.y = 0.01; s.v.y *= -0.3; s.v.x *= 0.6; s.v.z *= 0.6; }
+      if (s.p.y < s.floor) { s.p.y = s.floor; s.v.y *= -0.3; s.v.x *= 0.6; s.v.z *= 0.6; }
       const k = 1 - s.age / s.life;
       this.sparkPos[n * 3] = s.p.x; this.sparkPos[n * 3 + 1] = s.p.y; this.sparkPos[n * 3 + 2] = s.p.z;
       this.sparkCol[n * 3] = 1 * k; this.sparkCol[n * 3 + 1] = 0.55 * k * k; this.sparkCol[n * 3 + 2] = 0.15 * k * k * k;

@@ -25,6 +25,8 @@ const DEFAULTS = {
   spawnWhere: 'look',      // 'look' | 'front' | 'spawn'
   spawnTemper: 'normal',   // 'brave' | 'normal' | 'timid' (V2 behaviour only)
   spawnBehavior: 'classic', // 'classic' | 'v2' (experimental: reacts to the player)
+  spawnKind: 'ragdoll',    // 'ragdoll' | 'zombie' (spawn menu card)
+  map: 'range',            // 'range' | 'tower'
 };
 
 // Hues (multiplied by a brightness): particle = shader colour, pool/decal/meat = linear material colours.

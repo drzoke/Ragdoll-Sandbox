@@ -180,7 +180,9 @@ export class Ballistics {
     const wear = (b.pellet ? 6 : b.fragment ? 7 : 26) * b.energy * (helmet ? 1.25 : 1);
     const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : dir.clone().negate();
     // a helmet can still be punched through by a full-power round now and then (angle, weak spot)
-    const pierce = a.broken || (helmet && !b.pellet && !b.fragment && b.energy > 0.8 && Math.random() < 0.12);
+    // rifle rounds (sniper, musket ball) usually go straight through
+    const full = !b.pellet && !b.fragment;
+    const pierce = a.broken || (full && b.energy > 1.7 && Math.random() < (helmet ? 0.75 : 0.9)) || (helmet && full && b.energy > 0.8 && Math.random() < 0.12);
     a.hp = Math.max(0, a.hp - wear);
     if (a.hp <= 0 && !a.broken) { a.broken = true; r.health.log(`${helmet ? 'Helmet' : 'Vest'} broken: rounds go through now`, 'warn'); }
     this.lastTarget = r;
@@ -266,6 +268,13 @@ export class Ballistics {
       return null;
     }
     if (ud.button) { ud.button.press(); this.sound('concrete'); return null; }
+    if (ud.glass) {
+      // a window: it shatters and the bullet carries on through, a little slower
+      this.map.glass?.shot(ud.glass, dir);
+      b.energy *= 0.9;
+      b.skip.add(obj);
+      return hit.point.clone().addScaledVector(dir, 0.15);
+    }
     if (ud.gib) {
       const gb = ud.gib.body;
       gb.applyImpulse(new CANNON.Vec3(dir.x * 1.5, dir.y * 1.5 + 0.5, dir.z * 1.5));

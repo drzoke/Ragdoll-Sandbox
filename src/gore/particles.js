@@ -3,9 +3,9 @@ import * as THREE from 'three';
 // GPU point particles with CPU integration. Used for blood droplets and impact dust.
 // Each particle: position, velocity, life, size, colour, kind (0 = blood -> makes splats when it lands, 1 = dust).
 export class Particles {
-  constructor(scene, max, colliders) {
+  constructor(scene, max, map) {
     this.max = max;
-    this.colliders = colliders;
+    this.map = map;   // for the floors and walls blood lands on
     this.pos = new Float32Array(max * 3);
     this.vel = new Float32Array(max * 3);
     this.col = new Float32Array(max * 3);
@@ -75,13 +75,7 @@ export class Particles {
     this.alive.delete(i); this.free.push(i);
   }
 
-  surfaceHeight(x, y, z) {
-    let h = 0;
-    for (const c of this.colliders) {
-      if (x > c.min.x && x < c.max.x && z > c.min.z && z < c.max.z && y > c.min.y && y <= c.max.y + 0.05) h = Math.max(h, c.max.y);
-    }
-    return h;
-  }
+  surfaceHeight(x, y, z) { return this.map.surfaceHeight(x, y, z); }
 
   /**
    * Blood droplet flying into the side (or underside) of a wall / prop: works out which face it
@@ -90,7 +84,10 @@ export class Particles {
   hitSide(i3, dt) {
     const P = this.pos, V = this.vel;
     const x = P[i3], y = P[i3 + 1], z = P[i3 + 2];
-    for (const c of this.colliders) {
+    const list = this.map.near(x, y, z, x, y, z);
+    for (let ci = 0; ci < list.length; ci++) {
+      const c = list[ci];
+      if (c.off) continue;
       if (x <= c.min.x || x >= c.max.x || y <= c.min.y || y >= c.max.y - 0.004 || z <= c.min.z || z >= c.max.z) continue;
       const px = x - V[i3] * dt, py = y - V[i3 + 1] * dt, pz = z - V[i3 + 2] * dt;
       // the axis whose slab it entered last (largest entry time) is the face it hit

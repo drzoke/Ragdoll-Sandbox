@@ -3,15 +3,15 @@ import { canvasTexture } from '../core/util.js';
 
 /** A physical push button on a pedestal. Walk up, look at it and press E (or shoot it). */
 export class PressButton {
-  constructor({ scene, physics, map, position, yaw = 0, label = 'RESPAWN', sub = 'Press E', color = 0xd8302a, onPress }) {
+  constructor({ map, position, yaw = 0, label = 'RESPAWN', sub = 'Press E', prompt = label, color = 0xd8302a, onPress }) {
     this.onPress = onPress;
     this.cooldown = 0;
     this.pressT = 1;
     this.label = label;
+    this.prompt = prompt;
     const root = new THREE.Group();
     root.position.set(...position);
     root.rotation.y = yaw;
-    scene.add(root);
     this.root = root;
 
     const metal = new THREE.MeshStandardMaterial({ color: 0x3b3f44, roughness: 0.5, metalness: 0.6 });
@@ -51,10 +51,11 @@ export class PressButton {
     this.light.position.set(0, 1.3, 0);
     root.add(this.light);
 
-    // Colliders: player AABB + physics box for ragdolls
+    // Colliders: player AABB + physics box for ragdolls (both go away with the map)
     const wp = new THREE.Vector3(...position);
-    map.addCollider(new THREE.Vector3(wp.x - 0.28, 0, wp.z - 0.28), new THREE.Vector3(wp.x + 0.28, 1.06, wp.z + 0.28));
-    physics.addStaticBox([0.28, 0.53, 0.28], [wp.x, 0.53, wp.z]);
+    map.addCollider(new THREE.Vector3(wp.x - 0.28, wp.y, wp.z - 0.28), new THREE.Vector3(wp.x + 0.28, wp.y + 1.06, wp.z + 0.28));
+    map.staticBox([0.28, 0.53, 0.28], [wp.x, wp.y + 0.53, wp.z]);
+    map.add(root, { quality: true, grime: false });
   }
 
   press() {

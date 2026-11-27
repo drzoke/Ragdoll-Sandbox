@@ -64,6 +64,12 @@ export class Health {
     this.brainDeath = 0;         // 0..1 progress
     this.alive = true;
     this.deathCause = '';
+    // Zombies (Alpha 0.9): undead bodies don't need blood, a heart or air. Only destroying the
+    // brain (or taking the head off) stops them. A zombie bite infects: the infection kills slowly,
+    // and the dead body gets back up as a zombie unless the head was destroyed.
+    this.undead = false;
+    this.infected = false;
+    this.infection = 0;          // 0..1, dead at 1
     this.lastHitTime = -99;
     this.lastHitPart = null;
 
@@ -668,7 +674,14 @@ export class Health {
   }
 
   // ---------------------------------------------------------------- Simulation
+  /** The brain is intact and still on the body (a zombie can stand up again / keep going). */
+  get headIntact() {
+    const head = this.parts.head;
+    return head.attached && !head.exploded && !this.decapitated && this.organs.brain.hp > 0;
+  }
+
   update(dt) {
+    if (this.undead) { this.updateUndead(dt); return; }
     this.time += dt;
     const o = this.organs;
 
@@ -780,11 +793,45 @@ export class Health {
     if (was >= 25 && this.consciousness < 25 && this.alive) this.log('Lost consciousness', 'warn');
     if (was < 25 && this.consciousness >= 25 && this.alive) this.log('Regained consciousness', 'info');
     if (this.knockedOut && this.consciousness > 60) this.knockedOut = false;
+
+    // Zombie bite: a fever that takes about a minute, then death (and it rises again)
+    if (this.infected && this.alive) {
+      const was2 = this.infection;
+      this.infection = Math.min(1, this.infection + dt / 55);
+      if (was2 < 0.5 && this.infection >= 0.5) this.log('Infection spreading: fever', 'warn');
+      if (this.infection > 0.7) this.consciousness = Math.min(this.consciousness, 100 - (this.infection - 0.7) * 260);
+      if (this.infection >= 1) {
+        this.alive = false; this.cardiacArrest = true; this.brainDeath = 1;
+        this.deathCause = 'Infection';
+        this.log('Dead (Infection)');
+      }
+    }
+  }
+
+  /** A zombie: no circulation, no pain. It only stops when the brain is destroyed or the head comes off. */
+  updateUndead(dt) {
+    this.time += dt;
+    for (const w of this.wounds) { w.age += dt; w.rate *= Math.exp(-dt / 5); }   // thick, slow ooze
+    this.heartRate = 0; this.breathRate = 0; this.o2 = 0;
+    this.pain = 0; this.rawPain = 0; this.shock = 0; this.adrenaline = 0;
+    this.cardiacArrest = false;
+    if (this.alive && !this.headIntact) {
+      this.alive = false;
+      this.deathCause = this.decapitated || !this.parts.head.attached ? 'Head off' : this.parts.head.exploded ? 'Head destroyed' : 'Brain destroyed';
+      this.consciousness = 0;
+      this.log(`Put down (${this.deathCause.toLowerCase()})`);
+      return;
+    }
+    if (!this.alive) { this.consciousness = 0; return; }
+    // knocked silly by a big hit, then back on its feet
+    this.consciousness += (100 - this.consciousness) * clamp(dt * 0.45);
   }
 
   // ---------------------------------------------------------------- Readouts
   get stateLabel() {
+    if (this.undead) return this.alive ? 'Undead' : 'Put down';
     if (!this.alive) return 'Dead';
+    if (this.infected && this.infection > 0.6) return 'Infected (turning)';
     if (this.cardiacArrest) return 'Cardiac arrest';
     if (this.consciousness < 25) return 'Unconscious';
     if (this.consciousness < 55) return 'Semi-conscious';

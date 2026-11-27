@@ -86,7 +86,7 @@
 <div id="vignette"></div>
 <!-- Alpha: one step per full update (feature batch). Patch: small fixes shipped on that version
      (back to 0 when the Alpha number goes up). -->
-<div id="version">Alpha 0.8<small>Patch 2</small></div>
+<div id="version">Alpha 0.9<small>Patch 0</small></div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
@@ -121,11 +121,12 @@
   <div class="m-side">
     <div class="m-brand">
       <div class="m-logo"><span>RAGDOLL</span><b>SANDBOX</b></div>
-      <div class="m-ver">Alpha 0.8 · physics and gore sandbox</div>
+      <div class="m-ver">Alpha 0.9 · physics and gore sandbox</div>
       <div class="m-paused">Paused</div>
     </div>
     <nav class="m-nav">
       <button id="play" class="m-btn primary"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg><span>Play</span></button>
+      <button class="m-btn" data-panel="maps"><svg viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 4v14M15 6v14" stroke="currentColor" stroke-width="1.8"/></svg><span>Maps</span></button>
       <button class="m-btn" data-panel="settings"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zm8.6 4.9l1.9 1.5-2 3.4-2.3-.8a8 8 0 01-2.1 1.2L15.7 21h-4l-.4-2.3a8 8 0 01-2.1-1.2l-2.3.8-2-3.4 1.9-1.5a8 8 0 010-2.4L4.9 9.6l2-3.4 2.3.8a8 8 0 012.1-1.2L11.7 3h4l.4 2.3a8 8 0 012.1 1.2l2.3-.8 2 3.4-1.9 1.5a8 8 0 010 2.4z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Settings</span></button>
       <button class="m-btn" data-panel="keys"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 10h1M10 10h1M14 10h1M18 10h1M7 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Controls</span></button>
       <button class="m-btn" data-panel="news"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>What's new</span></button>
@@ -138,6 +139,10 @@
   <div class="m-panel hidden" id="m-panel">
     <header><h2 id="m-panel-title">Settings</h2><button id="m-panel-close" aria-label="Close">✕</button></header>
     <div class="m-panel-body">
+    <section class="tab hidden" id="tab-maps">
+      <p class="note">Pick where to play. Loading a map clears the bodies and the blood.</p>
+      <div id="map-list"></div>
+    </section>
     <section class="tab hidden" id="tab-settings">
       <h3>Graphics</h3>
       <div class="seg" data-setting="graphics"><button data-v="verylow">Very Low</button><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button><button data-v="ultra">Very High</button></div>
@@ -173,9 +178,9 @@
         <tr><td>Big button</td><td>Fire, punch, slash, throw, push, treat or shock (drag on it to aim while firing)</td></tr>
         <tr><td>Top-left fire</td><td>Fire with your left thumb while the right one aims</td></tr>
         <tr><td>Aim</td><td>Aim down sights (tap to toggle). Hook with fists, lob a grenade, grab or drop with Grab.</td></tr>
-        <tr><td>Reload / Inspect</td><td>Guns. With Grab they pull what you hold closer or push it farther.</td></tr>
+        <tr><td>Reload / Inspect</td><td>Guns. With Grab they pull what you hold closer or push it farther. Looking through the sniper scope they become Breath (hold to steady) and Zoom.</td></tr>
         <tr><td>Jump / Crouch</td><td>Crouch stays on until you tap it again</td></tr>
-        <tr><td>Press</td><td>Appears when you look at a button (respawn, clean up)</td></tr>
+        <tr><td>Press</td><td>Appears when you look at something you can use (buttons, the elevator, the roof ladder)</td></tr>
         <tr><td>Bottom bar</td><td>Tap an item to switch to it</td></tr>
         <tr><td>Top left</td><td>Pause, toolbox, spawn menu</td></tr>
         <tr><td>Top right</td><td>Slow down time, speed up time, x-ray (tap again for the flat view, again to close)</td></tr>
@@ -187,14 +192,15 @@
         <tr><td>Space</td><td>Jump</td></tr>
         <tr><td>C / Ctrl</td><td>Crouch (hold)</td></tr>
         <tr><td>1 – 9 or Q</td><td>Switch between the items on your bar (you start with fists; equip more in the toolbox)</td></tr>
-        <tr><td>Mouse wheel</td><td>Switch item (or move what you're holding with Grab)</td></tr>
+        <tr><td>Mouse wheel</td><td>Switch item (or move what you're holding with Grab, or zoom the sniper scope)</td></tr>
         <tr><td>Left / right click</td><td>Use the item (fire, punch, slash, stab, throw, grab, treat, shock)</td></tr>
         <tr><td>R</td><td>Reload</td></tr>
+        <tr><td>Shift (scoped)</td><td>Hold your breath to steady the sniper scope</td></tr>
         <tr><td>Tab</td><td>Open toolbox</td></tr>
-        <tr><td>B</td><td>Spawn menu (more ragdolls, armour)</td></tr>
+        <tr><td>B</td><td>Spawn menu (ragdolls and zombies, armour)</td></tr>
         <tr><td>Z</td><td>Slow down time</td></tr>
         <tr><td>V</td><td>Speed up time</td></tr>
-        <tr><td>E</td><td>Press button</td></tr>
+        <tr><td>E</td><td>Use: press a button, call or ride the elevator, climb the ladder</td></tr>
         <tr><td>X</td><td>X-ray panel: open, press again for the other view (3D / Flat), again to close</td></tr>
         <tr><td>H</td><td>Hide the tool controls list</td></tr>
         <tr><td>F3</td><td>Debug info</td></tr>
@@ -207,7 +213,16 @@
     <section class="tab hidden" id="tab-news">
       <div class="news">
         <p class="news-intro">Every update since the first draft. A new Alpha number is a big update; patches are smaller fixes on that version.</p>
-        <h3>Alpha 0.8 <span class="cur">current</span></h3>
+        <h3>Alpha 0.9 <span class="cur">current</span></h3>
+        <ul>
+          <li><b>Skyscraper map.</b> Pick it under Maps in the menu. You start on a city street in front of a 20-floor office tower: walk into the lobby, call the elevator, choose a floor and ride up. Every floor is an open-plan office with desks, a meeting room and a lounge. On floor 20 a ladder goes up through a hatch to the roof, with a helipad and the whole city below. Windows shatter when you shoot them or throw someone through them, and the fall is real.</li>
+          <li><b>Sniper rifle.</b> A bolt-action rifle with a 4–12× scope. Right click to look through it, scroll (or F) to zoom, and hold Shift to hold your breath and steady the drift. It works the bolt after every shot, and each round goes through bodies, armour and glass.</li>
+          <li><b>Flintlock musket.</b> A musket from the 1700s. The flint sparks, the pan flashes and a moment later it fires a heavy lead ball in a big cloud of white smoke. It isn't very accurate, it now and then only flashes in the pan, and reloading takes about 6 seconds: prime the pan, pour the powder, ram the ball and cock it.</li>
+          <li><b>Zombies.</b> Spawn them from the spawn menu. They shamble after the nearest living person on their floor, you included, and claw and bite. They feel no pain and don't bleed out, so only a shot that destroys the brain or takes the head off puts them down. Anyone they bite is infected and gets back up as a zombie after they die.</li>
+          <li><b>New spawn menu.</b> It now looks like the toolbox: pick the Ragdoll (gray head) or the Zombie (green head) card, set how many, armour, behaviour and where, then Spawn. Double click a card to spawn straight away.</li>
+          <li><b>Your health.</b> Zombies, long falls and grenades going off near you hurt now. Health comes back slowly when you stop getting hurt, and if it runs out you respawn at the start of the map.</li>
+        </ul>
+        <h3>Alpha 0.8</h3>
         <ul>
           <li><b>Machete.</b> Slash for long, deep cuts that bleed hard and get deeper on the same spot: enough of them chop through an arm, a leg or the neck. Cuts across the wrist, the back of the ankle or the back of the thigh sever tendons. Right click stabs deep into the organs.</li>
           <li><b>Medkit.</b> Hold left click on a body part to bandage its wounds, put a tourniquet above a stump, splint a broken bone or dress a burn. Right click gives morphine, R hangs a blood bag.</li>
@@ -282,44 +297,13 @@
 </div>
 
 <div id="spawnmenu" class="hidden">
-  <div class="sm-card">
-    <header><h2>Spawn</h2><span class="desk-only">B or Esc to close</span><button id="sm-close" aria-label="Close">✕</button></header>
-    <div class="sm-body">
-      <div class="sm-figure" id="sm-figure">
-        <svg viewBox="0 0 120 230">
-          <g class="body" fill="#8a8e93">
-            <circle cx="60" cy="26" r="17"/>
-            <rect x="40" y="48" width="40" height="44" rx="8"/><rect x="42" y="94" width="36" height="28" rx="7"/><rect x="43" y="124" width="34" height="20" rx="6"/>
-            <rect x="24" y="50" width="12" height="44" rx="6"/><rect x="84" y="50" width="12" height="44" rx="6"/>
-            <rect x="23" y="96" width="11" height="38" rx="5"/><rect x="86" y="96" width="11" height="38" rx="5"/>
-            <rect x="44" y="146" width="14" height="40" rx="7"/><rect x="62" y="146" width="14" height="40" rx="7"/>
-            <rect x="45" y="188" width="12" height="34" rx="6"/><rect x="63" y="188" width="12" height="34" rx="6"/>
-          </g>
-          <g class="joints" fill="#1a1b1d"><circle cx="60" cy="45" r="5"/><circle cx="31" cy="50" r="5"/><circle cx="89" cy="50" r="5"/><circle cx="29" cy="95" r="4"/><circle cx="91" cy="95" r="4"/><circle cx="51" cy="146" r="5"/><circle cx="69" cy="146" r="5"/><circle cx="51" cy="187" r="4"/><circle cx="69" cy="187" r="4"/></g>
-          <g class="helmet"><path d="M41 26a19 19 0 0138 0v3H41z" fill="#4d5434"/><rect x="40" y="27" width="40" height="4" rx="2" fill="#3e442a"/></g>
-          <g class="vest"><rect x="37" y="47" width="46" height="62" rx="8" fill="#3c4134"/><rect x="45" y="55" width="30" height="30" rx="3" fill="#353a2e"/><rect x="42" y="92" width="10" height="12" rx="2" fill="#474d3c"/><rect x="55" y="92" width="10" height="12" rx="2" fill="#474d3c"/><rect x="68" y="92" width="10" height="12" rx="2" fill="#474d3c"/></g>
-        </svg>
-      </div>
-      <div class="sm-opts">
-        <h3>How many</h3>
-        <div class="seg"><button data-opt="count" data-v="1">1</button><button data-opt="count" data-v="2">2</button><button data-opt="count" data-v="3">3</button><button data-opt="count" data-v="5">5</button><button data-opt="count" data-v="8">8</button></div>
-        <h3>Armour</h3>
-        <div class="chips"><button data-opt="helmet">Helmet</button><button data-opt="vest">Vest</button></div>
-        <p class="note">Armour stops pistol rounds, shotgun pellets and shrapnel until it wears out. The body behind it still takes the blow.</p>
-        <h3>Behaviour</h3>
-        <div class="seg"><button data-opt="behavior" data-v="classic">Classic</button><button data-opt="behavior" data-v="v2">V2 <i class="exp">experimental</i></button></div>
-        <div id="sm-temper" class="hidden">
-          <p class="note">V2 ragdolls notice you: they put their hands up when you aim at them, duck at gunfire, run or crawl away and press on their wounds.</p>
-          <h3>Temperament</h3>
-          <div class="seg"><button data-opt="temper" data-v="brave">Brave</button><button data-opt="temper" data-v="normal">Normal</button><button data-opt="temper" data-v="timid">Timid</button></div>
-        </div>
-        <h3>Where</h3>
-        <div class="seg"><button data-opt="where" data-v="look">Where I look</button><button data-opt="where" data-v="front">In front of me</button><button data-opt="where" data-v="spawn">Spawn point</button></div>
-        <button id="sm-spawn" class="sm-go">Spawn ragdoll</button>
-        <div class="sm-row"><button id="sm-clear">Remove all ragdolls</button><button id="sm-clean">Clean up blood</button></div>
-        <p class="note" id="sm-count"></p>
-      </div>
+  <div class="tb-card sm-card2">
+    <header><h2>Spawn</h2><span class="desk-only">Pick who to spawn and set it up, then Spawn (or double click) · B or Esc to close</span><span class="touch-only">Tap who to spawn, then Spawn</span><button id="sm-close" aria-label="Close">✕</button></header>
+    <div class="tb-body sm-top">
+      <div id="spawn-grid"></div>
+      <nav id="spawn-cats"></nav>
     </div>
+    <footer id="sm-info"></footer>
   </div>
 </div>
 
