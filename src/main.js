@@ -22,6 +22,8 @@ import { Graphics } from './graphics.js';
 import { settings } from './settings.js';
 import { trackMaterials } from './materials.js';
 import { GRAY as RAGDOLL_GRAY, BLACK as RAGDOLL_BLACK } from './ragdoll/ragdoll.js';
+import { IS_TOUCH, IS_IOS, IS_STANDALONE } from './core/device.js';
+import { TouchControls } from './ui/touch.js';
 
 // ------------------------------------------------------------------ loading screen
 const loader = window.__loader || { set() {} };
@@ -119,7 +121,43 @@ function setPlaying(p) {
   input.enabled = p;
   menu.classList.toggle('hidden', p);
   if (!p) { input.clear(); toolbox.close(); }
+  touch.setPlaying(p);
 }
+
+// ---- touch controls (phones and tablets, played sideways) ----
+/** X-ray button on touch screens: off -> 3D -> flat -> off. */
+function cycleXray() {
+  if (!hud.xrayOpen) { settings.set('xrayMode', 'dynamic'); hud.toggleXray(); }
+  else if (settings.get('xrayMode') === 'dynamic') settings.set('xrayMode', 'flat');
+  else hud.toggleXray();
+}
+const touch = new TouchControls({
+  input, toolbox, mouseSensitivity: CONFIG.player.mouseSensitivity, isAiming: () => player.aiming,
+  onPause: () => setPlaying(false), onXray: cycleXray,
+  onEditDone: () => menu.classList.remove('hidden'),
+});
+const touchWanted = () => settings.get('touchControls') === 'on' || (settings.get('touchControls') === 'auto' && IS_TOUCH);
+function applyTouchMode() {
+  touch.setActive(touchWanted());
+  document.getElementById('play').textContent = touch.active ? 'Tap to play' : 'Click to play';
+  document.getElementById('play-note').textContent = !touch.active
+    ? "The game plays in fullscreen so keys like Ctrl+W can't close it by accident. Hold Esc to leave fullscreen."
+    : IS_IOS && !IS_STANDALONE
+      ? 'Play with your phone sideways. For true full screen on iPhone, tap Share, then Add to Home Screen, and play from the icon.'
+      : 'Play with your phone sideways. The game goes full screen when you tap Play. The pause button is at the top left.';
+}
+applyTouchMode();
+document.getElementById('hotbar').addEventListener('click', (e) => {
+  const s = e.target.closest('.slot');
+  if (s && playing && !toolboxOpen) toolbox.select(Number(s.dataset.i));
+});
+document.getElementById('tb-close').addEventListener('click', () => toolbox.close());
+document.getElementById('touch-edit').addEventListener('click', () => {
+  audio.unlock();
+  if (!touch.active) settings.set('touchControls', 'on');
+  menu.classList.add('hidden');
+  touch.startEdit();
+});
 
 async function lockPointer() {
   try {
@@ -175,7 +213,14 @@ function syncSettingsUI() {
   for (const seg of menu.querySelectorAll('.seg[data-setting]')) {
     for (const b of seg.querySelectorAll('button')) b.classList.toggle('on', b.dataset.v === settings.get(seg.dataset.setting));
   }
-  for (const cb of menu.querySelectorAll('input[data-setting]')) cb.checked = !!settings.get(cb.dataset.setting);
+  for (const cb of menu.querySelectorAll('input[type=checkbox][data-setting]')) cb.checked = !!settings.get(cb.dataset.setting);
+  for (const rg of menu.querySelectorAll('input[type=range][data-setting]')) {
+    rg.value = settings.get(rg.dataset.setting);
+    const out = rg.parentElement.querySelector('output');
+    if (out) out.textContent = `${Number(rg.value).toFixed(2).replace(/0$/, '')}${rg.dataset.unit ?? '×'}`;
+  }
+  const hasCustom = !!settings.get('touchCustom');
+  menu.querySelector('[data-setting="touchLayout"] [data-v="custom"]').classList.toggle('hidden', !hasCustom);
   const lvl = settings.get('graphics');
   document.getElementById('gfx-note').textContent = GFX_NOTES[lvl];
   document.getElementById('gfx-gpu').innerHTML = `<div><span>Minimum GPU</span><b>${GFX_GPU[lvl][0]}</b></div><div><span>Recommended GPU</span><b>${GFX_GPU[lvl][1]}</b></div>`;
@@ -186,10 +231,12 @@ for (const seg of menu.querySelectorAll('.seg[data-setting]')) {
     settings.set(seg.dataset.setting, b.dataset.v); audio.unlock(); audio.play('click');
   });
 }
-for (const cb of menu.querySelectorAll('input[data-setting]')) cb.addEventListener('change', () => settings.set(cb.dataset.setting, cb.checked));
+for (const cb of menu.querySelectorAll('input[type=checkbox][data-setting]')) cb.addEventListener('change', () => settings.set(cb.dataset.setting, cb.checked));
+for (const rg of menu.querySelectorAll('input[type=range][data-setting]')) rg.addEventListener('input', () => settings.set(rg.dataset.setting, Number(rg.value)));
 settings.onChange((k, v) => {
   syncSettingsUI();
   if (k === 'graphics') { graphics.apply(v); grab.setQuality(v); toolbox.setQuality(v); resize(); }
+  if (k === 'touchControls') applyTouchMode();
 });
 syncSettingsUI();
 
@@ -205,17 +252,35 @@ document.addEventListener('fullscreenchange', () => {
   if (!document.fullscreenElement) { input.keyboardLocked = false; navigator.keyboard?.unlock?.(); }
 });
 
+/** Phones: full screen (where the browser allows it) and lock the screen sideways. */
+async function enterMobileFullscreen() {
+  try {
+    if (!document.fullscreenElement) await (document.documentElement.requestFullscreen?.({ navigationUI: 'hide' }) || document.documentElement.webkitRequestFullscreen?.());
+  } catch { /* iPhone Safari: no fullscreen API (Add to Home Screen instead) */ }
+  try { await screen.orientation?.lock?.('landscape'); } catch { /* not supported / not fullscreen */ }
+}
+
 document.getElementById('play').addEventListener('click', async () => {
   audio.unlock();
+  if (touch.active) {
+    freeMouse = true;
+    setPlaying(true);
+    enterMobileFullscreen();
+    return;
+  }
   const fs = enterFullscreenWithKeyLock(); // must start inside the click
   await fs;
   await lockPointer();
 });
 document.addEventListener('pointerlockchange', () => {
+  if (touch.active) return;
   if (document.pointerLockElement === canvas) { setPlaying(true); if (toolboxOpen) toolbox.close(); }
   else if (!freeMouse && !toolboxOpen) setPlaying(false);
 });
-document.addEventListener('pointerlockerror', () => { freeMouse = true; lockWarn.classList.remove('hidden'); setPlaying(true); });
+document.addEventListener('pointerlockerror', () => {
+  if (touch.active) return;
+  freeMouse = true; lockWarn.classList.remove('hidden'); setPlaying(true);
+});
 addEventListener('keydown', (e) => {
   if (!playing) return;
   // With the keyboard locked the browser no longer handles Esc for us.
@@ -246,6 +311,7 @@ let debugOn = false;
 const debug = { timeScale: 1 }; // set to 0 from the console to freeze the simulation
 let target = null;
 let fps = 60;
+let lastFocused = null;
 
 // ---- time warp: world time scale (the player and weapons stay real-time) ----
 const TIME_STEPS = [0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1, 1.5, 2, 3];
@@ -266,6 +332,7 @@ function updateInteraction(dt) {
   const focused = bHits.length ? bHits[0].object.userData.button : null;
   hud.setPrompt(focused ? `<b>E</b>${focused.label === 'RESPAWN' ? 'Respawn ragdoll' : 'Clean up blood'}` : '');
   if (focused && input.wasPressed('KeyE')) focused.press();
+  lastFocused = focused;
   for (const b of buttons) b.update(dt, b === focused);
 
   centerRay.far = 60;
@@ -301,7 +368,9 @@ function frame() {
   const ts = world.timeScale;
   const wdt = dt * ts;
 
-  player.update(dt, input, playing && !toolboxOpen);
+  touch.update(dt, { tool: toolbox.active, useVisible: !!lastFocused, xrayMode: hud.xrayOpen ? settings.get('xrayMode') : 'off' });
+  player.update(dt, input, playing && !toolboxOpen && !touch.portrait);
+  player.aiming = false;                   // the gun in your hands sets it again
   toolbox.update(dt, input, playing, wdt); // tools aim before the physics step
   physics.update(dt, ts);
   ragdolls.update(wdt);
@@ -343,4 +412,4 @@ setTimeout(() => {
 }, 250);
 
 // Exposed for debugging from the console and for automated tests.
-window.game = { debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };
+window.game = { touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };

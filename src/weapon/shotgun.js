@@ -138,7 +138,7 @@ export class Shotgun {
     const reloadPose = this.reloading || this.state.startsWith('reload');
     const wantAds = active && input.mouseDown[2] && !reloadPose && !p.sprinting && this.state !== 'inspect';
     this.ads += ((wantAds ? 1 : 0) - this.ads) * damp(12, dt);
-    p.aiming = this.ads > 0.5;
+    if (this.raise > 0) p.aiming = this.ads > 0.5; // only the item in your hands (others would overwrite it)
     this.sprint += ((p.sprinting && !reloadPose ? 1 : 0) - this.sprint) * damp(8, dt);
 
     if (active) {

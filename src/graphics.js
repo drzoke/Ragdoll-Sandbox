@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SSRPass } from 'three/addons/postprocessing/SSRPass.js';
 import { setMaterialQuality } from './materials.js';
+import { IS_TOUCH } from './core/device.js';
 
 /**
  * Graphics presets.
@@ -38,7 +39,8 @@ export class Graphics {
     this.level = level;
     const r = this.renderer, sun = this.map.sun;
     const dpr = window.devicePixelRatio || 1;
-    r.setPixelRatio(level === 'low' ? Math.min(dpr, 1) * 0.75 : Math.min(dpr, 2));
+    // phones: cap the resolution a bit lower (small screen, small GPU, hot battery)
+    r.setPixelRatio(level === 'low' ? Math.min(dpr, IS_TOUCH ? 1.25 : 1) * 0.75 : Math.min(dpr, IS_TOUCH ? (level === 'medium' ? 1.5 : 1.75) : 2));
 
     const shadows = level !== 'low';
     const post = level === 'high' || level === 'ultra';

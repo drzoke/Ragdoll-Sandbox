@@ -36,6 +36,7 @@ export class HUD {
   toggleXray() {
     this.xrayOpen = !this.xrayOpen;
     this.el.xray.classList.toggle('hidden', !this.xrayOpen);
+    document.body.classList.toggle('xray-open', this.xrayOpen);
     this.xrayView.first = true;
   }
 

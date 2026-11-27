@@ -8,6 +8,16 @@ const DEFAULTS = {
   dismemberment: true,     // severing + exploding body parts
   showControls: true,      // weapon controls panel on the left
   xrayMode: 'dynamic',     // 'dynamic' (3D) | 'flat' (still front-view diagram)
+  // touch (phones / tablets)
+  touchControls: 'auto',   // 'auto' (on for phones and tablets) | 'on' | 'off'
+  touchLayout: 'optimal',  // 'optimal' | 'classic' | 'lefty' | 'custom'
+  touchCustom: null,       // custom layout: { base, pos: { id: [x, y] } } (fractions of the screen)
+  touchSens: 1,            // look sensitivity multiplier (0.3 .. 3)
+  touchAimSens: 0.6,       // extra multiplier while aiming down sights
+  touchButtonSize: 'medium', // 'small' | 'medium' | 'large'
+  touchAim: 'toggle',      // 'toggle' | 'hold' (aim button)
+  touchAutoSprint: true,   // push the stick all the way forward to sprint
+  touchOpacity: 0.55,      // button opacity
 };
 
 // Hues (multiplied by a brightness): particle = shader colour, pool/decal/meat = linear material colours.

@@ -2,9 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#3c4046">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ragdoll">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
 <title>Ragdoll Sandbox</title>
-<link rel="icon" href="data:,">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="css/style.css">
 <script type="importmap">
 {
@@ -42,6 +49,7 @@
     var expected = 47, seen = 0;
     window.__loader = { p: 0, set: function (p, text) {
       this.p = Math.max(this.p, p);
+      if (!document.getElementById('ld-fill')) return; // loading screen already gone
       document.getElementById('ld-fill').style.width = (this.p * 100).toFixed(1) + '%';
       document.getElementById('ld-pct').textContent = Math.round(this.p * 100) + '%';
       if (text) document.getElementById('ld-status').textContent = text;
@@ -70,11 +78,11 @@
 </div>
 <div id="vignette"></div>
 <!-- one step per full update (feature batch), not for small fixes -->
-<div id="version">Alpha 0.6</div>
+<div id="version">Alpha 0.7</div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
-    <header><h2>Toolbox</h2><span>Click an item to equip it · Tab or Esc to close</span></header>
+    <header><h2>Toolbox</h2><span class="desk-only">Click an item to equip it · Tab or Esc to close</span><span class="touch-only">Tap an item to equip it</span><button id="tb-close" aria-label="Close">✕</button></header>
     <div class="tb-body">
       <div id="toolbox-grid"></div>
       <nav id="toolbox-cats"></nav>
@@ -108,7 +116,7 @@
 
     <section class="tab" id="tab-play">
       <button id="play">Click to play</button>
-      <p class="note">The game plays in fullscreen so keys like Ctrl+W can't close it by accident. Hold Esc to leave fullscreen.</p>
+      <p class="note" id="play-note">The game plays in fullscreen so keys like Ctrl+W can't close it by accident. Hold Esc to leave fullscreen.</p>
       <div id="lockwarn" class="hidden">This page can't lock the mouse. Open the game in its own browser tab to look around with the mouse.</div>
     </section>
 
@@ -125,10 +133,35 @@
       <label class="row"><span>Show tool controls (left side)</span><input type="checkbox" data-setting="showControls"><i class="sw"></i></label>
       <div class="row"><span>X-ray view</span><div class="seg small" data-setting="xrayMode"><button data-v="dynamic">Dynamic</button><button data-v="flat">Flat</button></div></div>
       <p class="note">Dynamic shows a 3D x-ray that turns with the ragdoll. Flat shows a still front-view picture of the bones and organs with the same damage. Shift+X switches between them.</p>
+      <h3>Touch controls</h3>
+      <div class="row"><span>Touch controls</span><div class="seg small wide" data-setting="touchControls"><button data-v="auto">Auto</button><button data-v="on">On</button><button data-v="off">Off</button></div></div>
+      <p class="note">Auto turns them on for phones and tablets and off for computers.</p>
+      <div class="row col"><span>Button layout</span><div class="seg" data-setting="touchLayout"><button data-v="optimal">Optimal</button><button data-v="classic">Classic</button><button data-v="lefty">Left-handed</button><button data-v="custom">Custom</button></div></div>
+      <p class="note">Optimal (recommended): the move stick appears wherever your left thumb lands, fire is under your right thumb with aim, reload, jump and crouch around it, and a second fire button sits top left. Classic: a fixed stick and one fire button. Left-handed: Optimal mirrored.</p>
+      <button class="wide-btn" id="touch-edit">Edit layout (drag buttons)</button>
+      <div class="row"><span>Look sensitivity</span><span class="rng"><input type="range" min="0.3" max="3" step="0.05" data-setting="touchSens"><output></output></span></div>
+      <div class="row"><span>Aiming sensitivity</span><span class="rng"><input type="range" min="0.2" max="1.5" step="0.05" data-setting="touchAimSens"><output></output></span></div>
+      <div class="row"><span>Button size</span><div class="seg small wide" data-setting="touchButtonSize"><button data-v="small">Small</button><button data-v="medium">Medium</button><button data-v="large">Large</button></div></div>
+      <div class="row"><span>Button opacity</span><span class="rng"><input type="range" min="0.2" max="1" step="0.05" data-setting="touchOpacity" data-unit=""><output></output></span></div>
+      <div class="row"><span>Aim button</span><div class="seg small" data-setting="touchAim"><button data-v="toggle">Tap</button><button data-v="hold">Hold</button></div></div>
+      <label class="row"><span>Push the stick forward past the ring to sprint</span><input type="checkbox" data-setting="touchAutoSprint"><i class="sw"></i></label>
     </section>
 
     <section class="tab hidden" id="tab-keys">
-      <table class="controls">
+      <table class="controls touch-only">
+        <tr><td>Left thumb</td><td>Move (the stick appears where you touch). Push it forward past the ring to sprint.</td></tr>
+        <tr><td>Right thumb</td><td>Drag anywhere to look around</td></tr>
+        <tr><td>Big button</td><td>Fire, punch, throw or push (drag on it to aim while firing)</td></tr>
+        <tr><td>Top-left fire</td><td>Fire with your left thumb while the right one aims</td></tr>
+        <tr><td>Aim</td><td>Aim down sights (tap to toggle). Hook with fists, lob a grenade, grab or drop with Grab.</td></tr>
+        <tr><td>Reload / Inspect</td><td>Guns. With Grab they pull what you hold closer or push it farther.</td></tr>
+        <tr><td>Jump / Crouch</td><td>Crouch stays on until you tap it again</td></tr>
+        <tr><td>Press</td><td>Appears when you look at a button (respawn, clean up)</td></tr>
+        <tr><td>Bottom bar</td><td>Tap an item to switch to it</td></tr>
+        <tr><td>Top left</td><td>Pause, toolbox</td></tr>
+        <tr><td>Top right</td><td>Slow down time, speed up time, x-ray (tap again for the flat view, again to close)</td></tr>
+      </table>
+      <table class="controls desk-only">
         <tr><td>WASD</td><td>Move</td></tr>
         <tr><td>Mouse</td><td>Look</td></tr>
         <tr><td>Shift</td><td>Sprint</td></tr>
@@ -148,7 +181,8 @@
         <tr><td>F3</td><td>Debug info</td></tr>
         <tr><td>Esc</td><td>Pause</td></tr>
       </table>
-      <p class="note">The controls for the tool you're holding are listed on the left side of the screen.</p>
+      <p class="note desk-only">The controls for the tool you're holding are listed on the left side of the screen.</p>
+      <p class="note touch-only">Change the layout, button size and sensitivity in Settings, under Touch controls.</p>
     </section>
   </div>
 </div>

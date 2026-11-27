@@ -116,7 +116,7 @@ export class Pistol {
     // ---- input ----
     const wantAds = active && input.mouseDown[2] && !this.busy && !p.sprinting;
     this.ads += ((wantAds ? 1 : 0) - this.ads) * damp(14, dt);
-    p.aiming = this.ads > 0.5;
+    if (this.raise > 0) p.aiming = this.ads > 0.5; // only the item in your hands (others would overwrite it)
     this.sprint += ((p.sprinting && !this.busy ? 1 : 0) - this.sprint) * damp(8, dt);
 
     if (active) {

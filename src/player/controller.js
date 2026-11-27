@@ -75,6 +75,12 @@ export class PlayerController {
       if (input.isDown('KeyA')) fx -= 1;
       if (input.isDown('KeyD')) fx += 1;
     }
+    // touch stick: analogue (a light push walks slowly), keys win if both are used
+    let analog = 1;
+    if (active && !fx && !fz && input.axis && Math.hypot(input.axis.x, input.axis.y) > 0.08) {
+      fx = input.axis.x; fz = input.axis.y;
+      analog = clamp(Math.hypot(fx, fz) * 1.15, 0.3, 1);
+    }
     const len = Math.hypot(fx, fz) || 1;
     fx /= len; fz /= len;
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
@@ -85,8 +91,8 @@ export class PlayerController {
     // Ctrl only crouches when the keyboard is locked (fullscreen in Chrome/Edge); otherwise
     // Ctrl+W would close the tab, so C is the always-safe crouch key.
     this.wantsCrouch = active && (input.isDown('KeyC') || (input.keyboardLocked && input.isDown('ControlLeft')));
-    this.sprinting = active && moving && input.isDown('ShiftLeft') && fz < 0 && !this.aiming && this.crouch < 0.5;
-    let speed = this.sprinting ? P.sprintSpeed : P.walkSpeed;
+    this.sprinting = active && moving && input.isDown('ShiftLeft') && fz < -0.5 && !this.aiming && this.crouch < 0.5;
+    let speed = this.sprinting ? P.sprintSpeed : P.walkSpeed * analog;
     if (this.crouch > 0.5) speed = P.crouchSpeed;
     if (this.aiming) speed *= P.adsSpeedMul;
 

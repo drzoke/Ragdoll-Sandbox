@@ -12,6 +12,8 @@ export class Input {
     this.locked = false;
     this.enabled = false; // only true while the game is being played
     this.keyboardLocked = false; // true when Keyboard Lock is active (fullscreen, Chrome/Edge)
+    this.axis = { x: 0, y: 0 };  // analogue movement from the touch stick (x right, y back), -1..1
+    this.touchMode = false;      // touch controls are on: ignore the browser's emulated mouse events
 
     addEventListener('keydown', (e) => {
       if (!this.enabled) return;
@@ -24,14 +26,14 @@ export class Input {
       this.released.add(e.code);
     });
     target.addEventListener('mousedown', (e) => {
-      if (!this.enabled) return;
+      if (!this.enabled || this.touchMode) return;
       this.mouseDown[e.button] = true;
       this.mousePressed[e.button] = true;
     });
     addEventListener('mouseup', (e) => { this.mouseDown[e.button] = false; });
     addEventListener('contextmenu', (e) => e.preventDefault());
     addEventListener('mousemove', (e) => {
-      if (!this.enabled) return;
+      if (!this.enabled || (this.touchMode && !document.pointerLockElement)) return;
       this.mouseDX += e.movementX || 0;
       this.mouseDY += e.movementY || 0;
     });
@@ -60,6 +62,7 @@ export class Input {
 
   clear() {
     this.down.clear();
+    this.axis.x = this.axis.y = 0;
     this.mouseDown = [false, false, false];
     this.mouseDX = this.mouseDY = 0;
   }

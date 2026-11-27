@@ -60,6 +60,19 @@ Switching items plays a draw animation: the tool comes up from below, rises a li
 
 There are two buttons next to the spawn point: **RESPAWN** (new ragdoll) and **CLEAN UP** (removes blood, scorch marks, gibs, casings, shells and live grenades). Shooting a button also presses it.
 
+## Phones and tablets
+
+The game detects phones and tablets (the browser says it's mobile, or the screen is a touch screen with a finger as the main pointer) and switches to touch controls. **Settings → Touch controls** can force them on or off, and `?mobile=1` / `?mobile=0` in the address forces them too.
+
+- **Sideways, full screen:** tapping **Tap to play** goes full screen and locks the screen sideways (Android). If the phone is upright while you play, a "Turn your phone sideways" screen covers the game. iPhone Safari has no full screen for web pages, so the menu suggests **Share → Add to Home Screen**: the game then opens from its icon full screen and sideways (web app manifest and home screen icons are included).
+- **Left thumb:** the move stick. In the Optimal layout it appears wherever your thumb lands on the left side. A light push walks slowly, a full push walks, and pushing forward past the ring sprints (a yellow ring shows it).
+- **Right thumb:** drag anywhere to look. The big red fire button also looks while you hold it, so you can fire and track in one motion.
+- **Buttons change with the item:** Fire / Aim / Reload / Inspect for the guns, Jab / Hook for fists, Throw / Lob for the grenade, Push or Throw / Grab or Drop / Closer / Farther for Grab. Jump and Crouch (tap to toggle) sit around the fire button, a second fire button sits top left for firing with the left thumb, and a blue **Press** button appears when you look at the Respawn or Clean up button.
+- **Top bar:** pause and toolbox on the left; slow time, speed up time and x-ray on the right (the x-ray button goes 3D → Flat → off). The x-ray is a compact panel on phones. Tap items on the bottom bar to switch.
+- **Layouts:** Optimal (recommended), Classic (fixed stick, one fire button) and Left-handed (Optimal mirrored). **Edit layout** lets you drag every button and the stick where you want them; that becomes the Custom layout.
+- **Touch settings:** look sensitivity, aiming sensitivity, button size, button opacity, aim by tap (toggle) or hold, and sprint by pushing the stick.
+- Phones render at a slightly lower resolution than computers to stay smooth and cool.
+
 ## Settings
 
 - **Graphics**
@@ -68,6 +81,7 @@ There are two buttons next to the spawn point: **RESPAWN** (new ragdoll) and **C
   - **High**: soft 4096 shadows, GTAO ambient occlusion, bloom, dirt and wear on models, a brighter grab beam.
   - **Very High**: everything in High, plus screen-space reflections on the floor, normal-mapped surface detail, stronger reflections and a wide glow around the grab beam.
 - **Gore**: organs on or off, red or purple blood, dismemberment and exploding body parts on or off.
+- **Touch controls**: see Phones and tablets above.
 - **HUD**: show or hide the tool controls list, and pick the X-ray view: **Dynamic** (a 3D x-ray that turns with the ragdoll) or **Flat** (a still front-view picture of the skeleton and organs showing the same damage).
 
 Settings are saved in the browser (localStorage).
@@ -117,7 +131,9 @@ src/materials.js         material detail (grime, wear, normal maps) per preset
 src/ui/preview.js        spinning item previews for the toolbox
 src/ragdoll/             skeleton layout, anatomy data, health/physiology, brain/AI, ragdoll body, manager
 src/gore/                particles, decals/pools, gore orchestration (stumps, organs, gibs, bleeding)
-src/ui/                  HUD + X-ray
+src/ui/                  HUD, X-ray, touch controls (touch.js)
+src/core/device.js       phone / tablet detection
+manifest.webmanifest, icons/   home screen app (full screen, sideways)
 ```
 
 ## Extending
