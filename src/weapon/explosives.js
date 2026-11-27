@@ -54,6 +54,7 @@ export class Explosives {
     this.spoons = [];
     this.fx = [];           // sprites with an update function
     this.smoulder = [];     // burnt body parts giving off smoke for a few seconds
+    this.byBody = new Map(); // physics body -> live grenade
     this.raycaster = new THREE.Raycaster();
     this.tex = { fire: puffTexture(true), smoke: puffTexture(false), flash: flashTexture(), ring: ringTexture() };
     this.template = buildGrenade();
@@ -83,7 +84,7 @@ export class Explosives {
     const mesh = this.template.root.clone(true);
     mesh.traverse((o) => { o.userData = {}; });
     const body = new CANNON.Body({
-      mass: 0.4, material: this.physics.materials.debris, linearDamping: 0.08, angularDamping: 0.35,
+      mass: 0.4, material: this.physics.materials.grenade, linearDamping: 0.08, angularDamping: 0.35,
       collisionFilterGroup: GROUP.DEBRIS, collisionFilterMask: GROUP.STATIC | GROUP.RAGDOLL | GROUP.DEBRIS,
     });
     body.addShape(new CANNON.Sphere(0.034));
@@ -92,6 +93,7 @@ export class Explosives {
     body.angularVelocity.set(spin.x, spin.y, spin.z);
     this.physics.world.addBody(body);
     const g = { mesh, body, fuse: FUSE, lastClink: 0, smokeT: 0 };
+    this.byBody.set(body, g);
     // the ball mesh is what bullets / fists / the grab tool find
     mesh.traverse((o) => { if (o.isMesh) o.userData.grenade = g; });
     body.addEventListener('collide', (e) => {
@@ -121,6 +123,7 @@ export class Explosives {
     g.dead = true;
     const p = new THREE.Vector3(g.body.position.x, g.body.position.y, g.body.position.z);
     this.physics.world.removeBody(g.body);
+    this.byBody.delete(g.body);
     this.scene.remove(g.mesh);
     this.live = this.live.filter((x) => x !== g);
     this.explode(p);
@@ -348,6 +351,26 @@ export class Explosives {
   // ---------------------------------------------------------------- update
   /** dt = world (time-scaled) seconds. */
   update(dt) {
+    // A grenade isn't a smooth ball (lever, fuse head, rough casing) and the floor is rough
+    // concrete: once it's resting on something it stops rolling within a short distance
+    // instead of sliding away like a marble.
+    if (this.live.length) {
+      const grounded = new Set();
+      for (const c of this.physics.world.contacts) {
+        // ni points from bi to bj: the surface pushes the grenade along -ni (if it's bi) or +ni
+        const g = this.byBody.get(c.bi) || this.byBody.get(c.bj);
+        if (!g) continue;
+        const upY = this.byBody.get(c.bi) === g ? -c.ni.y : c.ni.y;
+        if (upY > 0.55) grounded.add(g);
+      }
+      for (const g of grounded) {
+        const b = g.body, v = b.velocity, w = b.angularVelocity;
+        const k = Math.exp(-5.5 * dt), kw = Math.exp(-7 * dt);
+        v.x *= k; v.z *= k;
+        w.x *= kw; w.y *= kw; w.z *= kw;
+        if (Math.hypot(v.x, v.z) < 0.12 && Math.abs(v.y) < 0.3) { v.x = v.z = 0; w.set(0, 0, 0); }
+      }
+    }
     for (const g of [...this.live]) {
       g.mesh.position.set(g.body.position.x, g.body.position.y, g.body.position.z);
       g.mesh.quaternion.set(g.body.quaternion.x, g.body.quaternion.y, g.body.quaternion.z, g.body.quaternion.w);
@@ -417,6 +440,7 @@ export class Explosives {
   clear() {
     for (const g of this.live) { this.physics.world.removeBody(g.body); this.scene.remove(g.mesh); }
     this.live = [];
+    this.byBody.clear();
     for (const s of this.spoons) this.scene.remove(s.mesh);
     this.spoons = [];
     this.smoulder = [];

@@ -117,10 +117,14 @@ export class GrenadeTool {
     const dir = cam.getWorldDirection(new THREE.Vector3());
     const up = new THREE.Vector3(0, 1, 0);
     const over = this.kind === 'throw';
-    const vel = dir.clone().multiplyScalar(over ? 15 : 6.2).addScaledVector(up, over ? 2.4 : 3.2);
+    // Aiming at the floor near your feet drops/tosses it there instead of hurling it at the
+    // ground (which made it bounce and roll away): the throw gets softer the further down you look.
+    const down = Math.min(1, Math.max(0, (-dir.y - 0.2) / 0.7));   // 0 above ~12° down, 1 at ~65°+
+    const soft = 1 - down * (over ? 0.78 : 0.6);
+    const vel = dir.clone().multiplyScalar((over ? 15 : 6.2) * soft).addScaledVector(up, (over ? 2.4 : 3.2) * (1 - down * 0.85));
     vel.x += this.player.vel.x; vel.z += this.player.vel.z;
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
-    const spin = right.clone().multiplyScalar(over ? -14 : 8).add(new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4));
+    const spin = right.clone().multiplyScalar((over ? -14 : 8) * (1 - down * 0.8)).add(new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4));
     this.onThrow(pos, vel, spin, { right });
     this.model.root.visible = false;
     this.audio.play('throw');

@@ -19,6 +19,7 @@ export class Physics {
       flesh: new CANNON.Material('flesh'),
       foot: new CANNON.Material('foot'),
       debris: new CANNON.Material('debris'),
+      grenade: new CANNON.Material('grenade'),
     };
     const m = this.materials;
     world.addContactMaterial(new CANNON.ContactMaterial(m.ground, m.flesh, { friction: 0.42, restitution: 0.02 }));
@@ -26,6 +27,8 @@ export class Physics {
     // Feet slide a little: the ragdoll's walk is driven from the hips, not by planted IK feet.
     world.addContactMaterial(new CANNON.ContactMaterial(m.ground, m.foot, { friction: 0.12, restitution: 0.0 }));
     world.addContactMaterial(new CANNON.ContactMaterial(m.ground, m.debris, { friction: 0.7, restitution: 0.15 }));
+    // grenades: grippy, a small bounce (rolling is damped separately in Explosives)
+    world.addContactMaterial(new CANNON.ContactMaterial(m.ground, m.grenade, { friction: 0.9, restitution: 0.1 }));
     world.defaultContactMaterial.friction = 0.5;
     world.defaultContactMaterial.restitution = 0.05;
     // Softer contacts reduce ragdoll jitter.
