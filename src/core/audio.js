@@ -78,9 +78,12 @@ export class Audio {
     const t = this.ctx.currentTime;
     const near = Math.max(0.15, Math.min(1.4, 9 / (d + 4)));
     const lp = 600 + 5000 * Math.min(1, 12 / (d + 6));
-    this._noise(t, 1.6, { freq: lp, gain: 1.3 * near, decay: 1.3, toReverb: true });
-    this._noise(t, 0.25, { type: 'highpass', freq: 1500, gain: 0.6 * near * near, decay: 0.12 });
+    this._noise(t, 2.2, { freq: lp, gain: 1.35 * near, decay: 1.7, toReverb: true });
+    this._noise(t, 0.25, { type: 'highpass', freq: 1500, gain: 0.65 * near * near, decay: 0.12 });
     this._tone(t, 70, 1.0, { gain: 1.3 * near, endFreq: 22 });
+    this._tone(t, 46, 1.5, { gain: 0.9 * near, endFreq: 18 });   // deep thump you feel more than hear
+    // the echo coming back off the far walls
+    this._noise(t + 0.35 + Math.min(0.4, d * 0.01), 1.2, { freq: 900, gain: 0.35 * near, decay: 1.0, toReverb: true });
     this._tone(t, 140, 0.35, { gain: 0.6 * near, type: 'triangle', endFreq: 40 });
     // debris pattering down afterwards
     for (let i = 0; i < 6; i++) this._noise(t + 0.3 + Math.random() * 0.9, 0.05, { type: 'bandpass', freq: 1800 + Math.random() * 2000, q: 2, gain: 0.12 * near, decay: 0.04 });

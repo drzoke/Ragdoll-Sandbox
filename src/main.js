@@ -16,6 +16,7 @@ import { Shotgun } from './weapon/shotgun.js';
 import { Fists } from './weapon/fists.js';
 import { GrenadeTool } from './weapon/grenade.js';
 import { Explosives } from './weapon/explosives.js';
+import { ThrowArc } from './weapon/trajectory.js';
 import { ARM_MATERIALS } from './weapon/arms.js';
 import { Toolbox } from './weapon/toolbox.js';
 import { Graphics } from './graphics.js';
@@ -81,8 +82,9 @@ explosives.ballistics = ballistics;
 ballistics.explosives = explosives;
 const fists = new Fists({ mainCamera: camera, player, audio, environment: scene.environment, gore, hud, targets: () => ballistics.targets() });
 const throwRay = new THREE.Raycaster();
+const throwArc = new ThrowArc(scene, () => [...map.solidMeshes, ...ragdolls.meshes()]);
 const grenade = new GrenadeTool({
-  mainCamera: camera, player, audio, environment: scene.environment,
+  mainCamera: camera, player, audio, environment: scene.environment, arc: throwArc,
   onThrow: (pos, vel, spin, { right }) => {
     // never spawn the grenade inside a wall you're standing against
     const eye = camera.getWorldPosition(new THREE.Vector3());

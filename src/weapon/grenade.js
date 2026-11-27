@@ -23,15 +23,22 @@ CLIPS.throw.lh = [[0, 'idle'], [0.15, 'ring'], [0.22, 'ring'], [0.36, 'pull'], [
 CLIPS.lob.lh = [[0, 'idle'], [0.15, 'ring'], [0.22, 'ring'], [0.36, 'pull'], [0.6, 'low']];
 
 const _v = new THREE.Vector3(), _h = new THREE.Vector3(), _q = new THREE.Quaternion();
+// Holding the button pauses the throw here (pin out, arm cocked) and shows the arc.
+const HOLD_T = { throw: 0.3, lob: 0.3 };
+// Where the grenade leaves the hand, in camera space (matches the hand at the release frame).
+const RELEASE = { throw: new THREE.Vector3(0.16, -0.02, -0.5), lob: new THREE.Vector3(0.15, -0.15, -0.6) };
+export const GRENADE_DAMPING = 0.08;
 
 /**
  * Green ball grenade. Left click: pull the pin and throw overhand (far). Right click: underhand
  * lob (short, gentle). The grenade goes off 3 seconds after it leaves your hand.
  */
 export class GrenadeTool {
-  constructor({ mainCamera, player, audio, environment, onThrow }) {
+  constructor({ mainCamera, player, audio, environment, onThrow, arc }) {
     this.name = 'Grenade';
     this.player = player; this.audio = audio; this.mainCamera = mainCamera; this.onThrow = onThrow;
+    this.arc = arc;            // ThrowArc (world scene), shown while a throw is held
+    this.holding = false;
     const vm = viewmodelScene(environment);
     this.scene = vm.scene; this.camera = vm.camera;
     this.pivot = new THREE.Group(); this.scene.add(this.pivot);
@@ -58,7 +65,7 @@ export class GrenadeTool {
 
   resize(aspect) { this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); }
   refill() {}
-  get controls() { return [['Left click', 'Pull pin and throw'], ['Right click', 'Pull pin and lob underhand']]; }
+  get controls() { return [['Left click', 'Throw (hold to aim, let go to throw)'], ['Right click', 'Lob underhand (hold to aim)']]; }
   status() { return { title: 'Grenade', sub: '∞ · 3 second fuse' }; }
   crosshair() { return { gap: 6 }; }
 
@@ -69,8 +76,38 @@ export class GrenadeTool {
       else if (input.mousePressed[2]) this.start('lob');
     }
     if (!active && this.anim.playing) { this.anim.stop(); this.reset(); }
-    this.anim.update(dt);
+    // hold the button to keep the arm cocked and aim with the arc; let go to throw
+    const btn = this.kind === 'throw' ? 0 : 2;
+    const a = this.anim;
+    const hT = HOLD_T[this.kind];
+    const wantHold = active && a.playing && this.inHand && input.mouseDown[btn];
+    this.holding = false;
+    if (wantHold && a.time <= hT + 1e-6 && a.time + dt >= hT) { a.update(Math.max(0, hT - a.time)); a.time = hT; this.holding = true; }
+    else a.update(dt);
+    if (this.arc) {
+      if (this.holding) {
+        const { pos, vel } = this.throwParams(this.kind);
+        this.arc.show(pos, vel, GRENADE_DAMPING, this.mainCamera, dt);
+      } else this.arc.hide();
+    }
     this.animate(dt);
+  }
+
+  /** Release point and velocity for a throw right now (used by the throw and the arc). */
+  throwParams(kind) {
+    const cam = this.mainCamera;
+    cam.updateMatrixWorld();
+    const pos = viewmodelToWorld(RELEASE[kind], this.camera, cam, new THREE.Vector3());
+    const dir = cam.getWorldDirection(new THREE.Vector3());
+    const up = new THREE.Vector3(0, 1, 0);
+    const over = kind === 'throw';
+    // Aiming at the floor near your feet drops/tosses it there instead of hurling it at the
+    // ground (which made it bounce and roll away): the throw gets softer the further down you look.
+    const down = Math.min(1, Math.max(0, (-dir.y - 0.2) / 0.7));   // 0 above ~12° down, 1 at ~65°+
+    const soft = 1 - down * (over ? 0.78 : 0.6);
+    const vel = dir.clone().multiplyScalar((over ? 15 : 6.2) * soft).addScaledVector(up, (over ? 2.4 : 3.2) * (1 - down * 0.85));
+    vel.x += this.player.vel.x; vel.z += this.player.vel.z;
+    return { pos, vel, down, over };
   }
 
   start(kind) {
@@ -112,17 +149,8 @@ export class GrenadeTool {
     this.inHand = false;
     this.pivot.updateMatrixWorld(true);
     const cam = this.mainCamera;
-    const vmPos = this.model.root.getWorldPosition(new THREE.Vector3());
-    const pos = viewmodelToWorld(vmPos, this.camera, cam, new THREE.Vector3());
-    const dir = cam.getWorldDirection(new THREE.Vector3());
-    const up = new THREE.Vector3(0, 1, 0);
-    const over = this.kind === 'throw';
-    // Aiming at the floor near your feet drops/tosses it there instead of hurling it at the
-    // ground (which made it bounce and roll away): the throw gets softer the further down you look.
-    const down = Math.min(1, Math.max(0, (-dir.y - 0.2) / 0.7));   // 0 above ~12° down, 1 at ~65°+
-    const soft = 1 - down * (over ? 0.78 : 0.6);
-    const vel = dir.clone().multiplyScalar((over ? 15 : 6.2) * soft).addScaledVector(up, (over ? 2.4 : 3.2) * (1 - down * 0.85));
-    vel.x += this.player.vel.x; vel.z += this.player.vel.z;
+    const { pos, vel, down, over } = this.throwParams(this.kind);
+    this.arc?.hide();
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
     const spin = right.clone().multiplyScalar((over ? -14 : 8) * (1 - down * 0.8)).add(new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4));
     this.onThrow(pos, vel, spin, { right });
