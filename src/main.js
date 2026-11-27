@@ -489,13 +489,16 @@ function updateInteraction(dt) {
   for (const b of buttons) b.update(dt, b === focused);
 
   centerRay.far = 60;
-  const looked = ragdolls.pick(centerRay);
+  // the title screen's corpse (hidden) never shows up in the X-ray or as a target
+  let looked = ragdolls.pick(centerRay);
+  if (looked?.hidden) looked = null;
   lookedRagdoll = looked;
+  const live = ragdolls.list.filter((r) => !r.hidden);
   if (looked) target = looked;
-  if (ballistics.lastTarget && !ragdolls.list.includes(ballistics.lastTarget)) ballistics.lastTarget = null;
+  if (ballistics.lastTarget && !live.includes(ballistics.lastTarget)) ballistics.lastTarget = null;
   if (!looked && ballistics.lastTarget) target = ballistics.lastTarget;
-  if (target && !ragdolls.list.includes(target)) target = ragdolls.list[0] || null;
-  if (!target) target = ragdolls.list[0] || null;
+  if (target && !live.includes(target)) target = live[0] || null;
+  if (!target) target = live[0] || null;
 }
 
 // ---- FPS check: if the game runs too slowly while you play, step the graphics down ----
