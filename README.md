@@ -83,7 +83,9 @@ The game detects phones and tablets (the browser says it's a phone or tablet and
 - **Touch controls**: see Phones and tablets above.
 - **HUD**: show or hide the tool controls list, and pick the X-ray view: **Dynamic** (a 3D x-ray that turns with the ragdoll) or **Flat** (a still front-view picture of the skeleton and organs showing the same damage).
 
-**Hardware check:** while the game loads it reads the name of your graphics chip, runs a short GPU test (a heavy shader timed on a small hidden canvas) and a short CPU test, and recommends a preset (shown on the loading screen and marked REC in Settings, with a **Use recommended** button). Until you pick a preset yourself, the recommended one is used. Phones and tablets are kept at Medium or lower.
+**Hardware check:** while the game loads it reads the name of your graphics chip, runs a short GPU test (a heavy shader timed on a small hidden canvas) and a short CPU test, and recommends a preset (shown on the loading screen and marked REC in Settings, with a **Use recommended** button). Until you pick a preset yourself, the recommended one is used. Phones and tablets are kept at Medium or lower. The recommendation takes the screen into account (a Retina laptop or 4K monitor has 2 to 4 times the pixels of a 1080p screen), is careful with laptop GPUs and Apple M chips, and the presets cap their resolution to a pixel budget so very sharp screens don't slow the game down.
+
+**FPS check:** while you play, if the game averages under 40 FPS on the recommended preset it steps the graphics down one level (at most twice) and remembers that for this device. If you picked the preset yourself it only suggests lowering it.
 
 Settings are saved in the browser (localStorage).
 

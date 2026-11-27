@@ -38,9 +38,7 @@ export class Graphics {
     const prev = this.level;
     this.level = level;
     const r = this.renderer, sun = this.map.sun;
-    const dpr = window.devicePixelRatio || 1;
-    // phones: cap the resolution a bit lower (small screen, small GPU, hot battery)
-    r.setPixelRatio(level === 'low' ? Math.min(dpr, IS_TOUCH ? 1.25 : 1) * 0.75 : Math.min(dpr, IS_TOUCH ? (level === 'medium' ? 1.5 : 1.75) : 2));
+    r.setPixelRatio(this.pixelRatio(level));
 
     const shadows = level !== 'low';
     const post = level === 'high' || level === 'ultra';
@@ -98,8 +96,23 @@ export class Graphics {
     this.passes = { render, ssr, gtao, bloom, out };
   }
 
+  /**
+   * Resolution: the screen's pixel ratio, but capped to a pixel budget per preset, so a Retina
+   * laptop or a 4K monitor doesn't render 2-4x the pixels of a 1080p screen (post-processing
+   * cost grows with every pixel). Phones get a slightly lower cap.
+   */
+  pixelRatio(level = this.level) {
+    const dpr = window.devicePixelRatio || 1;
+    if (level === 'low') return Math.min(dpr, IS_TOUCH ? 1.25 : 1) * 0.75;
+    const budget = { medium: 4.2e6, high: 3.2e6, ultra: 3.8e6 }[level] || 4e6;   // pixels
+    const fit = Math.sqrt(budget / Math.max(1, innerWidth * innerHeight));
+    const max = IS_TOUCH ? (level === 'medium' ? 1.5 : 1.75) : 2;
+    return Math.max(Math.min(1, dpr), Math.min(dpr, max, fit));
+  }
+
   resize() {
     const w = innerWidth, h = innerHeight;
+    if (this.level) this.renderer.setPixelRatio(this.pixelRatio());
     this.renderer.setSize(w, h, false);
     if (this.composer) {
       this.composer.setPixelRatio(this.renderer.getPixelRatio());

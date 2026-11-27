@@ -25,8 +25,14 @@ function tierFromName(n) {
   const s = n.toLowerCase();
   if (!s || /^(webkit webgl|mozilla|apple gpu)$/.test(s)) return -1;
   if (/swiftshader|llvmpipe|softpipe|software|microsoft basic/.test(s)) return 0;
-  if (/rtx ?(30[6-9]0|40\d0|50\d0)|rx ?(6[7-9]\d0|7[6-9]\d0|9\d{3})|apple m[1-4] (pro|max|ultra)|arc a7/.test(s)) return 3;
-  if (/rtx|gtx ?16\d0|gtx ?10[78]0|rx ?(5[5-7]00|6[0-6]\d0|5[78]0|7600)|radeon (pro|7[89]0m|8[89]0m)|apple m[1-4]|arc/.test(s)) return 2;
+  // laptop versions of desktop cards are a lot slower (power and heat limits)
+  const laptop = /laptop|max-q|mobile|\d{3,4}m\b/.test(s) ? 1 : 0;
+  // Very High (screen-space reflections) only for fast desktop-class cards
+  if (/rtx ?(30[7-9]0|40[6-9]0|50\d0)|rx ?(6[89]\d0|7[7-9]\d0|9\d{3})/.test(s)) return 3 - laptop;
+  if (/rtx|gtx ?16\d0|gtx ?10[78]0|rx ?(5[5-7]00|6[0-7]\d0|5[78]0|7600)|apple m[1-5] (max|ultra)|arc a7/.test(s)) return 2 - laptop;
+  // Apple M-series: plain M1-M5 and Pro run High well only at a reduced resolution; start at Medium / High
+  if (/apple m[1-5] pro/.test(s)) return 2;
+  if (/apple m[1-5]|radeon (pro|7[89]0m|8[89]0m)|arc/.test(s)) return 1;
   if (/gtx|iris xe|iris\(r\) xe|radeon|vega|adreno ?(7\d\d|8\d\d)|mali-g(7|9)\d|apple a1[5-9]|nvidia/.test(s)) return 1;
   if (/intel|uhd|hd graphics|adreno|mali|powervr|apple a\d/.test(s)) return 0;
   return -1;
@@ -111,8 +117,13 @@ export function benchmark() {
   } catch { /* no WebGL here */ }
   const cpuScore = cpuTest();
 
+  // How many pixels the game will draw in full screen (capped like Graphics.pixelRatio does),
+  // relative to a 1080p screen: a Retina laptop or 4K monitor needs a faster GPU for the same preset.
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const screenPx = (screen.width || innerWidth) * (screen.height || innerHeight) * dpr * dpr;
+  const load = Math.min(2, Math.max(0.6, Math.min(screenPx, 3.5e6) / 2.07e6));
   // GPU throughput -> tier (rough: integrated ~10-40, mid-range ~60-150, fast cards 200+)
-  const benchTier = gpuScore > 200 ? 3 : gpuScore > 70 ? 2 : gpuScore > 18 ? 1 : 0;
+  const benchTier = gpuScore > 260 * load ? 3 : gpuScore > 90 * load ? 2 : gpuScore > 22 * load ? 1 : 0;
   // Known chip: trust the name, but drop a level if it tested much slower (battery saver, wrong GPU)
   let tier = nameTier >= 0 ? Math.min(nameTier, benchTier + 1) : benchTier;
   const notes = [];
@@ -121,7 +132,19 @@ export function benchmark() {
   else if (cores <= 4 || cpuScore < 0.18) { tier = Math.min(tier, 2); }
   if (memory && memory <= 2) { tier = Math.min(tier, 0); notes.push('low memory'); }
   if (IS_TOUCH) tier = Math.min(tier, 1); // phones and tablets: keep them smooth and cool
-  return { level: LEVELS[Math.max(0, tier)], gpu: gpu || 'Unknown GPU', gpuScore, cpuScore, cores, memory, notes };
+  // the game lowered the graphics on this device before because it ran too slowly: remember that
+  const cap = perfCap(gpu || 'Unknown GPU');
+  if (cap >= 0 && cap < tier) { tier = cap; notes.push('lowered after a slow test run'); }
+  return { level: LEVELS[Math.max(0, tier)], gpu: gpu || 'Unknown GPU', gpuScore, cpuScore, cores, memory, notes, load };
+}
+
+const CAP_KEY = 'ragdoll-sandbox-perfcap';
+function perfCap(gpu) {
+  try { const c = JSON.parse(localStorage.getItem(CAP_KEY) || 'null'); return c && c.gpu === gpu ? c.tier : -1; } catch { return -1; }
+}
+/** Remember that this device needed a lower preset (the FPS check lowered it). */
+export function savePerfCap(gpu, level) {
+  try { localStorage.setItem(CAP_KEY, JSON.stringify({ gpu, tier: LEVELS.indexOf(level) })); } catch { /* ignore */ }
 }
 
 export const LEVEL_NAMES = { low: 'Low', medium: 'Medium', high: 'High', ultra: 'Very High' };

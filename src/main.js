@@ -25,7 +25,7 @@ import { trackMaterials } from './materials.js';
 import { GRAY as RAGDOLL_GRAY, BLACK as RAGDOLL_BLACK } from './ragdoll/ragdoll.js';
 import { IS_TOUCH, IS_IOS, IS_STANDALONE } from './core/device.js';
 import { TouchControls } from './ui/touch.js';
-import { benchmark, LEVEL_NAMES } from './core/bench.js';
+import { benchmark, LEVEL_NAMES, savePerfCap } from './core/bench.js';
 
 // ------------------------------------------------------------------ loading screen
 const loader = window.__loader || { set() {} };
@@ -187,16 +187,34 @@ document.getElementById('touch-edit').addEventListener('click', () => {
   touch.startEdit();
 });
 
-async function lockPointer() {
+// Mouse lock. It has to be requested straight from the click (no waiting first: Safari and some
+// Chrome versions refuse it once the click's "user gesture" has been used up by going full screen).
+// If the browser refuses, the menu stays up and the next click tries again; only a page inside a
+// frame that can never lock the mouse falls back to playing with a free cursor.
+const IN_FRAME = (() => { try { return window.top !== window; } catch { return true; } })();
+const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edg|android).)*safari/i.test(navigator.userAgent);
+let lockFails = 0;
+function lockPointer() {
+  freeMouse = false;
   try {
     const req = canvas.requestPointerLock();
-    if (req && req.then) await req;
-    freeMouse = false;
-  } catch {
+    if (req && req.catch) req.catch(() => onLockFailed());
+  } catch { onLockFailed(); }
+}
+function onLockFailed() {
+  if (touch.active || document.pointerLockElement === canvas) return;
+  lockFails++;
+  if (IN_FRAME && lockFails >= 2) {
+    // embedded page that can't lock the mouse: play with a free cursor
     freeMouse = true;
+    lockWarn.textContent = "This page can't lock the mouse. Open the game in its own browser tab to look around properly.";
     lockWarn.classList.remove('hidden');
     setPlaying(true);
+    return;
   }
+  lockWarn.textContent = 'The browser didn\'t lock the mouse that time. Click Play again (click inside this window).';
+  lockWarn.classList.remove('hidden');
+  setPlaying(false);
 }
 
 // The toolbox frees the mouse so cards can be clicked; closing it re-locks.
@@ -303,19 +321,19 @@ document.getElementById('play').addEventListener('click', async () => {
     enterMobileFullscreen();
     return;
   }
-  const fs = enterFullscreenWithKeyLock(); // must start inside the click
-  await fs;
-  await lockPointer();
+  // Both start inside the click. Safari drops the mouse lock when it switches to full screen,
+  // so it plays in the window (Cmd+W can't be blocked on a Mac anyway).
+  lockPointer();
+  if (!IS_SAFARI) enterFullscreenWithKeyLock();
 });
+// Clicking the game while it's paused because the lock was lost locks it again.
+canvas.addEventListener('mousedown', () => { if (!touch.active && playing && !freeMouse && document.pointerLockElement !== canvas) lockPointer(); });
 document.addEventListener('pointerlockchange', () => {
   if (touch.active) return;
-  if (document.pointerLockElement === canvas) { setPlaying(true); if (toolboxOpen) toolbox.close(); }
+  if (document.pointerLockElement === canvas) { lockFails = 0; lockWarn.classList.add('hidden'); setPlaying(true); if (toolboxOpen) toolbox.close(); }
   else if (!freeMouse && !toolboxOpen) setPlaying(false);
 });
-document.addEventListener('pointerlockerror', () => {
-  if (touch.active) return;
-  freeMouse = true; lockWarn.classList.remove('hidden'); setPlaying(true);
-});
+document.addEventListener('pointerlockerror', () => onLockFailed());
 addEventListener('keydown', (e) => {
   if (!playing) return;
   // With the keyboard locked the browser no longer handles Esc for us.
@@ -379,6 +397,35 @@ function updateInteraction(dt) {
   if (!target) target = ragdolls.list[0] || null;
 }
 
+// ---- FPS check: if the game runs too slowly while you play, step the graphics down ----
+// (only while it's on the recommended preset; if you picked one yourself it just suggests it)
+const fpsWatch = { t: 0, frames: 0, warm: 0, steps: 0, hinted: false };
+settings.onChange((k) => { if (k === 'graphics') { fpsWatch.warm = 0; fpsWatch.t = 0; fpsWatch.frames = 0; } });
+function watchFps(_dt, now) {
+  // real time between frames (the game's dt is capped, which would hide a very slow frame rate)
+  const dt = fpsWatch.last ? Math.min(1, (now - fpsWatch.last) / 1000) : 0;
+  fpsWatch.last = now;
+  if (!playing || document.hidden || debug.timeScale === 0) { fpsWatch.warm = 0; return; }
+  fpsWatch.warm += dt;
+  if (fpsWatch.warm < 4) { fpsWatch.t = 0; fpsWatch.frames = 0; return; }   // skip loading hitches
+  fpsWatch.t += dt; fpsWatch.frames++;
+  if (fpsWatch.t < 6) return;
+  const avg = fpsWatch.frames / fpsWatch.t;
+  fpsWatch.t = 0; fpsWatch.frames = 0;
+  const lvl = settings.get('graphics'), order = ['low', 'medium', 'high', 'ultra'], i = order.indexOf(lvl);
+  if (avg >= 40 || i <= 0) return;
+  if (!settings.get('graphicsChosen') && fpsWatch.steps < 2) {
+    fpsWatch.steps++;
+    const next = order[i - 1];
+    settings.set('graphics', next);
+    savePerfCap(hw.gpu, next);
+    hud.toast(`Running at ${avg.toFixed(0)} FPS: graphics lowered to ${LEVEL_NAMES[next]}`);
+  } else if (!fpsWatch.hinted) {
+    fpsWatch.hinted = true;
+    hud.toast(`Running at ${avg.toFixed(0)} FPS. A lower graphics preset in Settings will be smoother.`);
+  }
+}
+
 // ------------------------------------------------------------------ loop
 let last = performance.now();
 function frame() {
@@ -428,6 +475,7 @@ function frame() {
     ].join('\n') : null,
   });
 
+  watchFps(dt, now);
   const t = toolbox.active;
   graphics.render(t.scene, t.camera);
   input.endFrame();
@@ -446,4 +494,4 @@ setTimeout(() => {
 }, 250);
 
 // Exposed for debugging from the console and for automated tests.
-window.game = { touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };
+window.game = { fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };
