@@ -1,5 +1,6 @@
 import * as CANNON from 'cannon-es';
 import { CONFIG } from '../config.js';
+import { MapBroadphase, PairSet } from './broadphase.js';
 
 export const GROUP = { STATIC: 1, RAGDOLL: 2, PLAYER: 4, DEBRIS: 8 };
 
@@ -8,7 +9,10 @@ export const GROUP = { STATIC: 1, RAGDOLL: 2, PLAYER: 4, DEBRIS: 8 };
 export class Physics {
   constructor() {
     const world = new CANNON.World({ gravity: new CANNON.Vec3(0, CONFIG.physics.gravity, 0) });
-    world.broadphase = new CANNON.SAPBroadphase(world);
+    // static bodies in a grid, moving bodies looked up by their boxes (see broadphase.js)
+    world.broadphase = new MapBroadphase(world);
+    world.collisionMatrix = new PairSet();
+    world.collisionMatrixPrevious = new PairSet();
     world.allowSleep = false;
     world.solver.iterations = CONFIG.physics.solverIterations;
     world.solver.tolerance = 1e-4;

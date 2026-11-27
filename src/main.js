@@ -671,6 +671,7 @@ function frame() {
   watchFps(dt, now);
   const t = toolbox.active;
   vitals.update(dt, { input, playing: playing && !toolboxOpen, show: !titleMode && ragdolls.list.some((r) => r.zombie && !r.hidden) });
+  map.cull(camera);
   if (titleMode || vitals.dead) graphics.render(null, null);
   else graphics.render(t.scene, t.camera);
   input.endFrame();

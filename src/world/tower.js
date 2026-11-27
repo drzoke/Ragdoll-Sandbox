@@ -411,10 +411,16 @@ export function buildTower(map) {
   coreBox(SHAFT.x0, SHAFT.x1, CORE.z0, SHAFT.z0);
   coreBox(SHAFT.x0, -0.6, SHAFT.z1, CORE.z1, BASE, ROOF);
   coreBox(0.6, SHAFT.x1, SHAFT.z1, CORE.z1, BASE, ROOF);
+  // Each floor's own surfaces (ceiling, light panels, carpet, door trims) are built twice: per floor,
+  // drawn only for the floor you're on while you're inside the tower (the slabs hide the others),
+  // and merged for the whole tower, drawn instead while you're outside looking in through the glass.
+  const inner = Array.from({ length: LEVELS }, () => ({ shell: new BoxBatch(), lamps: new BoxBatch() }));
+  const outer = { shell: new BoxBatch(), lamps: new BoxBatch() };
+  const both = (i, kind, fn) => { fn(inner[i][kind]); fn(outer[kind]); };
   for (let i = 0; i < LEVELS; i++) {
     coreBox(-0.6, 0.6, SHAFT.z1, CORE.z1, fy(i) + 2.2, fy(i + 1));
     // door frame trims
-    shell.add(M.alu, -0.63, fy(i) + 1.12, CORE.z1 + 0.02, 0.06, 2.24, 0.05).add(M.alu, 0.63, fy(i) + 1.12, CORE.z1 + 0.02, 0.06, 2.24, 0.05).add(M.alu, 0, fy(i) + 2.23, CORE.z1 + 0.02, 1.32, 0.06, 0.05);
+    both(i, 'shell', (b) => b.add(M.alu, -0.63, fy(i) + 1.12, CORE.z1 + 0.02, 0.06, 2.24, 0.05).add(M.alu, 0.63, fy(i) + 1.12, CORE.z1 + 0.02, 0.06, 2.24, 0.05).add(M.alu, 0, fy(i) + 2.23, CORE.z1 + 0.02, 1.32, 0.06, 0.05));
   }
   coreBox(SHAFT.x0, SHAFT.x1, SHAFT.z0, CORE.z1, ROOF, coreTop);
   for (const [x, z] of [[-9, -6], [9, -6], [-9, 6], [9, 6]]) {
@@ -428,15 +434,14 @@ export function buildTower(map) {
   const lampGeo = new THREE.PlaneGeometry(0.6, 1.2);
   const down = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
   const one = new THREE.Vector3(1, 1, 1);
-  const lamps = new BoxBatch();
   for (let i = 0; i < LEVELS; i++) {
     const cy = fy(i) + CEIL;
-    shell.addGeo(M.ceiling, ceilGeo, new THREE.Matrix4().compose(new THREE.Vector3(0, cy, 0), down, one));
+    both(i, 'shell', (b) => b.addGeo(M.ceiling, ceilGeo, new THREE.Matrix4().compose(new THREE.Vector3(0, cy, 0), down, one)));
     for (let x = -13.5; x <= 13.5; x += 3) for (let z = -10.5; z <= 10.5; z += 3) {
       if (x > CORE.x0 - 0.8 && x < CORE.x1 + 0.8 && z > CORE.z0 - 0.8 && z < CORE.z1 + 0.8) continue;
-      lamps.addGeo(M.lamp, lampGeo, new THREE.Matrix4().compose(new THREE.Vector3(x, cy - 0.004, z), down, one));
+      both(i, 'lamps', (b) => b.addGeo(M.lamp, lampGeo, new THREE.Matrix4().compose(new THREE.Vector3(x, cy - 0.004, z), down, one)));
     }
-    if (i >= 1) shell.add(M.carpet, 0, fy(i) - 0.15, 0, 2 * HX, 0.3, 2 * HZ, { tile: 2 });
+    if (i >= 1) both(i, 'shell', (b) => b.add(M.carpet, 0, fy(i) - 0.15, 0, 2 * HX, 0.3, 2 * HZ, { tile: 2 }));
   }
   // the roof slab
   shell.add(M.roof, 0, ROOF - 0.15, 0, 2 * HX, 0.3, 2 * HZ, { tile: 6 });
@@ -557,7 +562,16 @@ export function buildTower(map) {
   for (let a = 0; a < 8; a++) { const x = -8.5 + Math.cos(a * Math.PI / 4) * 4.9, z = 5.5 + Math.sin(a * Math.PI / 4) * 4.9; shell.add(M.greenLamp, x, ROOF + 0.28, z, 0.12, 0.06, 0.12); }
 
   for (const m of shell.build()) map.add(m);
-  for (const m of lamps.build({ castShadow: false, receiveShadow: false })) map.add(m, { quality: false });
+  // the floors' own surfaces: per floor, and all floors merged (see above)
+  const group = (b) => {
+    const g = new THREE.Group();
+    map.add(g);
+    for (const m of b.shell.build()) g.add(map.add(m));
+    for (const m of b.lamps.build({ castShadow: false, receiveShadow: false })) g.add(map.add(m, { quality: false }));
+    return g;
+  };
+  const interiors = inner.map(group);
+  const exterior = group(outer);
 
   // ---- the elevator ----
   const elevator = new Elevator(map, { levels: LEVELS, floorY: fy, labels: LABELS, shaft: SHAFT, doorZ: DOOR_Z, materials: M });
@@ -585,20 +599,56 @@ export function buildTower(map) {
   lid.position.set(HATCH.x, ROOF + 0.53, HATCH.z);
   hatchBox.castShadow = lid.castShadow = true;
   map.add(hatchBox); map.add(lid);
-  map.solid(HATCH.x, ROOF + 0.28, HATCH.z, 1.26, 0.56, 1.26, { body: 'roof', proxy: roofCl, surface: 'metal', walk: true });
+  const hatchSolid = map.solid(HATCH.x, ROOF + 0.28, HATCH.z, 1.26, 0.56, 1.26, { body: 'roof', proxy: roofCl, surface: 'metal', walk: true });
+  // a handle on the lid and a stencilled sign on the side you come out on, so the way down is easy to spot
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.42), M.rail);
+  handle.position.set(HATCH.x + 0.42, ROOF + 0.585, HATCH.z);
+  map.add(handle);
+  const downSign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.3), new THREE.MeshStandardMaterial({ map: TX.textSign(256, 86, ['LADDER DOWN'], { font: 'bold 34px sans-serif' }), roughness: 0.5 }));
+  downSign.position.set(HATCH.x + 0.605, ROOF + 0.27, HATCH.z); downSign.rotation.y = Math.PI / 2;
+  map.add(downSign);
   // the rungs have gaps a look ray slips through: an invisible box around the ladder takes the look
   const ladderHit = new THREE.Mesh(new THREE.BoxGeometry(0.14, CEIL, 0.56), new THREE.MeshBasicMaterial({ visible: false }));
   ladderHit.position.set(LADDER.x + 0.06, CEIL / 2, LADDER.z);
   groups[top].add(ladderHit);
-  const climber = new LadderClimb(map, { ladder: ladderHit, hatch: [hatchBox, lid], lid, bottomY: ty });
+  // the hatch's invisible collision box is what the look ray hits first, so it carries the climb down too
+  const climber = new LadderClimb(map, { ladder: ladderHit, hatch: [hatchBox, lid, handle, downSign, hatchSolid.proxy], lid, bottomY: ty });
   map.interactables.push(climber.up, climber.down);
 
+  // ---- culling: only draw what can be seen from where the camera is ----
+  // Inside the tower the slabs hide every other floor, so only the floor you're on is drawn (its
+  // surfaces, furniture, elevator doors and the ragdolls on it). Outside, the floors show through
+  // the glass: the merged surfaces of all floors, plus the furniture at your eye height. On the
+  // roof nothing inside the tower can be seen.
+  const view = { inside: false, roof: false, level: 0 };
+  const shown = new Array(LEVELS).fill(null);
+  map.view = view;
+  const inTower = (p, pad = 0) => Math.abs(p.x) < HX + pad && Math.abs(p.z) < HZ + pad && p.y > BASE - 0.4 && p.y < ROOF - 0.3;
+  const levelAt = (y) => Math.max(0, Math.min(LEVELS - 1, Math.floor((y - BASE) / FH)));
+  map.cullers.push((cam, ctx) => {
+    const inside = inTower(cam, 0.05), roof = !inside && cam.y >= ROOF - 0.3, k = levelAt(cam.y);
+    view.inside = inside; view.roof = roof; view.level = k;
+    exterior.visible = !inside && !roof;
+    for (let i = 0; i < LEVELS; i++) {
+      interiors[i].visible = inside && i === k;
+      const v = inside ? i === k : !roof && Math.abs(i - k) <= 1;
+      if (v !== shown[i]) { shown[i] = v; groups[i].visible = v; }
+    }
+    elevator.showLevels(shown);
+    // ragdolls on other floors of the tower (all of them while the X-ray is open)
+    const xray = ctx?.hud?.xrayOpen;
+    for (const r of ctx?.ragdolls?.list || []) {
+      if (r.hidden || r.removed) continue;
+      const p = r.parts.pelvis.body.position;
+      let v = true;
+      if (!xray && inTower(p)) v = inside ? levelAt(p.y) === k : !roof;
+      if (r.root.visible !== v) r.root.visible = v;
+    }
+  });
+  map.onUnload = () => { for (const r of map.ctx?.ragdolls?.list || []) if (!r.hidden) r.root.visible = true; };
+
   // ---- moving parts ----
-  const visible = new Array(LEVELS).fill(true);
   map.updaters.push((dt, focus, ctx) => {
-    // draw the furniture only on the floors next to you
-    const k = levelOf(focus.y);
-    for (let i = 0; i < LEVELS; i++) { const v = Math.abs(i - k) <= 1; if (v !== visible[i]) { visible[i] = v; groups[i].visible = v; } }
     // sliding doors at the entrance open for you and for ragdolls walking up to them
     let want = false;
     if (ctx?.player) { const p = ctx.player.pos; want = Math.abs(p.x) < 3.2 && Math.abs(p.z - HZ) < 2.8 && p.y < BASE + 2; }
@@ -657,10 +707,11 @@ class LadderClimb {
         if (Math.floor(u * 7) > rung) { rung = Math.floor(u * 7); ctx.audio?.play('ladder'); p.landSpring.kick(-0.012); }
         return false;
       }
-      // out through the hatch onto the roof, next to it
+      // out through the hatch onto the roof, next to it, facing back towards it once you've stepped out
       ctx.audio?.play('hatch');
       this.carry(ctx, HATCH.x + 1.1 - p.pos.x, ROOF - p.pos.y, HATCH.z - p.pos.z);
       p.landSpring.kick(-0.05);
+      if (!this.hinted) { this.hinted = true; ctx.hud?.toast('Look at the hatch and press E to climb back down'); }
       return true;
     });
   }
@@ -693,7 +744,6 @@ export const TOWER = {
   far: 900,
   bounds: { minX: -38, maxX: 38, minZ: -34, maxZ: 34 },
   wallHeight: 130,
-  sapAxis: 1,
   fill: 0.55,
   hemi: 0.75,
   sun: 2.0,

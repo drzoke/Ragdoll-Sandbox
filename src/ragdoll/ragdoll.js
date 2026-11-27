@@ -201,6 +201,10 @@ export class Ragdoll {
     if (zombie) this.makeZombie(origin, yaw);
     else this.brain = this.behavior === 'v2' ? new BrainV2(this, origin, yaw) : new Brain(this, origin, yaw);
     this._unsub = physics.onStep((h) => this.applyMuscles(h));
+    // a settled corpse is put to sleep (see settle()); anything touching one wakes it
+    this.asleep = false;
+    this.stillTime = 0;
+    for (const name in this.parts) this.parts[name].body.addEventListener('wakeup', () => { if (this.asleep) this.wake(); });
     this.sync();
   }
 
@@ -309,6 +313,7 @@ export class Ragdoll {
    * start the title-screen corpse sitting against a wall. pelvisQ = world orientation.
    */
   placeInPose(pose, pelvisPos, pelvisQ) {
+    this.wake();
     this.setPose({ ...pose, relative: false }, pelvisQ);
     const wp = {}, wq = {};
     for (const def of PARTS) {
@@ -340,6 +345,7 @@ export class Ragdoll {
       b.position.x += dx; b.position.y += dy; b.position.z += dz;
       b.previousPosition?.copy(b.position);
       b.interpolatedPosition?.copy(b.position);
+      b.aabbNeedsUpdate = true;    // a sleeping body doesn't refresh its box by itself
     }
     const br = this.brain;
     for (const v of [br.root, br.home]) { v.x += dx; v.z += dz; }
@@ -409,6 +415,16 @@ export class Ragdoll {
 
   applyMuscles(h) {
     if (this.removed) return;
+    if (this.asleep) {
+      // a blast, the defibrillator or the grab tool pushed a sleeping body: everything wakes up
+      for (const name in this.parts) {
+        const p = this.parts[name];
+        if (p.removed) continue;
+        const v = p.body.velocity, w = p.body.angularVelocity;
+        if (v.x || v.y || v.z || w.x || w.y || w.z) { this.wake(); break; }
+      }
+      if (this.asleep) return;
+    }
     const KP = 20, KD = 40;
     for (const name in this.parts) {
       const p = this.parts[name];
@@ -537,7 +553,68 @@ export class Ragdoll {
     for (const n in this.impactCooldown) if (this.impactCooldown[n] > 0) this.impactCooldown[n] -= dt;
     this.health.update(dt);
     this.brain.update(dt);
+    this.settle(dt);
     this.sync();
+  }
+
+  /**
+   * Performance: a dead body that has stopped moving is taken out of the simulation (its bodies
+   * sleep and its joints leave the solver) until something hits, pushes or grabs it. Many corpses
+   * lying around then cost almost nothing per physics step.
+   */
+  settle(dt) {
+    const h = this.health;
+    if (h.alive || h.undead || this.grabbed || this.removed) {
+      this.stillTime = 0;
+      if (this.asleep) this.wake();
+      return;
+    }
+    if (this.asleep || dt <= 0) return;
+    // "still" = no part has drifted more than 2.5 cm from where it was when the wait started
+    // (resting limbs keep jittering a little in place, so their speed never quite reaches zero)
+    const anchor = this.stillAnchor || (this.stillAnchor = new Float32Array(PARTS.length * 3));
+    let moved = this.stillTime === 0, i = 0;
+    for (const name in this.parts) {
+      const p = this.parts[name], b = p.body.position;
+      if (!p.removed && !moved) {
+        const dx = b.x - anchor[i], dy = b.y - anchor[i + 1], dz = b.z - anchor[i + 2];
+        if (dx * dx + dy * dy + dz * dz > 0.025 * 0.025) moved = true;
+      }
+      i += 3;
+    }
+    if (moved) {
+      i = 0;
+      for (const name in this.parts) { const b = this.parts[name].body.position; anchor[i] = b.x; anchor[i + 1] = b.y; anchor[i + 2] = b.z; i += 3; }
+      this.stillTime = 1e-6;
+      return;
+    }
+    this.stillTime += dt;
+    if (this.stillTime > 1.2) this.sleep();
+  }
+
+  sleep() {
+    if (this.asleep) return;
+    this.asleep = true;
+    const world = this.physics.world;
+    for (const name in this.parts) {
+      const p = this.parts[name];
+      if (p.removed) continue;
+      p.body.sleep();
+      if (p.constraint) world.removeConstraint(p.constraint);
+    }
+  }
+
+  wake() {
+    if (!this.asleep) return;
+    this.asleep = false;
+    this.stillTime = 0;
+    const world = this.physics.world;
+    for (const name in this.parts) {
+      const p = this.parts[name];
+      if (p.removed) continue;
+      if (p.constraint && !world.constraints.includes(p.constraint)) world.addConstraint(p.constraint);
+      p.body.wakeUp();
+    }
   }
 
   sync() {
