@@ -27,6 +27,11 @@ import { IS_TOUCH, IS_IOS, IS_STANDALONE } from './core/device.js';
 import { TouchControls } from './ui/touch.js';
 import { benchmark, LEVEL_NAMES, savePerfCap } from './core/bench.js';
 
+const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edg|android).)*safari/i.test(navigator.userAgent);
+// macOS: full screen moves the window to its own Space with an animation, and browsers drop (or
+// refuse) the mouse lock during it. Cmd+W can't be blocked on a Mac anyway, so play in the window.
+const IS_MAC = /Macintosh|Mac OS X/.test(navigator.userAgent) && !IS_TOUCH;
+
 // ------------------------------------------------------------------ loading screen
 const loader = window.__loader || { set() {} };
 const frameYield = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
@@ -169,7 +174,9 @@ function applyTouchMode() {
   touch.setActive(touchWanted());
   document.getElementById('play').textContent = touch.active ? 'Tap to play' : 'Click to play';
   document.getElementById('play-note').textContent = !touch.active
-    ? "The game plays in fullscreen so keys like Ctrl+W can't close it by accident. Hold Esc to leave fullscreen."
+    ? (IS_MAC || IS_SAFARI
+      ? 'The mouse is locked to the game while you play, so it can\'t slide onto another screen. Press Esc to get it back.'
+      : "The game plays in fullscreen so keys like Ctrl+W can't close it by accident. Hold Esc to leave fullscreen.")
     : IS_IOS && !IS_STANDALONE
       ? 'Play with your phone sideways. For true full screen on iPhone, tap Share, then Add to Home Screen, and play from the icon.'
       : 'Play with your phone sideways. The game goes full screen when you tap Play. The pause button is at the top left.';
@@ -192,16 +199,17 @@ document.getElementById('touch-edit').addEventListener('click', () => {
 // If the browser refuses, the menu stays up and the next click tries again; only a page inside a
 // frame that can never lock the mouse falls back to playing with a free cursor.
 const IN_FRAME = (() => { try { return window.top !== window; } catch { return true; } })();
-const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edg|android).)*safari/i.test(navigator.userAgent);
+let lockedAt = 0;
 let lockFails = 0;
 function lockPointer() {
   freeMouse = false;
   try {
     const req = canvas.requestPointerLock();
-    if (req && req.catch) req.catch(() => onLockFailed());
-  } catch { onLockFailed(); }
+    if (req && req.catch) req.catch((e) => onLockFailed(e));
+  } catch (e) { onLockFailed(e); }
 }
-function onLockFailed() {
+function onLockFailed(err) {
+  if (err) console.warn('[pointer lock]', err?.name, err?.message);
   if (touch.active || document.pointerLockElement === canvas) return;
   lockFails++;
   if (IN_FRAME && lockFails >= 2) {
@@ -212,7 +220,7 @@ function onLockFailed() {
     setPlaying(true);
     return;
   }
-  lockWarn.textContent = 'The browser didn\'t lock the mouse that time. Click Play again (click inside this window).';
+  lockWarn.textContent = `The browser didn't lock the mouse that time${err?.name ? ` (${err.name})` : ''}. Click Play again, inside the game window.`;
   lockWarn.classList.remove('hidden');
   setPlaying(false);
 }
@@ -324,14 +332,22 @@ document.getElementById('play').addEventListener('click', async () => {
   // Both start inside the click. Safari drops the mouse lock when it switches to full screen,
   // so it plays in the window (Cmd+W can't be blocked on a Mac anyway).
   lockPointer();
-  if (!IS_SAFARI) enterFullscreenWithKeyLock();
+  if (!IS_SAFARI && !IS_MAC) enterFullscreenWithKeyLock();
 });
 // Clicking the game while it's paused because the lock was lost locks it again.
 canvas.addEventListener('mousedown', () => { if (!touch.active && playing && !freeMouse && document.pointerLockElement !== canvas) lockPointer(); });
 document.addEventListener('pointerlockchange', () => {
   if (touch.active) return;
-  if (document.pointerLockElement === canvas) { lockFails = 0; lockWarn.classList.add('hidden'); setPlaying(true); if (toolboxOpen) toolbox.close(); }
-  else if (!freeMouse && !toolboxOpen) setPlaying(false);
+  if (document.pointerLockElement === canvas) { lockFails = 0; lockedAt = performance.now(); lockWarn.classList.add('hidden'); setPlaying(true); if (toolboxOpen) toolbox.close(); }
+  else if (!freeMouse && !toolboxOpen) {
+    setPlaying(false);
+    // lost straight away (not by Esc): the browser or the OS took it back, e.g. while switching
+    // to full screen. One more click on Play locks it for good.
+    if (performance.now() - lockedAt < 1500) {
+      lockWarn.textContent = 'The mouse lock was released by the browser. Click Play once more to lock it.';
+      lockWarn.classList.remove('hidden');
+    }
+  }
 });
 document.addEventListener('pointerlockerror', () => onLockFailed());
 addEventListener('keydown', (e) => {

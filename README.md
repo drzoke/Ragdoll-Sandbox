@@ -138,6 +138,7 @@ src/ui/                  HUD, X-ray, touch controls (touch.js)
 src/core/device.js       phone / tablet detection
 src/core/bench.js        GPU / CPU check and recommended graphics preset
 manifest.webmanifest, icons/   home screen app (full screen, sideways)
+sw.js                    service worker: always loads the newest version (no stale files after an update)
 ```
 
 ## Extending
