@@ -44,43 +44,20 @@ export class Brain {
     this.crawlYaw = yaw;
     this.nextDecision = 0;
     this.activity = 'Idle';
-    // awareness of the player
-    this.fear = 0;               // 0..1
-    this.cower = 0;              // s left covering the head (gunshot close by, explosion)
-    this.mode = 'wander';        // what it does while standing
-    this.modeTime = 0;
-    this.fleeDir = null;
-    this.aimedTime = 0;
-    this.fearMul = 1;            // temperament: 0.35 brave, 1 normal, 1.7 timid
-  }
-
-  scare(x) { this.fear = Math.min(1, this.fear + x * this.fearMul); }
-
-  /** The player as the ragdoll sees them (set by the manager every frame), or null. */
-  get player() { return this.r.env?.player || null; }
-
-  /**
-   * Something frightening nearby: a gunshot, an explosion, a scream. amount = fear added at the
-   * source; the closer, the more it counts. Gunshots and blasts close by make it cover its head.
-   */
-  hear(pos, radius, amount, kind) {
-    const h = this.h;
-    if (!h.alive || h.consciousness < 30) return;
-    const p = this.r.bodyPos('chest', _v);
-    const d = p.distanceTo(pos);
-    if (d > radius) return;
-    const k = 1 - d / radius;
-    this.scare(amount * k);
-    if ((kind === 'shot' && d < 5.5) || (kind === 'blast' && d < 14)) this.cower = Math.max(this.cower, kind === 'blast' ? rand(1.6, 2.6) : rand(0.7, 1.2));
+    // Fear (Alpha 0.8) was taken out again: ragdolls ignore the player. These stay so other code
+    // (gunshot alerts, the title scene, the spawn menu) can still call into the brain.
+    this.fear = 0;
+    this.cower = 0;
+    this.fearMul = 1;
   }
 
   setState(s) { if (this.state !== s) { this.state = s; this.stateTime = 0; } }
+  hear() {}
+  scare() {}
 
   onHit(partName, dir) {
     this.lastHitDir.copy(dir).setY(0).normalize();
     this.lastHitPart = partName;
-    this.scare(0.45);
-    this.r.env?.alert(this.r.bodyPos('chest'), 12, 0.3, 'scream', this.r);
     if (this.state === 'stand') {
       this.stagger = 0.45;
       this.root.addScaledVector(this.lastHitDir, 0.18);
@@ -94,7 +71,6 @@ export class Brain {
   onPunch(partName, dir, knockdown) {
     this.lastHitDir.copy(dir).setY(0).normalize();
     this.lastHitPart = partName;
-    this.scare(0.2);
     if (this.state !== 'stand') return;
     this.stagger = 0.4;
     this.root.addScaledVector(this.lastHitDir, knockdown ? 0.3 : 0.12);
@@ -133,8 +109,6 @@ export class Brain {
 
     const pelvisPos = r.bodyPos('pelvis');
     const pelvisUp = Y.clone().applyQuaternion(r.bodyQuat('pelvis', _q));
-    this.sense(dt, pelvisPos, awake, painF);
-    h.pressing = null;
 
     if (r.grabbed) {
       // Held by the grab tool: curl up into a fetal ball. Afterwards it lands "fallen" and decides
@@ -155,14 +129,6 @@ export class Brain {
         for (const n in r.parts) S[n] = tone * h.partCap(n);
         pose.relative = true;
         pose.hipL = [0.3, 0.05]; pose.hipR = [0.3, 0.05]; pose.kneeL = 0.5; pose.kneeR = 0.5;
-        if (this.aware && this.aimed && awake > 0.4) {
-          // lying down with a gun on it: an arm up in front of the face
-          this.activity = 'Shielding its face';
-          const s = armL >= armR ? 'L' : 'R';
-          pose[`shoulder${s}`] = [1.7, -0.15]; pose[`elbow${s}`] = 1.1;
-          S[`upperArm${s}`] = 0.35 * awake; S[`lowerArm${s}`] = 0.3 * awake; S.head = 0.2 * awake;
-          pose.neck = 0.5;
-        } else this.pressWound(pose, { armL, armR, awake, lying: true });
         if (this.stateTime > this.nextDecision) this.decideOnGround({ capL, capR, armL, armR, support });
         break;
       }
@@ -208,77 +174,33 @@ export class Brain {
   // ------------------------------------------------------------------ standing / walking
   updateStand(dt, pose, { capL, capR, armL, armR, support, awake, painF }) {
     const r = this.r, h = this.h, S = r.strength;
-    const P = this.player;
+    // Wander logic: small loops around home.
+    if (!this.target) {
+      this.idleTimer -= dt;
+      if (this.idleTimer <= 0) {
+        const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * C.wanderRadius;
+        this.target = new THREE.Vector3(this.home.x + Math.cos(a) * d, 0, this.home.z + Math.sin(a) * d);
+        const B = CONFIG.map.boundary - 2;
+        this.target.x = clamp(this.target.x, -B, B); this.target.z = clamp(this.target.z, -B, B);
+      }
+    }
+    let wantSpeed = 0;
     const limpSide = capL < capR ? 'L' : 'R';
     const limp = clamp((1 - Math.min(capL, capR)) * 1.6);
-    const pp = r.bodyPos('pelvis');
-
-    // ---- what to do: wander, run away, hands up, cover the head or back away from a blade
-    const distP = P ? Math.hypot(P.pos.x - pp.x, P.pos.z - pp.z) : Infinity;
-    const faceP = P ? Math.atan2(P.pos.x - pp.x, P.pos.z - pp.z) : this.yaw;
-    let mode = 'wander';
-    if (this.cower > 0 && awake > 0.4) mode = 'cower';
-    else if (this.aware && this.fear > 0.62 && support > 0.5 && h.pain < 80 && (this.mode === 'flee' || distP < 16)) mode = 'flee';
-    else if (this.aware && this.aimed && distP < 22) mode = 'handsUp';
-    else if (this.aware && P?.melee && distP < 2.4 && this.fear > 0.1) mode = 'backAway';
-    if (mode !== this.mode) {
-      this.mode = mode; this.modeTime = 0;
-      if (mode !== 'wander') this.target = null;
-      else { this.home.set(pp.x, 0, pp.z); this.idleTimer = rand(1, 3); }   // settle down where it ended up
-    }
-    this.modeTime += dt;
-
-    let wantSpeed = 0, run = 0, back = false, wantYaw = null;
-    if (mode === 'wander') {
-      // small loops around home
-      if (!this.target) {
-        this.idleTimer -= dt;
-        if (this.idleTimer <= 0) {
-          const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * C.wanderRadius;
-          this.target = new THREE.Vector3(this.home.x + Math.cos(a) * d, 0, this.home.z + Math.sin(a) * d);
-          const B = CONFIG.map.boundary - 2;
-          this.target.x = clamp(this.target.x, -B, B); this.target.z = clamp(this.target.z, -B, B);
-        }
+    if (this.target) {
+      const dx = this.target.x - this.root.x, dz = this.target.z - this.root.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 0.25) { this.target = null; this.idleTimer = rand(2, 5); }
+      else {
+        const want = Math.atan2(dx, dz);
+        const diff = wrapAngle(want - this.yaw);
+        this.yaw += clamp(diff, -1.6 * dt, 1.6 * dt);
+        wantSpeed = C.walkSpeed * (Math.abs(diff) < 0.7 ? 1 : 0.25) * (1 - 0.55 * limp) * (1 - 0.4 * painF) * clamp(dist / 0.5, 0.3, 1);
       }
-      if (this.target) {
-        const dx = this.target.x - this.root.x, dz = this.target.z - this.root.z;
-        const dist = Math.hypot(dx, dz);
-        if (dist < 0.25) { this.target = null; this.idleTimer = rand(2, 5); }
-        else {
-          wantYaw = Math.atan2(dx, dz);
-          wantSpeed = C.walkSpeed * (1 - 0.55 * limp) * (1 - 0.4 * painF) * clamp(dist / 0.5, 0.3, 1);
-        }
-      }
-    } else if (mode === 'flee') {
-      // run straight away from the player, sliding along the edge of the map when it gets there
-      const B = CONFIG.map.boundary - 3;
-      let ax = pp.x - P.pos.x, az = pp.z - P.pos.z;
-      const l = Math.hypot(ax, az) || 1; ax /= l; az /= l;
-      if (Math.abs(pp.x) > B && Math.sign(ax) === Math.sign(pp.x)) ax = 0;
-      if (Math.abs(pp.z) > B && Math.sign(az) === Math.sign(pp.z)) az = 0;
-      if (!ax && !az) { ax = -Math.sign(pp.x) || 1; az = -Math.sign(pp.z) * 0.4; }   // cornered: run past
-      wantYaw = Math.atan2(ax, az);
-      run = clamp(1 - limp * 1.3) * (1 - 0.5 * painF);
-      wantSpeed = lerp(C.walkSpeed, C.runSpeed, run) * (1 - 0.5 * limp);
-      // far enough away: calm down a little faster
-      if (distP > 18) this.fear = Math.max(0, this.fear - dt * 0.08);
-    } else if (mode === 'handsUp') {
-      wantYaw = faceP;
-    } else if (mode === 'backAway') {
-      wantYaw = faceP; back = true;
-      wantSpeed = 0.55 * (1 - 0.6 * limp);
     }
-    if (wantYaw !== null) {
-      const diff = wrapAngle(wantYaw - this.yaw);
-      this.yaw += clamp(diff, -(run ? 2.6 : 1.6) * dt, (run ? 2.6 : 1.6) * dt);
-      if (!back && Math.abs(diff) > 0.7) wantSpeed *= 0.25;
-    }
-
     this.walkAmt += ((wantSpeed > 0.05 ? 1 : 0) - this.walkAmt) * damp(4, dt);
-    this.run = lerp(this.run || 0, run, damp(3, dt));
-    const R = this.run;
-    const freq = 5.4 * (0.6 + 0.4 * Math.min(1, wantSpeed / C.walkSpeed)) * (1 - 0.25 * limp) * (1 + 0.45 * R);
-    this.phase += dt * freq * this.walkAmt * (back ? -1 : 1);
+    const freq = 5.4 * (0.6 + 0.4 * (wantSpeed / C.walkSpeed)) * (1 - 0.25 * limp);
+    this.phase += dt * freq * this.walkAmt;
 
     // Limp hitch: slow down while the weak leg carries the weight.
     const weakPh = limpSide === 'L' ? this.phase : this.phase + Math.PI;
@@ -287,76 +209,56 @@ export class Brain {
 
     const fwd = _v.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     if (this.stagger > 0) this.stagger -= dt;
-    this.root.addScaledVector(fwd, this.speed * dt * (back ? -1 : 1));
+    this.root.addScaledVector(fwd, this.speed * dt);
     // Keep the virtual root near the real pelvis (it can't walk through obstacles).
+    const pp = r.bodyPos('pelvis');
     const off = Math.hypot(this.root.x - pp.x, this.root.z - pp.z);
     if (off > 0.3) { this.root.x = lerp(this.root.x, pp.x, 0.08); this.root.z = lerp(this.root.z, pp.z, 0.08); }
 
-    // Gait (a jog when running away: longer strides, knees higher, arms pumping)
+    // Gait
     const w = this.walkAmt;
     for (const s of ['L', 'R']) {
       const ph = s === 'L' ? this.phase : this.phase + Math.PI;
       const weak = s === limpSide ? limp : 0;
-      const amp = 0.36 * w * (1 - 0.45 * weak) * (1 + 0.4 * R);
-      pose[`hip${s}`] = [Math.sin(ph) * amp + 0.04 + R * 0.08, 0.03];
-      pose[`knee${s}`] = 0.07 + Math.max(0, Math.cos(ph)) * 0.75 * w * (1 - 0.6 * weak) * (1 + 0.55 * R) + (s === limpSide ? 0 : limp * 0.15) + R * 0.12;
+      const amp = 0.36 * w * (1 - 0.45 * weak);
+      pose[`hip${s}`] = [Math.sin(ph) * amp + 0.04, 0.03];
+      pose[`knee${s}`] = 0.07 + Math.max(0, Math.cos(ph)) * 0.75 * w * (1 - 0.6 * weak) + (s === limpSide ? 0 : limp * 0.15);
       pose[`ankle${s}`] = -Math.max(0, Math.cos(ph)) * 0.25 * w;
       const opp = s === 'L' ? this.phase + Math.PI : this.phase;
-      pose[`shoulder${s}`] = [Math.sin(opp) * 0.32 * w * (1 + 0.9 * R) + 0.03, 0.09 + limp * 0.12];
-      pose[`elbow${s}`] = 0.2 + Math.max(0, Math.sin(opp)) * 0.3 * w + R * 1.1;
+      pose[`shoulder${s}`] = [Math.sin(opp) * 0.32 * w + 0.03, 0.09 + limp * 0.12];
+      pose[`elbow${s}`] = 0.2 + Math.max(0, Math.sin(opp)) * 0.3 * w;
     }
-    const breath = Math.sin(this.time * (1.6 + this.fear * 2.5)) * (0.015 + this.fear * 0.012);
-    pose.spine = 0.03 + painF * 0.35 + limp * 0.12 + R * 0.14;
+    const breath = Math.sin(this.time * 1.6) * 0.015;
+    pose.spine = 0.03 + painF * 0.35 + limp * 0.12;
     pose.chest = breath + painF * 0.15;
-    pose.neck = -painF * 0.2 - R * 0.1;
-    // looks at the player once it knows they are there, otherwise glances around
-    if (this.aware && (this.fear > 0.08 || distP < 7) && !R) pose.headYaw = clamp(wrapAngle(faceP - this.yaw), -1.15, 1.15);
-    else pose.headYaw = noise1(this.time * 0.35, this.seed) * 0.7 * (1 - w * 0.6);
+    pose.neck = -painF * 0.2;
+    pose.headYaw = noise1(this.time * 0.35, this.seed) * 0.7 * (1 - w * 0.6);
     pose.pelvisRoll = (limpSide === 'L' ? 1 : -1) * limp * weakStance * 0.14;
-    pose.pelvisPitch = 0.04 + limp * 0.08 + R * 0.06;
+    pose.pelvisPitch = 0.04 + limp * 0.08;
 
-    let drop = 0;
-    if (mode === 'handsUp') {
-      // surrender: both hands up, still, watching the gun; it trembles when it's scared
-      const shake = this.fear * 0.06;
-      for (const s of ['L', 'R']) {
-        if ((s === 'L' ? armL : armR) < 0.25) continue;
-        pose[`shoulder${s}`] = [2.7 + noise1(this.time * 7, this.seed + (s === 'L' ? 1 : 2)) * shake, 0.34];
-        pose[`elbow${s}`] = 1.2 + noise1(this.time * 6, this.seed + 3) * shake;
+    // Clutch the most recent wound with the other hand when it hurts.
+    if (painF > 0.35 && this.lastHitPart) {
+      const hit = this.lastHitPart;
+      const hitSide = hit.endsWith('L') ? 'L' : hit.endsWith('R') ? 'R' : null;
+      const arm = hitSide === 'L' ? 'R' : 'L';
+      if (h.armCap(arm) > 0.3 && !hit.startsWith(`upperArm${arm}`) && !hit.startsWith(`lowerArm${arm}`)) {
+        const low = /thigh|shin|foot|pelvis/.test(hit);
+        pose[`shoulder${arm}`] = [low ? 0.35 : 0.75, -0.28];
+        pose[`elbow${arm}`] = low ? 0.6 : 1.85;
       }
-      pose.neck = 0.08;
-    } else if (mode === 'cower') {
-      // flinch: duck and cover the head with both arms
-      drop = 0.17;
-      for (const s of ['L', 'R']) {
-        pose[`hip${s}`] = [0.62, 0.08]; pose[`knee${s}`] = 1.05; pose[`ankle${s}`] = 0.3;
-        if ((s === 'L' ? armL : armR) < 0.25) continue;
-        pose[`shoulder${s}`] = [2.45, -0.32]; pose[`elbow${s}`] = 2.25;
-      }
-      pose.spine = 0.38; pose.chest = 0.15; pose.neck = 0.5; pose.headYaw = 0;
-    } else if (mode === 'backAway') {
-      // hands up in a guard while stepping back
-      for (const s of ['L', 'R']) {
-        if ((s === 'L' ? armL : armR) < 0.25) continue;
-        pose[`shoulder${s}`] = [1.3, -0.14]; pose[`elbow${s}`] = 1.95;
-      }
-      pose.spine = 0.08; pose.neck = -0.05;
-    } else {
-      // hold the worst bleeding wound with the other hand
-      this.pressWound(pose, { armL, armR, awake, lying: false });
     }
 
-    const height = C.standHeight - limp * weakStance * 0.075 - painF * 0.03 - Math.abs(Math.cos(this.phase)) * 0.015 * w - R * 0.035 - drop;
+    const height = C.standHeight - limp * weakStance * 0.075 - painF * 0.03 - Math.abs(Math.cos(this.phase)) * 0.015 * w;
     r.pelvisTarget.set(this.root.x, height, this.root.z);
-    r.pelvisTargetVel.copy(fwd).multiplyScalar(this.speed * (back ? -1 : 1));
+    r.pelvisTargetVel.copy(fwd).multiplyScalar(this.speed);
 
     // Foot targets: where each foot should be for this point of the gait cycle.
     const side = _v2.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw)); // ragdoll's left (+X when yaw = 0)
     for (const s of ['L', 'R']) {
       const ph = s === 'L' ? this.phase : this.phase + Math.PI;
-      const hip = pose[`hip${s}`][0] - R * 0.08;
+      const hip = pose[`hip${s}`][0];
       const reach = Math.sin(hip) * 0.86 + 0.045;                      // forward offset from the hip
-      const lift = Math.max(0, Math.cos(ph)) * 0.09 * w * (s === limpSide ? 1 - 0.5 * limp : 1) * (1 + R);
+      const lift = Math.max(0, Math.cos(ph)) * 0.09 * w * (s === limpSide ? 1 - 0.5 * limp : 1);
       const sx = s === 'L' ? 0.095 : -0.095;
       r.footTarget[s].set(
         this.root.x + fwd.x * reach + side.x * sx,
@@ -364,7 +266,7 @@ export class Brain {
         this.root.z + fwd.z * reach + side.z * sx
       );
     }
-    r.footPosStrength = mode === 'cower' ? 0 : 0.7 * w;
+    r.footPosStrength = 0.7 * w;
 
     const staggerMul = this.stagger > 0 ? 0.65 : 1;
     const sup = clamp((support - 0.25) / 0.6) * awake;
@@ -377,59 +279,7 @@ export class Brain {
       S[`thigh${s}`] = 0.85 * lc * awake; S[`shin${s}`] = 0.8 * lc * awake; S[`foot${s}`] = 0.6 * lc * awake;
       S[`upperArm${s}`] = 0.65 * ac * awake; S[`lowerArm${s}`] = 0.5 * ac * awake; S[`hand${s}`] = 0.35 * ac * awake;
     }
-    this.activity = mode === 'flee' ? (limp > 0.15 ? 'Limping away' : 'Running away')
-      : mode === 'handsUp' ? 'Hands up' : mode === 'cower' ? 'Covering its head' : mode === 'backAway' ? 'Backing away'
-      : h.pressing ? 'Holding its wound' : !this.target ? (limp > 0.15 ? 'Standing (hurt)' : 'Idle') : limp > 0.15 ? 'Limping' : 'Wandering';
-  }
-
-  /** Awareness: where the player is, whether a weapon is pointed at it, and how scared it is. */
-  sense(dt, pp, awake, painF) {
-    const P = this.player, h = this.h;
-    this.cower = Math.max(0, this.cower - dt);
-    this.aware = false; this.aimed = false;
-    if (!h.alive || awake < 0.25) { this.fear = Math.max(0, this.fear - dt * 0.05); return; }
-    if (P) {
-      const d = Math.hypot(P.pos.x - pp.x, P.pos.z - pp.z);
-      this.aware = d < 40;
-      this.aimed = !!P.armed && P.aimedAt === this.r && d < 30;
-      if (this.aimed) { this.aimedTime += dt; this.scare(dt * (d < 8 ? 0.1 : 0.04) * (this.aimedTime > 5 ? 1.8 : 1)); }
-      else this.aimedTime = Math.max(0, this.aimedTime - dt);
-      if (P.melee && d < 2.5) this.scare(dt * 0.1);
-    }
-    // pain and heavy bleeding keep it scared; otherwise it calms down slowly
-    const floor = (painF * 0.5 + (h.bleedRate > 2 ? 0.12 : 0)) * Math.min(1, this.fearMul);
-    if (this.fear > floor) this.fear = Math.max(floor, this.fear - dt * 0.035);
-  }
-
-  /**
-   * Press a hand on the worst bleeding wound it can reach (slows that wound down, see Health).
-   * Returns the wound, or null.
-   */
-  pressWound(pose, { armL, armR, awake, lying }) {
-    const h = this.h, S = this.r.strength;
-    if (awake < 0.35) return null;
-    let best = null;
-    for (const w of h.wounds) {
-      if (w.stump || w.rate < 0.6 || !h.parts[w.part]?.attached || /hand/.test(w.part)) continue;
-      if (!lying && /shin|foot/.test(w.part)) continue;   // can't reach that far down standing up
-      if (!best || w.rate > best.rate) best = w;
-    }
-    if (!best) return null;
-    const side = best.part.endsWith('L') ? 'L' : best.part.endsWith('R') ? 'R' : null;
-    const arm = side === 'L' ? 'R' : side === 'R' ? 'L' : (armR >= armL ? 'R' : 'L');
-    if ((arm === 'L' ? armL : armR) < 0.3) return null;
-    const low = /thigh|shin|foot|pelvis/.test(best.part), mid = best.part === 'abdomen', head = best.part === 'head';
-    if (lying) {
-      pose[`shoulder${arm}`] = [low ? 0.3 : head ? 2.3 : mid ? 0.45 : 0.65, -0.4];
-      pose[`elbow${arm}`] = low ? 0.35 : head ? 2.2 : mid ? 1.3 : 1.7;
-      S[`upperArm${arm}`] = Math.max(S[`upperArm${arm}`] || 0, 0.3 * awake);
-      S[`lowerArm${arm}`] = Math.max(S[`lowerArm${arm}`] || 0, 0.25 * awake);
-    } else {
-      pose[`shoulder${arm}`] = [low ? 0.35 : mid ? 0.55 : head ? 2.3 : 0.75, -0.28];
-      pose[`elbow${arm}`] = low ? 0.6 : head ? 2.2 : mid ? 1.5 : 1.85;
-    }
-    h.pressing = best;
-    return best;
+    this.activity = !this.target ? (limp > 0.15 ? 'Standing (hurt)' : 'Idle') : limp > 0.15 ? 'Limping' : 'Wandering';
   }
 
   decideOnGround({ capL, capR, armL, armR, support }) {
@@ -437,7 +287,6 @@ export class Brain {
     const canStand = support > 0.55 && h.pain < 65 && h.consciousness > 62 && !h.paralyzed;
     if (canStand) { this.startGetup(); return; }
     const armsOk = Math.max(armL, armR) > 0.3;
-    if (armsOk && this.fear > 0.6 && h.pain < 85 && Math.random() < 0.7) { this.setState('crawl'); this.crawlYaw = this.r.heading(); this.nextDecision = rand(5, 9); return; }
     if (h.pain > 45 && Math.random() < 0.75) { this.setState('squirm'); this.nextDecision = rand(2.5, 5); return; }
     if (armsOk) { this.setState('crawl'); this.crawlYaw = this.r.heading(); this.nextDecision = rand(4, 8); return; }
     this.setState('squirm'); this.nextDecision = rand(3, 6);
@@ -482,11 +331,7 @@ export class Brain {
     // Crawl head-first; steer slowly away from where the shots came from.
     const heading = r.heading();
     this.crawlYaw = heading;
-    // away from the player if it knows where they are, otherwise away from where the shots came from
-    const P = this.player;
-    const cp0 = r.bodyPos('chest', _v2);
-    const away = P && this.aware ? Math.atan2(cp0.x - P.pos.x, cp0.z - P.pos.z) : Math.atan2(this.lastHitDir.x, this.lastHitDir.z);
-    this.activity = P && this.aware && this.fear > 0.3 ? 'Crawling away' : 'Crawling';
+    const away = Math.atan2(this.lastHitDir.x, this.lastHitDir.z);
     const steer = clamp(wrapAngle(away - heading), -1, 1) * 0.6 * awake;
     for (const n of ['chest', 'abdomen', 'pelvis']) r.parts[n].body.angularVelocity.y += (steer - r.parts[n].body.angularVelocity.y) * 0.1;
     const armPower = Math.max(armL, armR);
@@ -539,8 +384,6 @@ export class Brain {
     const st = (0.18 + 0.4 * painF) * awake;
     for (const name in r.parts) S[name] = st * h.partCap(name);
     S.pelvis = 0;
-    // between the thrashing, hold the worst wound
-    if (noise1(t * 0.3, sd + 40) > -0.2) this.pressWound(pose, { armL, armR, awake, lying: true });
     // Occasional roll / thrash
     if (Math.random() < dt * (0.4 + painF)) {
       const axis = Y.clone().applyQuaternion(r.bodyQuat('chest', _q)).multiplyScalar((Math.random() - 0.5) * 6 * st);

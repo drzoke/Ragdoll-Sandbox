@@ -26,16 +26,22 @@ const INFO = {
 };
 const CATEGORIES = [['all', 'All'], ['weapons', 'Weapons'], ['medical', 'Medical'], ['tools', 'Tools']];
 
+export const BAR_SIZE = 9;
+
 /**
- * Inventory of tools ("toolbox"): hotbar at the bottom, Tab opens the full toolbox (a square
- * window with a scrolling item grid and categories on the right). Number keys, Q or the mouse
- * wheel switch tools. Also handles the holster → draw animation and the controls panel.
+ * Inventory of tools ("toolbox"). You start with only your fists on the hotbar; Tab opens the
+ * full toolbox (a square window with a scrolling item grid and categories on the right), where
+ * you pick an item and press Equip to put it on the bar (up to 9 items) and take it out, or
+ * Remove it from the bar again. Number keys 1–9, Q or the mouse wheel switch between the items
+ * on the bar. Also handles the holster → draw animation and the controls panel.
  */
 export class Toolbox {
   constructor(tools, { audio, onOpenChange, start = 0 }) {
     this.tools = tools;
     this.audio = audio;
     this.index = start;
+    this.bar = [start];          // tool indices on the hotbar, in slot order (at most BAR_SIZE)
+    this.picked = start;         // item shown in the toolbox's info panel (with Equip / Remove)
     this.pending = -1;
     this.isOpen = false;
     this.onOpenChange = onOpenChange;
@@ -48,9 +54,8 @@ export class Toolbox {
 
     this.el = { hotbar: $('hotbar'), box: $('toolbox'), grid: $('toolbox-grid'), cats: $('toolbox-cats'), info: $('tb-info'),
       controls: $('controls'), ctlList: $('controls-list'), ctlTitle: $('controls-title') };
-    this.el.hotbar.innerHTML = tools.map((t, i) => `<div class="slot" data-i="${i}"><span class="key">${i + 1}</span>${ICONS[t.name] || ''}<span class="nm">${t.short || t.name}</span></div>`).join('');
     this.el.grid.innerHTML = tools.map((t, i) => `<button class="tool-card" data-i="${i}" data-cat="${INFO[t.name]?.category || 'tools'}">
-        <span class="key">${i + 1}</span>
+        <span class="key"></span>
         <div class="pv"><canvas width="240" height="180"></canvas><div class="icon">${ICONS[t.name] || ''}</div></div>
         <b>${t.name}</b><small>${INFO[t.name]?.type || ''}</small></button>`).join('');
     this.cards = [...this.el.grid.querySelectorAll('.tool-card')].map((el) => ({ el, i: Number(el.dataset.i), ctx: el.querySelector('canvas').getContext('2d') }));
@@ -59,11 +64,22 @@ export class Toolbox {
     this.el.grid.addEventListener('click', (e) => {
       const card = e.target.closest('.tool-card');
       if (!card) return;
-      this.select(Number(card.dataset.i));
-      this.close();
+      const i = Number(card.dataset.i);
+      // first click picks the item (its info and the Equip button show below); clicking the picked
+      // item again (or double clicking) equips it
+      if (this.picked === i && e.detail !== 1) return;
+      if (this.picked === i) { this.equip(i); return; }
+      this.pick(i);
     });
-    this.el.grid.addEventListener('mouseover', (e) => { const c = e.target.closest('.tool-card'); if (c) { this.hover = Number(c.dataset.i); this.renderInfo(); } });
-    this.el.grid.addEventListener('mouseleave', () => { this.hover = -1; this.renderInfo(); });
+    this.el.grid.addEventListener('dblclick', (e) => { const c = e.target.closest('.tool-card'); if (c) this.equip(Number(c.dataset.i)); });
+    this.el.grid.addEventListener('mouseover', (e) => { const c = e.target.closest('.tool-card'); if (c) this.hover = Number(c.dataset.i); });
+    this.el.grid.addEventListener('mouseleave', () => { this.hover = -1; });
+    this.el.info.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-act]');
+      if (!b) return;
+      if (b.dataset.act === 'equip') this.equip(this.picked);
+      else if (b.dataset.act === 'remove') this.unequip(this.picked);
+    });
     this.el.cats.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) this.setCategory(b.dataset.cat); });
 
     this.controlsKey = '';
@@ -90,8 +106,48 @@ export class Toolbox {
     this.preview?.setQuality(level);
   }
 
-  select(i) {
+  pick(i) {
     if (i < 0 || i >= this.tools.length) return;
+    this.picked = i;
+    this.audio.play('click');
+    this.renderHotbar();
+  }
+
+  /** Put an item on the bar (if it isn't there yet) and switch to it. A full bar swaps out the
+   *  item in your hands. */
+  equip(i) {
+    if (i < 0 || i >= this.tools.length) return;
+    if (!this.bar.includes(i)) {
+      if (this.bar.length < BAR_SIZE) this.bar.push(i);
+      else this.bar[Math.max(0, this.bar.indexOf(this.index))] = i;
+    }
+    this.picked = i;
+    this.select(i, true);
+    this.close();
+  }
+
+  /** Take an item off the bar (the last item always stays). */
+  unequip(i) {
+    const at = this.bar.indexOf(i);
+    if (at < 0 || this.bar.length <= 1) return;
+    this.bar.splice(at, 1);
+    this.audio.play('click');
+    if (this.index === i || this.pending === i) this.select(this.bar[Math.min(at, this.bar.length - 1)], true);
+    else this.renderHotbar();
+  }
+
+  /** Switch to the item in bar slot n (0-based). */
+  slot(n) { if (n < this.bar.length) this.select(this.bar[n]); }
+
+  /** Next / previous item on the bar. */
+  cycle(step) {
+    const at = Math.max(0, this.bar.indexOf(this.pending >= 0 ? this.pending : this.index));
+    this.select(this.bar[(at + step + this.bar.length) % this.bar.length]);
+  }
+
+  select(i, force = false) {
+    if (i < 0 || i >= this.tools.length) return;
+    if (!force && !this.bar.includes(i)) return;
     if (i === this.index && this.pending < 0) return;
     this.pending = i;
     this.audio.play('equip');
@@ -101,6 +157,7 @@ export class Toolbox {
   open() {
     if (this.isOpen) return;
     this.isOpen = true;
+    this.picked = this.pending >= 0 ? this.pending : this.index;
     if (this.quality !== 'low' && !this.preview) { this.preview = new ItemPreview(); this.preview.setQuality(this.quality); }
     this.el.box.classList.remove('hidden');
     this.renderInfo();
@@ -113,29 +170,40 @@ export class Toolbox {
 
   renderHotbar() {
     const sel = this.pending >= 0 ? this.pending : this.index;
-    this.el.hotbar.querySelectorAll('.slot').forEach((s, i) => s.classList.toggle('active', i === sel));
-    for (const c of this.cards) c.el.classList.toggle('active', c.i === sel);
+    const key = this.bar.join(',');
+    if (key !== this.barKey) {
+      this.barKey = key;
+      this.el.hotbar.innerHTML = this.bar.map((i, n) => { const t = this.tools[i]; return `<div class="slot" data-i="${i}"><span class="key">${n + 1}</span>${ICONS[t.name] || ''}<span class="nm">${t.short || t.name}</span></div>`; }).join('');
+      for (const c of this.cards) { const n = this.bar.indexOf(c.i); c.el.querySelector('.key').textContent = n >= 0 ? n + 1 : ''; c.el.classList.toggle('onbar', n >= 0); }
+    }
+    this.el.hotbar.querySelectorAll('.slot').forEach((s) => s.classList.toggle('active', Number(s.dataset.i) === sel));
+    for (const c of this.cards) { c.el.classList.toggle('active', c.i === sel); c.el.classList.toggle('picked', c.i === this.picked); }
     this.renderInfo();
   }
 
   renderInfo() {
-    const i = this.hover >= 0 ? this.hover : (this.pending >= 0 ? this.pending : this.index);
-    const t = this.tools[i], info = INFO[t.name] || {};
-    const equipped = i === this.index && this.pending < 0;
-    this.el.info.innerHTML = `<b>${t.name}</b><span class="tag">${info.type || ''}</span>${equipped ? '<span class="tag on">Equipped</span>' : ''}<p>${info.text || ''}</p>`;
+    const i = this.picked, t = this.tools[i], info = INFO[t.name] || {};
+    const inHand = i === (this.pending >= 0 ? this.pending : this.index);
+    const slot = this.bar.indexOf(i);
+    const full = slot < 0 && this.bar.length >= BAR_SIZE;
+    const tags = (inHand ? '<span class="tag on">In your hands</span>' : '') + (slot >= 0 ? `<span class="tag">Slot ${slot + 1}</span>` : '');
+    const equipLabel = slot >= 0 ? (inHand ? 'Equipped' : 'Hold it') : 'Equip';
+    const btns = `<div class="tb-acts">${slot >= 0 && this.bar.length > 1 ? '<button data-act="remove" class="ghost">Remove from bar</button>' : ''}<button data-act="equip" ${inHand ? 'disabled' : ''}>${equipLabel}</button></div>`;
+    const note = full ? `<p class="full">Your bar is full (${BAR_SIZE} items): equipping swaps out the item in your hands.</p>` : '';
+    this.el.info.innerHTML = `${btns}<b>${t.name}</b><span class="tag">${info.type || ''}</span>${tags}<p>${info.text || ''}</p>${note}`;
   }
 
   update(dt, input, playing, worldDt) {
     this.time += dt;
     if (playing && !this.isOpen) {
-      for (let i = 0; i < this.tools.length; i++) if (input.wasPressed(`Digit${i + 1}`)) this.select(i);
-      if (input.wasPressed('KeyQ')) this.select((this.index + 1) % this.tools.length);
+      for (let n = 0; n < BAR_SIZE; n++) if (input.wasPressed(`Digit${n + 1}`)) this.slot(n);
+      if (input.wasPressed('KeyQ')) this.cycle(1);
       // the wheel switches tools unless the grab tool is using it to move what it holds
-      if (input.wheel && !this.active.held) this.select((this.index + (input.wheel > 0 ? 1 : this.tools.length - 1)) % this.tools.length);
+      if (input.wheel && !this.active.held) this.cycle(input.wheel > 0 ? 1 : -1);
       if (input.wasPressed('KeyH')) settings.set('showControls', !settings.get('showControls'));
     }
     if (this.isOpen) {
-      for (let i = 0; i < this.tools.length; i++) if (input.wasPressed(`Digit${i + 1}`)) { this.select(i); this.close(); }
+      if (input.wasPressed('Enter')) this.equip(this.picked);
       if (this.preview && this.quality !== 'low') {
         for (const c of this.cards) if (!c.el.classList.contains('hidden')) this.preview.draw(this.tools[c.i].name, c.ctx, this.time + c.i * 1.3, c.i === this.hover);
       }
@@ -161,7 +229,7 @@ export class Toolbox {
 
   renderControls() {
     const t = this.active;
-    const rows = [...t.controls.filter(([k]) => k), [`1–${this.tools.length} or Q`, 'Switch item'], ['Tab', 'Open toolbox'], ['B', 'Spawn menu'], ['Z', 'Slow down time'], ['V', 'Speed up time'], ['X', 'X-ray (again: 3D / Flat, again: close)'], ['H', 'Hide this list']];
+    const rows = [...t.controls.filter(([k]) => k), [this.bar.length > 1 ? `1–${this.bar.length} or Q` : '1–9 or Q', 'Switch item'], ['Tab', 'Toolbox (equip items)'], ['B', 'Spawn menu'], ['Z', 'Slow down time'], ['V', 'Speed up time'], ['X', 'X-ray (again: 3D / Flat, again: close)'], ['H', 'Hide this list']];
     const key = t.name + JSON.stringify(rows);
     if (key === this.controlsKey) return;
     this.controlsKey = key;

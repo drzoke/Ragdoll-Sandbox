@@ -116,7 +116,6 @@ export class SpawnMenu {
       for (let j = 0; j < 12 && !this.free(p.x, p.z, 0.35); j++) p.addScaledVector(toward, 0.35);
       const yaw = Math.atan2(eye.x - p.x, eye.z - p.z) + (Math.random() - 0.5) * 0.3;
       const r = this.ragdolls.spawn([p.x, 0, p.z], yaw, { armor: { helmet: o.helmet, vest: o.vest } });
-      r.brain.fearMul = TEMPER[o.temper] || 1;
       spawned.push(r);
     }
     this.audio.play('button');

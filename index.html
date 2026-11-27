@@ -39,7 +39,7 @@
     var tips = ['Press X to open the X-ray panel. It shows the bones, organs, blood and oxygen of the ragdoll you look at.',
       'Grab a ragdoll and swing it into the floor or a wall to break its bones.',
       'Press Z to slow time down and V to speed it up.',
-      'Press Tab to open the toolbox. Press 1 to 8 to switch items.',
+      'You start with your fists. Press Tab to open the toolbox and equip more items (up to 9 on your bar).',
       'Throw a grenade with left click, or lob it underhand with right click. It goes off after 3 seconds.',
       'Shoot the ragdoll with the shotgun while it stands by a wall and the blood ends up on the wall too.',
       'Punch the ragdoll with your fists to leave bruises. A hook to the head can knock it out.',
@@ -86,11 +86,11 @@
 <div id="vignette"></div>
 <!-- Alpha: one step per full update (feature batch). Patch: small fixes shipped on that version
      (back to 0 when the Alpha number goes up). -->
-<div id="version">Alpha 0.8<small>Patch 0</small></div>
+<div id="version">Alpha 0.9<small>Patch 0</small></div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
-    <header><h2>Toolbox</h2><span class="desk-only">Click an item to equip it · Tab or Esc to close</span><span class="touch-only">Tap an item to equip it</span><button id="tb-close" aria-label="Close">✕</button></header>
+    <header><h2>Toolbox</h2><span class="desk-only">Pick an item, then Equip (or double click) to put it on your bar · Tab or Esc to close</span><span class="touch-only">Tap an item, then Equip</span><button id="tb-close" aria-label="Close">✕</button></header>
     <div class="tb-body">
       <div id="toolbox-grid"></div>
       <nav id="toolbox-cats"></nav>
@@ -121,7 +121,7 @@
   <div class="m-side">
     <div class="m-brand">
       <div class="m-logo"><span>RAGDOLL</span><b>SANDBOX</b></div>
-      <div class="m-ver">Alpha 0.8 · physics and gore sandbox</div>
+      <div class="m-ver">Alpha 0.9 · physics and gore sandbox</div>
       <div class="m-paused">Paused</div>
     </div>
     <nav class="m-nav">
@@ -185,7 +185,7 @@
         <tr><td>Shift</td><td>Sprint</td></tr>
         <tr><td>Space</td><td>Jump</td></tr>
         <tr><td>C / Ctrl</td><td>Crouch (hold)</td></tr>
-        <tr><td>1 – 8 or Q</td><td>Switch item (Fists, M1911, Shotgun, Grenade, Grab, Machete, Medkit, Defibrillator)</td></tr>
+        <tr><td>1 – 9 or Q</td><td>Switch between the items on your bar (you start with fists; equip more in the toolbox)</td></tr>
         <tr><td>Mouse wheel</td><td>Switch item (or move what you're holding with Grab)</td></tr>
         <tr><td>Left / right click</td><td>Use the item (fire, punch, slash, stab, throw, grab, treat, shock)</td></tr>
         <tr><td>R</td><td>Reload</td></tr>
@@ -205,22 +205,76 @@
 
     <section class="tab hidden" id="tab-news">
       <div class="news">
+        <p class="news-intro">Every update since the first draft. A new Alpha number is a big update; patches are smaller fixes on that version.</p>
+        <h3>Alpha 0.9 <span class="cur">current</span></h3>
+        <ul>
+          <li><b>Equip from the toolbox.</b> You start with only your fists. Open the toolbox (Tab), pick an item and press <b>Equip</b> (or double click it) to put it on your bar. The bar holds up to 9 items, numbered 1 to 9; <b>Remove from bar</b> takes one off again. With a full bar, equipping swaps out the item in your hands.</li>
+          <li><b>Ragdolls are back to how they were.</b> They no longer notice you: no hands up, ducking, running or crawling away from you. They wander, limp, fall, get back up, crawl and writhe like before 0.8. The temperament option is gone from the spawn menu.</li>
+          <li><b>What's new</b> now lists every update and patch.</li>
+        </ul>
         <h3>Alpha 0.8</h3>
         <ul>
           <li><b>Machete.</b> Slash for long, deep cuts that bleed hard and get deeper on the same spot: enough of them chop through an arm, a leg or the neck. Cuts across the wrist, the back of the ankle or the back of the thigh sever tendons. Right click stabs deep into the organs.</li>
           <li><b>Medkit.</b> Hold left click on a body part to bandage its wounds, put a tourniquet above a stump, splint a broken bone or dress a burn. Right click gives morphine, R hangs a blood bag.</li>
           <li><b>Defibrillator.</b> Hold to charge, let go on the chest. It can restart a heart that has stopped, as long as the heart and enough blood are left. Shocking a beating heart can stop it.</li>
           <li><b>Spawn menu (B).</b> Spawn up to 12 ragdolls where you look, in a row, with a helmet and a vest. Armour stops pistol rounds, pellets and shrapnel until it wears out, but the hit still bruises and cracks ribs.</li>
-          <li><b>Smarter ragdolls.</b> They put their hands up when you aim at them, duck and cover their heads at gunshots and explosions, run or crawl away from you when they are scared, back away from a blade, and press a hand on their worst wound to slow the bleeding. You can make them brave or timid in the spawn menu.</li>
-          <li><b>New menus.</b> This title screen, and a pause menu with Resume and Main menu.</li>
+          <li><b>Smarter ragdolls</b> (taken out again in 0.9). They put their hands up when aimed at, ducked at gunshots, ran or crawled away and pressed a hand on their wounds.</li>
+          <li><b>New menus.</b> This title screen with a slow camera around a badly hurt ragdoll, side panels for Settings, Controls and What's new, and a pause menu with Resume and Main menu.</li>
         </ul>
         <h3>Alpha 0.7</h3>
         <ul>
-          <li>Phone and tablet version with touch controls and four layouts, played sideways in full screen.</li>
-          <li>Grenade throw arc, a bigger explosion, compact x-ray, a hardware check that picks the graphics, and fixes for Mac mouse lock.</li>
+          <li><b>Phones and tablets.</b> Touch controls with a move stick, drag to look and buttons for each item, played sideways in full screen. Four layouts (Optimal, Classic, Left-handed and your own, made by dragging the buttons), sensitivity and button size settings, and Add to Home Screen as an app.</li>
+          <li>The game detects phones and tablets by itself (Touch controls: Auto, On or Off in Settings).</li>
+          <li>Fix: aiming down sights with the pistol now slows your movement and look like it should.</li>
+          <li><span class="patch">Patch 1</span> Grenades thrown at the floor stay where they land instead of sliding away; the throw gets softer the further down you look.</li>
+          <li><span class="patch">Patch 2</span> Hold the throw button to aim the grenade: a dotted arc, a landing ring and a danger circle. A bigger, more realistic explosion with a white-hot core, a larger fireball and a rising smoke column. The patch number now shows under the version.</li>
+          <li><span class="patch">Patch 3</span> Touch controls no longer turn on by mistake on computers. The X-ray is a compact panel in the top-right corner, and X switches between 3D and Flat. Loading checks your graphics card and processor and recommends a graphics preset.</li>
+          <li><span class="patch">Patch 4</span> Mac fixes: the mouse locks reliably, the graphics recommendation is more careful with Retina screens and laptop chips, and the game lowers the graphics by itself if it runs under 40 FPS.</li>
+          <li><span class="patch">Patch 5</span> The game always loads the newest version after an update. On a Mac it plays in the window with the mouse locked.</li>
         </ul>
         <h3>Alpha 0.6</h3>
-        <ul><li>Grenade shrapnel, burns, blast dismemberment and point-blank shotgun wounds.</li></ul>
+        <ul>
+          <li><b>Grenade shrapnel.</b> About 50 real fragments that wound organs, cut arteries and break bones, plus extra ones aimed at nearby body parts.</li>
+          <li><b>Stronger blasts.</b> Up close a blast can blow apart hands, feet, limbs and the head, and tear off arms and legs a bit further out. It also ruptures eardrums and concusses.</li>
+          <li><b>Burns.</b> First, second and third degree burns on the side facing the fireball, with glowing embers and smoke, pain, shock and fluid loss.</li>
+          <li><b>Shotgun.</b> Pellets lose power with distance, and at point blank several pellets on one part make one massive wound.</li>
+        </ul>
+        <h3>Alpha 0.5</h3>
+        <ul>
+          <li><b>Hands.</b> Blocky hands hold every item and follow every animation: magazine swaps, racking the slide, pumping, loading shells and pulling the pin.</li>
+          <li><b>Fists.</b> Quick jabs and a hard hook that bruise, stagger, knock down or knock out, and can give a bloody nose.</li>
+          <li><b>Remington 870 shotgun.</b> 8 pellets per shot, an automatic pump with flying shells, and loading one shell at a time.</li>
+          <li><b>Grenades and explosions.</b> Throw or lob, a 3 second fuse, and an explosion with fire, smoke, shrapnel, knockback and scorch marks.</li>
+          <li><b>Blood on walls</b> that runs down, <b>bruises</b> that darken over time, and a <b>Flat X-ray</b> view.</li>
+          <li><span class="patch">Patch 1</span> Bruises are purple instead of pink and darken faster.</li>
+          <li><span class="patch">Patch 2</span> The version label in the bottom-right corner.</li>
+        </ul>
+        <h3>Alpha 0.4</h3>
+        <ul>
+          <li>Switching items plays a draw animation: the item comes up from below, overshoots a little and settles.</li>
+          <li>A bigger base and claws on the grab tool.</li>
+        </ul>
+        <h3>Alpha 0.3</h3>
+        <ul>
+          <li><b>New toolbox.</b> A square window with categories and spinning 3D previews of every item.</li>
+          <li><b>Very High graphics</b> with floor reflections, plus more material detail (grime, wear) on higher presets.</li>
+          <li>The grab tool glows and outlines what you hold. Slow motion goes down to 0.01×.</li>
+        </ul>
+        <h3>Alpha 0.2</h3>
+        <ul>
+          <li><b>Grab tool.</b> Pick up ragdolls and body parts from a distance, swing them around, throw them and slam them into things to break bones.</li>
+          <li><b>Exploding body parts.</b> Keep shooting a destroyed part and it bursts.</li>
+          <li><b>Real bullets</b> that travel with tracers, so you can watch them fly in slow motion.</li>
+          <li><b>Time controls.</b> Z slows time down, V speeds it up.</li>
+          <li><b>Hotbar and toolbox</b>, a loading screen, and Settings with Low, Medium and High graphics and gore options.</li>
+        </ul>
+        <h3>Alpha 0.1</h3>
+        <ul>
+          <li><b>The first draft.</b> Physics ragdolls with muscles that stand, walk, limp, fall and get back up, the M1911 pistol, wounds traced through bones, organs and arteries, blood loss and shock, gore, and the X-ray vitals panel.</li>
+          <li><span class="patch">Patch 1</span> Crouch moved to C (Ctrl+W closed the tab), and the browser asks before you leave mid-game.</li>
+          <li><span class="patch">Patch 2</span> Full screen with keyboard lock, so Ctrl and Ctrl+W reach the game.</li>
+        </ul>
+        <p class="news-intro">The version label first appeared in Alpha 0.5; the numbers before it were given afterwards.</p>
       </div>
     </section>
     </div>
@@ -252,8 +306,6 @@
         <h3>Armour</h3>
         <div class="chips"><button data-opt="helmet">Helmet</button><button data-opt="vest">Vest</button></div>
         <p class="note">Armour stops pistol rounds, shotgun pellets and shrapnel until it wears out. The body behind it still takes the blow.</p>
-        <h3>Temperament</h3>
-        <div class="seg"><button data-opt="temper" data-v="brave">Brave</button><button data-opt="temper" data-v="normal">Normal</button><button data-opt="temper" data-v="timid">Timid</button></div>
         <h3>Where</h3>
         <div class="seg"><button data-opt="where" data-v="look">Where I look</button><button data-opt="where" data-v="front">In front of me</button><button data-opt="where" data-v="spawn">Spawn point</button></div>
         <button id="sm-spawn" class="sm-go">Spawn ragdoll</button>

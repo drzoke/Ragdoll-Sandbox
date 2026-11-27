@@ -26,10 +26,10 @@ python3 -m http.server 8000      # or: npx serve .
 | Shift | Sprint |
 | Space | Jump |
 | C (hold) | Crouch (Ctrl also works in fullscreen on Chrome/Edge) |
-| 1 – 8 or Q | Switch item (Fists, M1911, Remington 870, Grenade, Grab, Machete, Medkit, Defibrillator) |
+| 1 – 9 or Q | Switch between the items on your bar (you start with Fists; equip more in the toolbox) |
 | Mouse wheel | Switch item (with Grab: move what you're holding closer or farther) |
-| Tab | Open the toolbox |
-| B | Spawn menu (ragdolls, armour, temperament) |
+| Tab | Open the toolbox (pick an item, then Equip to put it on your bar) |
+| B | Spawn menu (ragdolls and armour) |
 | Z | Slow time down (down to 0.01×) |
 | V | Speed time up (up to 3×) |
 | E | Press the button you're looking at |
@@ -60,13 +60,13 @@ You see your own blocky, Roblox-style hands holding every item. They follow the 
 
 **Defibrillator:** hold left click to charge, let go with the paddles on the chest to shock. A stopped heart can restart if the heart is still there and there is enough blood (give a blood bag first after heavy bleeding); each extra shock raises the chance. Shocking a beating heart can stop it. The shock arcs, flashes and makes the whole body jerk.
 
-**Spawn menu (B):** spawn 1, 2, 3, 5 or 8 ragdolls (up to 12 at once) where you look, in front of you or at the spawn point, with a helmet and/or a vest, and pick a temperament (Brave, Normal, Timid). It can also remove every ragdoll and clean up blood. Armour stops pistol rounds, shotgun pellets and shrapnel until it wears out (dents and sparks), but the body behind it still takes the blow: a helmet hit dazes, a vest hit bruises and can crack a rib. Vests and helmets also soften blasts.
+**Spawn menu (B):** spawn 1, 2, 3, 5 or 8 ragdolls (up to 12 at once) where you look, in front of you or at the spawn point, with a helmet and/or a vest. It can also remove every ragdoll and clean up blood. Armour stops pistol rounds, shotgun pellets and shrapnel until it wears out (dents and sparks), but the body behind it still takes the blow: a helmet hit dazes, a vest hit bruises and can crack a rib. Vests and helmets also soften blasts.
 
 **Menus:** the game opens on a title screen with a slow cinematic camera around a dead, badly hurt ragdoll slumped against a wall, with Play, Settings, Controls and What's new. Esc opens the pause menu, which adds Resume and Main menu.
 
 Switching items plays a draw animation: the tool comes up from below, rises a little past its resting spot, then settles.
 
-**Toolbox (Tab):** a square window listing every item in a scrolling grid, with categories on the right (All, Weapons, Tools, Medical; Fists, M1911, Remington 870, Grenade and Machete are weapons, Grab is a tool, Medkit and Defibrillator are medical). Click an item, or press its number, to equip it. Item previews follow the graphics preset: a picture on Low, a spinning 3D model on Medium, and a spinning model with its own effects (the pistol cycles and flashes, the grab tool pulses) on High and Very High, plus a glossy reflection on Very High.
+**Toolbox (Tab):** you start with only your fists on the bar. The toolbox is a square window listing every item in a scrolling grid, with categories on the right (All, Weapons, Medical, Tools). Click an item to see what it does, then press **Equip** (or double click it, or press Enter) to put it on your bar and take it out. The bar holds up to 9 items, numbered 1 to 9 in the order you equipped them; **Remove from bar** takes one off again, and with a full bar, equipping swaps out the item in your hands. Item previews follow the graphics preset: a picture on Low, a spinning 3D model on Medium, and a spinning model with its own effects (the pistol cycles and flashes, the grab tool pulses) on High and Very High, plus a glossy reflection on Very High.
 
 There are two buttons next to the spawn point: **RESPAWN** (new ragdoll) and **CLEAN UP** (removes blood, scorch marks, gibs, casings, shells and live grenades). Shooting a button also presses it.
 
@@ -110,7 +110,7 @@ Settings are saved in the browser (localStorage).
 ## What's in it
 
 - **Ragdolls**: 16 rigid bodies (gray segments) joined by cone-twist joints (black balls). Knees and elbows act as hinges. "Muscles" are velocity servos that pull each segment towards a target pose. While walking, the hips are held up and the feet step to target positions.
-- **Behaviour** (`ragdoll/brain.js`): ragdolls notice you. Aim at one and it puts its hands up (and trembles if you keep aiming); a nearby gunshot or blast makes them flinch, crouch and cover their heads; enough fear makes them run away from you, and backing away from a drawn machete. Screams scare the ones nearby. On the ground they shield their face when aimed at, press a hand on their worst wound (which slows the bleeding), and crawl away from you if they can. Fear fades over time but pain and heavy bleeding keep them scared. Otherwise: idle and short wanders around home → limping (one leg hurt) → falls when support is lost → gets back up if it can, otherwise **crawls** (both legs out) or **writhes** on the ground in pain → unconscious → dead. It also hunches and clutches wounds when hurt, and shivers when in shock.
+- **Behaviour** (`ragdoll/brain.js`): idle and short wanders around home → limping (one leg hurt) → falls when support is lost → gets back up if it can, otherwise **crawls** (both legs out) or **writhes** on the ground in pain → unconscious → dead. It also hunches and clutches wounds when hurt, and shivers when in shock.
 - **Damage** (`ragdoll/health.js` + `ragdoll/anatomy.js`): each hit is ray-traced through the body part in local space against organs (ellipsoids), arteries and bones (capsules), and rib cage/skull/pelvis shells. Bullets can pass through limbs into the next part. Outcomes include fractures, a shattered bone, severed arteries, destroyed organs, spinal injury (paralysis), a torso torn open (exposed organs) and limb loss.
 - **Physiology**: blood volume, bleeding with clotting, arterial pressure, heart rate, SpO₂, breathing, pain (adrenaline masks it), hypovolemic shock classes, consciousness, cardiac arrest and brain death. Nothing dies instantly: even a brain hit or decapitation takes seconds.
 - **Exploding parts**: keep shooting a destroyed body part and it bursts. Heads and limbs vanish in a spray of blood, bone and flesh chunks (limbs below it fall off), and torso parts are gutted in place.

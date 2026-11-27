@@ -144,7 +144,7 @@ for (const b of buttons) for (const m of b.meshes) trackMaterials(m, { grime: fa
 graphics.apply(settings.get('graphics'));
 grab.setQuality(settings.get('graphics'));
 const tools = [fists, pistol, shotgun, grenade, grab, machete, medkit, defib];
-const toolbox = new Toolbox(tools, { audio, start: 1, onOpenChange: (open) => onToolboxChange(open) });
+const toolbox = new Toolbox(tools, { audio, start: 0, onOpenChange: (open) => onToolboxChange(open) });
 
 await stage(0.86, 'Spawning ragdoll');
 ragdolls.spawn();
