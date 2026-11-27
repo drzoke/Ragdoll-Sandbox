@@ -156,14 +156,14 @@ export class Gore {
 
   /** Bruises come up over a second or two, then darken from red-purple to deep purple. */
   updateBruises(dt) {
-    const fresh = new THREE.Color(0.36, 0.05, 0.26), deep = new THREE.Color(0.16, 0.03, 0.26), old = new THREE.Color(0.13, 0.05, 0.19);
+    const fresh = new THREE.Color(0.24, 0.035, 0.3), deep = new THREE.Color(0.12, 0.025, 0.25), old = new THREE.Color(0.1, 0.035, 0.17);
     for (let i = this.bruises.length - 1; i >= 0; i--) {
       const b = this.bruises[i];
       if (b.ragdoll.removed) { this.bruises.splice(i, 1); continue; }
       b.age += dt;
       const m = b.mesh.material;
       if (b.soot) { m.color.setRGB(0.02, 0.018, 0.016); m.opacity = Math.min(0.92, b.age * 6) * Math.min(1, 0.55 + b.sev * 0.5); continue; }
-      const k1 = Math.min(1, b.age / 10), k2 = Math.min(1, Math.max(0, b.age - 20) / 120);
+      const k1 = Math.min(1, b.age / 6), k2 = Math.min(1, Math.max(0, b.age - 20) / 120);
       m.color.copy(fresh).lerp(deep, k1).lerp(old, k2);
       m.opacity = Math.min(1, b.age / 1.6) * Math.min(0.95, 0.35 + b.sev * 0.55);
     }
