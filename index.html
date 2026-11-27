@@ -29,6 +29,7 @@
     <div class="ld-logo"><span class="ld-dot"></span>Ragdoll Sandbox</div>
     <div class="ld-bar"><i id="ld-fill"></i></div>
     <div class="ld-row"><span id="ld-status">Loading engine</span><span id="ld-pct">0%</span></div>
+    <div class="ld-hw" id="ld-hw"></div>
     <div class="ld-tip" id="ld-tip"></div>
   </div>
 </div>
@@ -42,7 +43,7 @@
       'Throw a grenade with left click, or lob it underhand with right click. It goes off after 3 seconds.',
       'Shoot the ragdoll with the shotgun while it stands by a wall and the blood ends up on the wall too.',
       'Punch the ragdoll with your fists to leave bruises. A hook to the head can knock it out.',
-      'Press Shift+X to switch the x-ray between the 3D view and a flat picture.',
+      'Press X to open the x-ray, X again to switch between the 3D view and a flat picture, and once more to close it.',
       'Press Esc and open Settings to change the graphics and gore options.',
       'Press E on the red button to get a new ragdoll, and on the blue button to clean up the blood.'];
     document.getElementById('ld-tip').textContent = tips[(Math.random() * tips.length) | 0];
@@ -79,7 +80,7 @@
 <div id="vignette"></div>
 <!-- Alpha: one step per full update (feature batch). Patch: small fixes shipped on that version
      (back to 0 when the Alpha number goes up). -->
-<div id="version">Alpha 0.7<small>Patch 2</small></div>
+<div id="version">Alpha 0.7<small>Patch 3</small></div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
@@ -98,7 +99,7 @@
       <div class="xr-title">X-RAY · <span id="xr-name">No target</span></div>
       <div class="xr-state" id="xr-state">Look at a ragdoll</div>
     </div>
-    <div class="xr-key" title="Shift+X: Dynamic / Flat">X</div>
+    <div class="xr-key">X</div>
   </header>
   <div id="xr-view"><canvas id="ecg" width="300" height="46"></canvas></div>
   <section id="xr-vitals"></section>
@@ -126,6 +127,7 @@
       <div class="seg" data-setting="graphics"><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button><button data-v="ultra">Very High</button></div>
       <p class="note" id="gfx-note"></p>
       <div class="gpu" id="gfx-gpu"></div>
+      <div class="gpu rec" id="gfx-rec"></div>
       <h3>Gore</h3>
       <label class="row"><span>Show organs</span><input type="checkbox" data-setting="showOrgans"><i class="sw"></i></label>
       <label class="row"><span>Dismemberment &amp; exploding parts</span><input type="checkbox" data-setting="dismemberment"><i class="sw"></i></label>
@@ -133,7 +135,7 @@
       <h3>HUD</h3>
       <label class="row"><span>Show tool controls (left side)</span><input type="checkbox" data-setting="showControls"><i class="sw"></i></label>
       <div class="row"><span>X-ray view</span><div class="seg small" data-setting="xrayMode"><button data-v="dynamic">Dynamic</button><button data-v="flat">Flat</button></div></div>
-      <p class="note">Dynamic shows a 3D x-ray that turns with the ragdoll. Flat shows a still front-view picture of the bones and organs with the same damage. Shift+X switches between them.</p>
+      <p class="note">Dynamic shows a 3D x-ray that turns with the ragdoll. Flat shows a still front-view picture of the bones and organs with the same damage. Press X with the x-ray open to switch between them.</p>
       <h3>Touch controls</h3>
       <div class="row"><span>Touch controls</span><div class="seg small wide" data-setting="touchControls"><button data-v="auto">Auto</button><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <p class="note">Auto turns them on for phones and tablets and off for computers.</p>
@@ -176,8 +178,7 @@
         <tr><td>Z</td><td>Slow down time</td></tr>
         <tr><td>V</td><td>Speed up time</td></tr>
         <tr><td>E</td><td>Press button</td></tr>
-        <tr><td>X</td><td>X-ray panel</td></tr>
-        <tr><td>Shift + X</td><td>Switch the x-ray between Dynamic (3D) and Flat</td></tr>
+        <tr><td>X</td><td>X-ray panel: open, press again for the other view (3D / Flat), again to close</td></tr>
         <tr><td>H</td><td>Hide the tool controls list</td></tr>
         <tr><td>F3</td><td>Debug info</td></tr>
         <tr><td>Esc</td><td>Pause</td></tr>

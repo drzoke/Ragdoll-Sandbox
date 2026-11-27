@@ -1,6 +1,7 @@
 import { CONFIG } from '../config.js';
 import { clamp } from '../core/util.js';
 import { XRayView } from './xray.js';
+import { settings } from '../settings.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -18,7 +19,7 @@ export class HUD {
       crosshair: $('crosshair'), hit: $('hitmarker'), prompt: $('prompt'), ammo: $('ammo'),
       mag: $('ammo-mag'), chamber: $('ammo-chamber'), reserve: $('ammo-reserve'), ammoName: $('ammo-name'), debug: $('debug'), toast: $('toast'),
       time: $('timescale'), toolStatus: $('toolstatus'), tsTitle: $('ts-title'), tsSub: $('ts-sub'),
-      xray: $('xray'), xrName: $('xr-name'), xrState: $('xr-state'), vitals: $('xr-vitals'), bones: $('xr-bones'), organs: $('xr-organs'), log: $('xr-log'), ecg: $('ecg'),
+      xray: $('xray'), xrKey: document.querySelector('#xray .xr-key'), xrName: $('xr-name'), xrState: $('xr-state'), vitals: $('xr-vitals'), bones: $('xr-bones'), organs: $('xr-organs'), log: $('xr-log'), ecg: $('ecg'),
     };
     this.el.vitals.innerHTML = VITALS.map((v) => `<div class="vital" id="v-${v.key}"><div class="lbl"><span>${v.label}</span><b>-</b></div><div class="bar"><i></i></div></div>`).join('');
     this.vitalEls = Object.fromEntries(VITALS.map((v) => {
@@ -65,6 +66,13 @@ export class HUD {
   }
 
   update(dt, { pistol, tool, player, target, viewerPos, debugText }) {
+    // x-ray header: which view is showing, and that X switches it
+    const xm = settings.get('xrayMode');
+    if (xm !== this.xrMode) {
+      this.xrMode = xm;
+      this.el.xrKey.innerHTML = `<span>${xm === 'flat' ? 'Flat' : '3D'}</span><b>X</b>`;
+      this.el.xrKey.title = xm === 'flat' ? 'Press X to close' : 'Press X for the flat view';
+    }
     // Crosshair: each tool can widen it (shotgun pattern, recoil) or hide it while aiming
     const isPistol = tool === pistol;
     const ch = isPistol ? { gap: Math.max(0, 0.11 - pistol.fireT) * 120, ads: pistol.ads > 0.6 } : tool.crosshair?.() || { grab: true };
@@ -143,9 +151,9 @@ export class HUD {
       const cls = gone ? 'gone' : o.hp <= 0 ? 'bad' : o.hp < 100 ? 'warn' : '';
       return { name: o.name, status, cls, sev: gone ? 3 : o.hp <= 0 ? 2 : o.hp < 100 ? 1 : 0 };
     });
-    this.el.bones.innerHTML = listHtml(bones, 6);
-    this.el.organs.innerHTML = listHtml(organs, 6);
-    this.el.log.innerHTML = h.events.slice(0, 4).map((e) => `<li class="${e.severity}"><span>${esc(e.text)}</span><span>${e.t.toFixed(1)}s</span></li>`).join('') || '<li class="info"><span>No injuries yet</span></li>';
+    this.el.bones.innerHTML = listHtml(bones, 4);
+    this.el.organs.innerHTML = listHtml(organs, 4);
+    this.el.log.innerHTML = h.events.slice(0, 3).map((e) => `<li class="${e.severity}"><span>${esc(e.text)}</span><span>${e.t.toFixed(1)}s</span></li>`).join('') || '<li class="info"><span>No injuries yet</span></li>';
   }
 
   drawEcg(dt, target) {

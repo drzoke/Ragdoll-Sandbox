@@ -155,7 +155,7 @@ export class Toolbox {
 
   renderControls() {
     const t = this.active;
-    const rows = [...t.controls.filter(([k]) => k), [`1–${this.tools.length} or Q`, 'Switch item'], ['Tab', 'Open toolbox'], ['Z', 'Slow down time'], ['V', 'Speed up time'], ['H', 'Hide this list']];
+    const rows = [...t.controls.filter(([k]) => k), [`1–${this.tools.length} or Q`, 'Switch item'], ['Tab', 'Open toolbox'], ['Z', 'Slow down time'], ['V', 'Speed up time'], ['X', 'X-ray (again: 3D / Flat, again: close)'], ['H', 'Hide this list']];
     const key = t.name + JSON.stringify(rows);
     if (key === this.controlsKey) return;
     this.controlsKey = key;

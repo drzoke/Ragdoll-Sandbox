@@ -25,11 +25,20 @@ import { trackMaterials } from './materials.js';
 import { GRAY as RAGDOLL_GRAY, BLACK as RAGDOLL_BLACK } from './ragdoll/ragdoll.js';
 import { IS_TOUCH, IS_IOS, IS_STANDALONE } from './core/device.js';
 import { TouchControls } from './ui/touch.js';
+import { benchmark, LEVEL_NAMES } from './core/bench.js';
 
 // ------------------------------------------------------------------ loading screen
 const loader = window.__loader || { set() {} };
 const frameYield = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 async function stage(p, text) { loader.set(p, text); await frameYield(); }
+// ---- hardware check: test the GPU and CPU, recommend a graphics preset ----
+await stage(0.6, 'Testing your GPU and CPU');
+const hw = benchmark();
+const hwLine = `${hw.gpu} · ${hw.cores} CPU threads${hw.memory ? ` · ${hw.memory} GB` : ''}`;
+document.getElementById('ld-hw')?.replaceChildren(`${hwLine}  →  Recommended: ${LEVEL_NAMES[hw.level]}`);
+let autoGraphics = false;
+if (!settings.get('graphicsChosen') && settings.get('graphics') !== hw.level) { settings.set('graphics', hw.level); autoGraphics = true; }
+console.info('[hardware]', JSON.stringify(hw));
 await stage(0.62, 'Starting renderer');
 
 // ------------------------------------------------------------------ renderer / scene
@@ -128,9 +137,11 @@ function setPlaying(p) {
 
 // ---- touch controls (phones and tablets, played sideways) ----
 /** X-ray button on touch screens: off -> 3D -> flat -> off. */
+// X (or the touch X-ray button) cycles: open (in the last used view) -> the other view -> closed.
+let xraySwitched = false;
 function cycleXray() {
-  if (!hud.xrayOpen) { settings.set('xrayMode', 'dynamic'); hud.toggleXray(); }
-  else if (settings.get('xrayMode') === 'dynamic') settings.set('xrayMode', 'flat');
+  if (!hud.xrayOpen) { xraySwitched = false; hud.toggleXray(); }
+  else if (!xraySwitched) { xraySwitched = true; settings.set('xrayMode', settings.get('xrayMode') === 'flat' ? 'dynamic' : 'flat'); }
   else hud.toggleXray();
 }
 const touch = new TouchControls({
@@ -138,7 +149,22 @@ const touch = new TouchControls({
   onPause: () => setPlaying(false), onXray: cycleXray,
   onEditDone: () => menu.classList.remove('hidden'),
 });
-const touchWanted = () => settings.get('touchControls') === 'on' || (settings.get('touchControls') === 'auto' && IS_TOUCH);
+// Auto: start from the device check, then follow the input actually used (a finger on the
+// screen turns touch controls on; keys or a real mouse turn them off).
+let autoTouch = IS_TOUCH;
+// earlier versions could switch touch controls on for computers by mistake: undo that once
+if (!settings.get('touchFixed1')) { if (!IS_TOUCH && settings.get('touchControls') === 'on') settings.set('touchControls', 'auto'); settings.set('touchFixed1', true); }
+const touchWanted = () => settings.get('touchControls') === 'on' || (settings.get('touchControls') === 'auto' && autoTouch);
+function setAutoTouch(v) {
+  if (autoTouch === v || settings.get('touchControls') !== 'auto' || touch.editing) return;
+  autoTouch = v;
+  // switching controls mid-game: pause, so Play starts the right way (mouse lock or touch)
+  if (playing) { if (document.pointerLockElement) document.exitPointerLock(); setPlaying(false); }
+  applyTouchMode();
+}
+addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') setAutoTouch(true); else if (e.pointerType === 'mouse') setAutoTouch(false); }, true);
+addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' && (Math.abs(e.movementX) + Math.abs(e.movementY) > 2)) setAutoTouch(false); }, true);
+addEventListener('keydown', (e) => { if (!e.repeat && e.key !== 'Unidentified') setAutoTouch(false); }, true);
 function applyTouchMode() {
   touch.setActive(touchWanted());
   document.getElementById('play').textContent = touch.active ? 'Tap to play' : 'Click to play';
@@ -226,10 +252,16 @@ function syncSettingsUI() {
   const lvl = settings.get('graphics');
   document.getElementById('gfx-note').textContent = GFX_NOTES[lvl];
   document.getElementById('gfx-gpu').innerHTML = `<div><span>Minimum GPU</span><b>${GFX_GPU[lvl][0]}</b></div><div><span>Recommended GPU</span><b>${GFX_GPU[lvl][1]}</b></div>`;
+  // what the hardware check found
+  for (const b of menu.querySelectorAll('.seg[data-setting="graphics"] button')) b.classList.toggle('rec', b.dataset.v === hw.level);
+  document.getElementById('gfx-rec').innerHTML = `<div><span>This device</span><b>${hwLine.replace(/[<>&]/g, '')}</b></div>
+    <div class="rec-row"><span>Recommended: <b>${LEVEL_NAMES[hw.level]}</b>${hw.notes.length ? ` (${hw.notes.join(', ')})` : ''}</span>${lvl !== hw.level ? '<button id="gfx-use-rec">Use recommended</button>' : '<em>In use</em>'}</div>`;
+  document.getElementById('gfx-use-rec')?.addEventListener('click', () => { settings.set('graphics', hw.level); settings.set('graphicsChosen', false); });
 }
 for (const seg of menu.querySelectorAll('.seg[data-setting]')) {
   seg.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
+    if (seg.dataset.setting === 'graphics') settings.set('graphicsChosen', true);
     settings.set(seg.dataset.setting, b.dataset.v); audio.unlock(); audio.play('click');
   });
 }
@@ -237,6 +269,7 @@ for (const cb of menu.querySelectorAll('input[type=checkbox][data-setting]')) cb
 for (const rg of menu.querySelectorAll('input[type=range][data-setting]')) rg.addEventListener('input', () => settings.set(rg.dataset.setting, Number(rg.value)));
 settings.onChange((k, v) => {
   syncSettingsUI();
+if (autoGraphics) setTimeout(() => hud.toast(`Graphics set to ${LEVEL_NAMES[hw.level]} for this device (change it in Settings)`), 1200);
   if (k === 'graphics') { graphics.apply(v); grab.setQuality(v); toolbox.setQuality(v); resize(); }
   if (k === 'touchControls') applyTouchMode();
 });
@@ -360,9 +393,8 @@ function frame() {
     if (input.isDown('ShiftLeft') || input.isDown('ShiftRight')) {
       const m = settings.get('xrayMode') === 'flat' ? 'dynamic' : 'flat';
       settings.set('xrayMode', m);
-      hud.toast(`X-ray: ${m === 'flat' ? 'Flat' : 'Dynamic'}`);
       if (!hud.xrayOpen) hud.toggleXray();
-    } else hud.toggleXray();
+    } else cycleXray();
   }
   if (input.wasPressed('F3')) debugOn = !debugOn;
   if (input.wasPressed('KeyZ')) setTimeIndex(timeIndex - 1);

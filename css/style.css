@@ -291,3 +291,22 @@ body.touch #tb-info p { display: none; }
 #version { text-align: right; line-height: 1.15; }
 #version small { display: block; font-size: 9px; opacity: .85; }
 body.touch #version small { font-size: 8px; }
+
+/* x-ray on computers: a compact panel in the top-right corner */
+#xray { bottom: auto; width: 300px; max-height: calc(100vh - 150px); padding: 10px; gap: 6px; }
+#xr-view { flex: none; height: clamp(110px, calc(100vh - 560px), 170px); min-height: 0; }
+#xray .xr-key { display: flex; align-items: center; gap: 5px; padding: 1px 2px 1px 7px; font-size: 11px; }
+#xray .xr-key b { padding: 0 5px; border-radius: 3px; background: rgba(143,208,255,.22); color: #cfeaff; }
+#xray .xr-state { font-size: 14px; }
+
+/* hardware check */
+.ld-hw { margin-top: 10px; min-height: 1.3em; font-size: 12px; color: #e8edf2; opacity: .85; }
+.seg button.rec { position: relative; }
+.seg button.rec::after { content: 'REC'; position: absolute; top: 2px; right: 4px; font-size: 7.5px; font-weight: 800; letter-spacing: .06em; color: #4fa3ff; }
+.seg button.rec.on::after { color: #1d6fd1; }
+.gpu.rec { grid-template-columns: 1fr; }
+.gpu.rec .rec-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: #cfd8e2; }
+.gpu.rec .rec-row span { display: inline; font-size: 12px; letter-spacing: 0; text-transform: none; color: #cfd8e2; }
+.gpu.rec .rec-row b { display: inline; }
+.gpu.rec .rec-row em { font-style: normal; font-size: 11px; color: #8fd0ff; }
+#gfx-use-rec { padding: 5px 10px; font: inherit; font-size: 12px; font-weight: 700; border: 0; border-radius: 6px; background: #4fa3ff; color: #fff; cursor: pointer; }

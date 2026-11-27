@@ -32,8 +32,7 @@ python3 -m http.server 8000      # or: npx serve .
 | Z | Slow time down (down to 0.01×) |
 | V | Speed time up (up to 3×) |
 | E | Press the button you're looking at |
-| X | Toggle the X-ray / vitals panel |
-| Shift + X | Switch the X-ray between Dynamic (3D) and Flat |
+| X | X-ray / vitals panel: open, press again for the other view (Dynamic 3D / Flat), again to close (Shift + X also switches) |
 | H | Hide the tool controls list on the left |
 | F3 | Debug overlay |
 | Esc | Pause (menu has Settings) |
@@ -62,7 +61,7 @@ There are two buttons next to the spawn point: **RESPAWN** (new ragdoll) and **C
 
 ## Phones and tablets
 
-The game detects phones and tablets (the browser says it's mobile, or the screen is a touch screen with a finger as the main pointer) and switches to touch controls. **Settings → Touch controls** can force them on or off, and `?mobile=1` / `?mobile=0` in the address forces them too.
+The game detects phones and tablets (the browser says it's a phone or tablet and has a touch screen; on other systems only when a finger is the only pointer, so touch-screen laptops with a trackpad or mouse keep keyboard and mouse) and switches to touch controls. On Auto it also follows what you use: touching the screen turns touch controls on, and pressing keys or moving a mouse turns them off. **Settings → Touch controls** can force them on or off, and `?mobile=1` / `?mobile=0` in the address forces them too.
 
 - **Sideways, full screen:** tapping **Tap to play** goes full screen and locks the screen sideways (Android). If the phone is upright while you play, a "Turn your phone sideways" screen covers the game. iPhone Safari has no full screen for web pages, so the menu suggests **Share → Add to Home Screen**: the game then opens from its icon full screen and sideways (web app manifest and home screen icons are included).
 - **Left thumb:** the move stick. In the Optimal layout it appears wherever your thumb lands on the left side. A light push walks slowly, a full push walks, and pushing forward past the ring sprints (a yellow ring shows it).
@@ -83,6 +82,8 @@ The game detects phones and tablets (the browser says it's mobile, or the screen
 - **Gore**: organs on or off, red or purple blood, dismemberment and exploding body parts on or off.
 - **Touch controls**: see Phones and tablets above.
 - **HUD**: show or hide the tool controls list, and pick the X-ray view: **Dynamic** (a 3D x-ray that turns with the ragdoll) or **Flat** (a still front-view picture of the skeleton and organs showing the same damage).
+
+**Hardware check:** while the game loads it reads the name of your graphics chip, runs a short GPU test (a heavy shader timed on a small hidden canvas) and a short CPU test, and recommends a preset (shown on the loading screen and marked REC in Settings, with a **Use recommended** button). Until you pick a preset yourself, the recommended one is used. Phones and tablets are kept at Medium or lower.
 
 Settings are saved in the browser (localStorage).
 
@@ -133,6 +134,7 @@ src/ragdoll/             skeleton layout, anatomy data, health/physiology, brain
 src/gore/                particles, decals/pools, gore orchestration (stumps, organs, gibs, bleeding)
 src/ui/                  HUD, X-ray, touch controls (touch.js)
 src/core/device.js       phone / tablet detection
+src/core/bench.js        GPU / CPU check and recommended graphics preset
 manifest.webmanifest, icons/   home screen app (full screen, sideways)
 ```
 
