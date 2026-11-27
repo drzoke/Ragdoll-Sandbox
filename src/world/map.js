@@ -79,10 +79,13 @@ export class GameMap {
 
     physics.addStaticPlane([0, 1, 0], [0, 0, 0]);
     // Invisible boundary walls (physics for ragdolls/debris; the player clamps in its controller).
-    physics.addStaticPlane([1, 0, 0], [-B, 0, 0]);
-    physics.addStaticPlane([-1, 0, 0], [B, 0, 0]);
-    physics.addStaticPlane([0, 0, 1], [0, 0, -B]);
-    physics.addStaticPlane([0, 0, -1], [0, 0, B]);
+    // Thick boxes rather than infinite planes, so the title screen's set far outside the play
+    // area has working physics too.
+    const T = 3, H = 40;
+    physics.addStaticBox([T, H, B + 2 * T], [-B - T, H, 0]);
+    physics.addStaticBox([T, H, B + 2 * T], [B + T, H, 0]);
+    physics.addStaticBox([B + 2 * T, H, T], [0, H, -B - T]);
+    physics.addStaticBox([B + 2 * T, H, T], [0, H, B + T]);
 
     // A few prototype blocks for testing movement and ragdoll falls.
     const propTex = makeGridTexture('#a9acaf', 'rgba(40,44,48,0.25)', 'rgba(30,33,36,0.4)');
@@ -94,6 +97,9 @@ export class GameMap {
       [1, 1, 1, -8, 4], [1, 1, 1, -8.2, 5.1], [1, 1, 1, -8.1, 4.5],
     ];
     for (const [w, h, d, x, z] of props) this.addBlock(w, h, d, x, h / 2, z, propTex, physics);
+    // The title screen's set: one wall far outside the play area (lost in the fog from inside it)
+    const [tx, tz] = CONFIG.map.titleSpot;
+    this.titleWall = this.addBlock(8, 3, 0.4, tx, 1.5, tz, propTex, physics);
   }
 
   addBlock(w, h, d, x, y, z, tex, physics) {

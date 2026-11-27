@@ -101,8 +101,9 @@ export class Toolbox {
   /** Low: pictures. Medium: spinning models. High / Very High: spinning models with effects. */
   setQuality(level) {
     this.quality = level;
-    this.el.box.classList.toggle('icons', level === 'low');
-    if (level !== 'low' && this.isOpen && !this.preview) this.preview = new ItemPreview();
+    const flat = level === 'low' || level === 'verylow';
+    this.el.box.classList.toggle('icons', flat);
+    if (!flat && this.isOpen && !this.preview) this.preview = new ItemPreview();
     this.preview?.setQuality(level);
   }
 
@@ -158,7 +159,7 @@ export class Toolbox {
     if (this.isOpen) return;
     this.isOpen = true;
     this.picked = this.pending >= 0 ? this.pending : this.index;
-    if (this.quality !== 'low' && !this.preview) { this.preview = new ItemPreview(); this.preview.setQuality(this.quality); }
+    if (this.quality !== 'low' && this.quality !== 'verylow' && !this.preview) { this.preview = new ItemPreview(); this.preview.setQuality(this.quality); }
     this.el.box.classList.remove('hidden');
     this.renderInfo();
     this.onOpenChange?.(true);
@@ -204,7 +205,7 @@ export class Toolbox {
     }
     if (this.isOpen) {
       if (input.wasPressed('Enter')) this.equip(this.picked);
-      if (this.preview && this.quality !== 'low') {
+      if (this.preview && this.quality !== 'low' && this.quality !== 'verylow') {
         for (const c of this.cards) if (!c.el.classList.contains('hidden')) this.preview.draw(this.tools[c.i].name, c.ctx, this.time + c.i * 1.3, c.i === this.hover);
       }
     }

@@ -10,6 +10,8 @@ import { IS_TOUCH } from './core/device.js';
 
 /**
  * Graphics presets.
+ *  verylow – for weak devices: half resolution, no shadows, far fewer blood particles,
+ *            flat materials and pictures instead of 3D previews in the toolbox.
  *  low    – no shadows, reduced resolution, fewer blood particles, flatter materials.
  *  medium – 2048 shadow map, native resolution (capped at 2x).
  *  high   – ambient occlusion (GTAO), soft 4096 shadows, bloom, material grime and wear.
@@ -40,7 +42,7 @@ export class Graphics {
     const r = this.renderer, sun = this.map.sun;
     r.setPixelRatio(this.pixelRatio(level));
 
-    const shadows = level !== 'low';
+    const shadows = level !== 'low' && level !== 'verylow';
     const post = level === 'high' || level === 'ultra';
     const size = post ? 4096 : 2048;
     const shadowChange = r.shadowMap.enabled !== shadows || sun.shadow.mapSize.x !== size;
@@ -52,7 +54,7 @@ export class Graphics {
     if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
     if (shadowChange && prev) this.scene.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
 
-    this.gore.particles.spawnScale = level === 'low' ? 0.5 : 1;
+    this.gore.particles.spawnScale = level === 'verylow' ? 0.3 : level === 'low' ? 0.5 : 1;
 
     setMaterialQuality(level);
     if (this.composer) { this.composer.dispose(); this.passes.ssr?.dispose(); this.composer = null; this.passes = null; }
@@ -103,6 +105,7 @@ export class Graphics {
    */
   pixelRatio(level = this.level) {
     const dpr = window.devicePixelRatio || 1;
+    if (level === 'verylow') return Math.min(dpr, 1) * (IS_TOUCH ? 0.6 : 0.55);
     if (level === 'low') return Math.min(dpr, IS_TOUCH ? 1.25 : 1) * 0.75;
     const budget = { medium: 4.2e6, high: 3.2e6, ultra: 3.8e6 }[level] || 4e6;   // pixels
     const fit = Math.sqrt(budget / Math.max(1, innerWidth * innerHeight));

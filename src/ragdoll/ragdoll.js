@@ -4,6 +4,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { PARTS, PART_BY_NAME } from './skeleton.js';
 import { Health } from './health.js';
 import { Brain } from './brain.js';
+import { BrainV2 } from './brainV2.js';
 import { GROUP } from '../core/physics.js';
 import { clamp } from '../core/util.js';
 
@@ -49,7 +50,7 @@ function partGeometry(def) {
  * towards a target pose supplied by the Brain. Damage and physiology live in Health.
  */
 export class Ragdoll {
-  constructor({ scene, physics, position, yaw = 0, name = 'Subject', armor = null }) {
+  constructor({ scene, physics, position, yaw = 0, name = 'Subject', armor = null, behavior = 'classic' }) {
     this.scene = scene;
     this.physics = physics;
     this.name = name;
@@ -164,7 +165,9 @@ export class Ragdoll {
     if (armor?.helmet) this.addArmor('helmet');
     if (armor?.vest) this.addArmor('vest');
 
-    this.brain = new Brain(this, origin, yaw);
+    // Classic behaviour, or the experimental V2 that notices the player (hands up, fleeing...)
+    this.behavior = behavior === 'v2' ? 'v2' : 'classic';
+    this.brain = this.behavior === 'v2' ? new BrainV2(this, origin, yaw) : new Brain(this, origin, yaw);
     this._unsub = physics.onStep((h) => this.applyMuscles(h));
     this.sync();
   }

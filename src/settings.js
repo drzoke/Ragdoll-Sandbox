@@ -2,7 +2,7 @@
 const KEY = 'ragdoll-sandbox-settings-v1';
 
 const DEFAULTS = {
-  graphics: 'medium',      // 'low' | 'medium' | 'high' | 'ultra'
+  graphics: 'medium',      // 'verylow' | 'low' | 'medium' | 'high' | 'ultra'
   showOrgans: true,        // exposed organs + organ gibs
   bloodColor: 'red',       // 'red' | 'purple'
   dismemberment: true,     // severing + exploding body parts
@@ -23,7 +23,8 @@ const DEFAULTS = {
   spawnHelmet: false,
   spawnVest: false,
   spawnWhere: 'look',      // 'look' | 'front' | 'spawn'
-  spawnTemper: 'normal',   // 'brave' | 'normal' | 'timid'
+  spawnTemper: 'normal',   // 'brave' | 'normal' | 'timid' (V2 behaviour only)
+  spawnBehavior: 'classic', // 'classic' | 'v2' (experimental: reacts to the player)
 };
 
 // Hues (multiplied by a brightness): particle = shader colour, pool/decal/meat = linear material colours.

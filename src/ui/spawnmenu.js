@@ -8,8 +8,8 @@ export const MAX_RAGDOLLS = 12;
 const TEMPER = { brave: 0.35, normal: 1, timid: 1.7 };
 
 /**
- * Spawn menu (B, or the person button on touch screens): how many ragdolls, which armour, how
- * easily they get scared and where they appear. Also removes every ragdoll or cleans up blood.
+ * Spawn menu (B, or the person button on touch screens): how many ragdolls, which armour, which
+ * behaviour (Classic, or the experimental V2 and how easily they get scared) and where they appear. Also removes every ragdoll or cleans up blood.
  * The choices are remembered between visits.
  */
 export class SpawnMenu {
@@ -25,6 +25,7 @@ export class SpawnMenu {
       vest: !!settings.get('spawnVest'),
       where: settings.get('spawnWhere') || 'look',
       temper: settings.get('spawnTemper') || 'normal',
+      behavior: settings.get('spawnBehavior') === 'v2' ? 'v2' : 'classic',
     };
     this.el.addEventListener('click', (e) => {
       const b = e.target.closest('button');
@@ -63,7 +64,9 @@ export class SpawnMenu {
     }
     const fig = $('sm-figure');
     fig.classList.toggle('helmet', o.helmet); fig.classList.toggle('vest', o.vest);
-    const n = this.ragdolls.list.length;
+    // temperament only matters for V2 (Classic ragdolls don't react to you)
+    $('sm-temper').classList.toggle('hidden', o.behavior !== 'v2');
+    const n = this.ragdolls.list.filter((r) => !r.hidden).length;
     $('sm-count').textContent = `${n} ragdoll${n === 1 ? '' : 's'} in the world (up to ${MAX_RAGDOLLS}).`;
     $('sm-spawn').textContent = `Spawn ${o.count > 1 ? `${o.count} ragdolls` : 'ragdoll'}`;
   }
@@ -100,7 +103,7 @@ export class SpawnMenu {
 
   spawn() {
     const o = this.opts;
-    const room = MAX_RAGDOLLS - this.ragdolls.list.length;
+    const room = MAX_RAGDOLLS - this.ragdolls.list.filter((r) => !r.hidden).length;
     if (room <= 0) { this.audio.play('deny'); this.hud.toast(`There are already ${MAX_RAGDOLLS} ragdolls. Remove some first.`); return; }
     const n = Math.min(o.count, room);
     const eye = this.camera.getWorldPosition(new THREE.Vector3()).setY(0);
@@ -115,12 +118,13 @@ export class SpawnMenu {
       const p = a.clone().addScaledVector(side, off).addScaledVector(toward, -row * 1.1);
       for (let j = 0; j < 12 && !this.free(p.x, p.z, 0.35); j++) p.addScaledVector(toward, 0.35);
       const yaw = Math.atan2(eye.x - p.x, eye.z - p.z) + (Math.random() - 0.5) * 0.3;
-      const r = this.ragdolls.spawn([p.x, 0, p.z], yaw, { armor: { helmet: o.helmet, vest: o.vest } });
+      const r = this.ragdolls.spawn([p.x, 0, p.z], yaw, { armor: { helmet: o.helmet, vest: o.vest }, behavior: o.behavior });
+      if (o.behavior === 'v2') r.brain.fearMul = TEMPER[o.temper] || 1;
       spawned.push(r);
     }
     this.audio.play('button');
     const what = [o.helmet && 'helmet', o.vest && 'vest'].filter(Boolean).join(' and ');
-    this.hud.toast(`Spawned ${n} ragdoll${n > 1 ? 's' : ''}${what ? ` with ${what}` : ''}${n < o.count ? ` (max ${MAX_RAGDOLLS})` : ''}`);
+    this.hud.toast(`Spawned ${n} ${o.behavior === 'v2' ? 'V2 ' : ''}ragdoll${n > 1 ? 's' : ''}${what ? ` with ${what}` : ''}${n < o.count ? ` (max ${MAX_RAGDOLLS})` : ''}`);
     return spawned;
   }
 }

@@ -147,4 +147,4 @@ export function savePerfCap(gpu, level) {
   try { localStorage.setItem(CAP_KEY, JSON.stringify({ gpu, tier: LEVELS.indexOf(level) })); } catch { /* ignore */ }
 }
 
-export const LEVEL_NAMES = { low: 'Low', medium: 'Medium', high: 'High', ultra: 'Very High' };
+export const LEVEL_NAMES = { verylow: 'Very Low', low: 'Low', medium: 'Medium', high: 'High', ultra: 'Very High' };

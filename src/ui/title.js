@@ -4,10 +4,16 @@ import { buildMachete } from '../weapon/modelsMedical.js';
 
 // The title screen: the real game world, a slow cinematic camera, and a badly hurt dead ragdoll
 // slumped against the long wall (shot, cut, burnt, a hand blown off and a forearm missing), its
-// helmet knocked off beside it. It is a real ragdoll: once you play you can walk over to it.
+// helmet knocked off beside it. It lives on a set far away from the play area, so you never
+// find it while playing.
 
-const WALL_Z = -9.8;            // front face of the long wall (block at x -16..-8, z -10.2..-9.8)
-const SPOT = new THREE.Vector3(-11.3, 0, WALL_Z + 0.2);
+import { CONFIG } from '../config.js';
+
+// The set is a wall of its own far outside the play area (Map.titleWall, 8 x 3 x 0.4 m), lost in
+// the fog, so the body is never in the game you play.
+const [TX, TZ] = CONFIG.map.titleSpot;
+const WALL_Z = TZ + 0.2;        // front face of the set's wall
+const SPOT = new THREE.Vector3(TX + 0.7, 0, WALL_Z + 0.2);
 const _v = new THREE.Vector3(), _f = new THREE.Vector3();
 
 export class TitleScene {
@@ -29,9 +35,11 @@ export class TitleScene {
 
   get alive() { return this.corpse && this.ragdolls.list.includes(this.corpse); }
 
-  /** Make sure the corpse is there (it can be removed while playing); build it if not. */
+  /** Make sure the corpse and its blood are there; rebuild them if Clean up wiped the blood. */
   ensure() {
-    if (this.alive) return this.corpse;
+    if (this.alive && !this.dirty) return this.corpse;
+    if (this.corpse) this.ragdolls.remove(this.corpse);
+    this.dirty = false;
     return this.build();
   }
 
@@ -39,6 +47,8 @@ export class TitleScene {
     const rd = this.ragdolls;
     const r = rd.spawn([SPOT.x, 0, SPOT.z], 0, { armor: { vest: true, helmet: true }, name: 'Unknown subject' });
     this.corpse = r;
+    r.hidden = true;            // not counted as one of your ragdolls, kept by Remove all
+    rd.keep = r;
     // Sitting on the floor, back against the wall, head dropped, one knee up.
     const pose = basePose();
     Object.assign(pose, {

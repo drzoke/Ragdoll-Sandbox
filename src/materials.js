@@ -101,6 +101,7 @@ function applyTo(m) {
   const metal = m.metalness > 0.5, glowing = m.emissiveIntensity > 0 && m.emissive && m.emissive.getHex() !== 0;
   let map = o.map, rough = o.roughnessMap, normal = o.normalMap, env = o.envMapIntensity;
   if (level === 'low') env = o.envMapIntensity * 0.5;
+  if (level === 'verylow') env = o.envMapIntensity * 0.3;
   if (level === 'high' || level === 'ultra') {
     tex ??= makeTextures();
     rough = rough || (metal ? tex.wear : tex.rough);

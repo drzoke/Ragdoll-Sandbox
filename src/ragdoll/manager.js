@@ -14,8 +14,8 @@ export class RagdollManager {
     this.player = null;
   }
 
-  spawn(position = CONFIG.ragdoll.spawn, yaw = Math.PI * 0, { armor = null, name = null } = {}) {
-    const r = new Ragdoll({ scene: this.scene, physics: this.physics, position, yaw, armor, name: name || `Subject ${String(++this.counter).padStart(2, '0')}` });
+  spawn(position = CONFIG.ragdoll.spawn, yaw = Math.PI * 0, { armor = null, name = null, behavior = 'classic' } = {}) {
+    const r = new Ragdoll({ scene: this.scene, physics: this.physics, position, yaw, armor, behavior, name: name || `Subject ${String(++this.counter).padStart(2, '0')}` });
     r.env = this;
     r.xray = new XRayRig(r);
     this.list.push(r);

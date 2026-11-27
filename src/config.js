@@ -8,7 +8,8 @@ export const CONFIG = {
   },
 
   map: {
-    floorSize: 400,       // visual floor (fades into fog)
+    floorSize: 800,       // visual floor (fades into fog; also under the hidden title-screen set)
+    titleSpot: [0, -300], // the title screen's set: far outside the play area, lost in the fog
     boundary: 45,         // invisible walls at +-boundary (m)
     skyColor: 0x9ea4aa,
   },

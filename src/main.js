@@ -25,6 +25,7 @@ import { ThrowArc } from './weapon/trajectory.js';
 import { ARM_MATERIALS } from './weapon/arms.js';
 import { Toolbox } from './weapon/toolbox.js';
 import { Graphics } from './graphics.js';
+import { watchForUpdates } from './ui/update.js';
 import { settings } from './settings.js';
 import { trackMaterials } from './materials.js';
 import { GRAY as RAGDOLL_GRAY, BLACK as RAGDOLL_BLACK, ARMOR_MATERIALS } from './ragdoll/ragdoll.js';
@@ -85,15 +86,16 @@ const buttons = [
     onPress: () => { audio.play('button'); cleanUp(); } }),
 ];
 
-function cleanUp() {
+function cleanUp(silent = false) {
   if (grab.held?.kind === 'gib') grab.release();
   gore.clear(); ballistics.clear(); explosives.clear(); pistol.casings.clear(); shotgun.hulls.clear();
-  hud.toast('Cleaned up');
+  if (title) title.dirty = true;   // the title screen's blood went too: rebuild it next time
+  if (!silent) hud.toast('Cleaned up');
 }
 function removeAllRagdolls() {
   grab.release();
-  const n = ragdolls.list.length;
-  ragdolls.clear();
+  const n = ragdolls.list.filter((r) => !r.hidden).length;
+  ragdolls.clear(ragdolls.keep);
   hud.toast(n ? `Removed ${n} ragdoll${n > 1 ? 's' : ''}` : 'No ragdolls to remove');
 }
 
@@ -320,12 +322,14 @@ addEventListener('keydown', (e) => {
 
 // ---- settings ----
 const GFX_NOTES = {
+  verylow: 'For slow computers and older phones: half resolution, no shadows, far fewer blood drops and simpler materials. Looks rougher but runs the fastest.',
   low: 'No shadows, lower resolution and fewer blood drops. Runs on almost anything.',
   medium: 'Sharp sun shadows and full resolution.',
   high: 'Adds soft shadows, ambient occlusion (darkening where objects meet), glow on bright lights, and dirt and wear on models.',
   ultra: 'Everything in High, plus reflections on the floor, fine surface detail on models and stronger reflections.',
 };
 const GFX_GPU = {
+  verylow: ['Any graphics chip that runs WebGL 2', 'Intel HD 4000 or better'],
   low: ['Any graphics chip from the last 10 years (Intel HD 4000, Chromebooks)', 'Intel UHD 620 or better'],
   medium: ['Intel UHD 620 / AMD Radeon Vega 8', 'Intel Iris Xe / NVIDIA GTX 1050'],
   high: ['NVIDIA GTX 1050 Ti / AMD RX 570', 'NVIDIA GTX 1660 / AMD RX 5600 XT'],
@@ -509,7 +513,7 @@ function watchFps(_dt, now) {
   if (fpsWatch.t < 6) return;
   const avg = fpsWatch.frames / fpsWatch.t;
   fpsWatch.t = 0; fpsWatch.frames = 0;
-  const lvl = settings.get('graphics'), order = ['low', 'medium', 'high', 'ultra'], i = order.indexOf(lvl);
+  const lvl = settings.get('graphics'), order = ['verylow', 'low', 'medium', 'high', 'ultra'], i = order.indexOf(lvl);
   if (avg >= 40 || i <= 0) return;
   if (!settings.get('graphicsChosen') && fpsWatch.steps < 2) {
     fpsWatch.steps++;
@@ -556,7 +560,7 @@ function frame() {
   ballistics.update(wdt, dt);
   explosives.update(wdt);
   gore.update(wdt, camera, renderer.domElement.height);
-  map.update(player.pos);
+  map.update(titleMode ? title.focus : player.pos);
   updateInteraction(dt);
   updatePlayerInfo();
 
@@ -594,4 +598,5 @@ setTimeout(() => {
 }, 250);
 
 // Exposed for debugging from the console and for automated tests.
+watchForUpdates({ hud });
 window.game = { machete, medkit, defib, spawnMenu, title, showTitle, get titleMode() { return titleMode; }, fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };

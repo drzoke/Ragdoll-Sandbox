@@ -86,7 +86,7 @@
 <div id="vignette"></div>
 <!-- Alpha: one step per full update (feature batch). Patch: small fixes shipped on that version
      (back to 0 when the Alpha number goes up). -->
-<div id="version">Alpha 0.9<small>Patch 0</small></div>
+<div id="version">Alpha 0.8<small>Patch 1</small></div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
@@ -121,7 +121,7 @@
   <div class="m-side">
     <div class="m-brand">
       <div class="m-logo"><span>RAGDOLL</span><b>SANDBOX</b></div>
-      <div class="m-ver">Alpha 0.9 · physics and gore sandbox</div>
+      <div class="m-ver">Alpha 0.8 · physics and gore sandbox</div>
       <div class="m-paused">Paused</div>
     </div>
     <nav class="m-nav">
@@ -132,6 +132,7 @@
       <button class="m-btn pause-only" id="to-title"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Main menu</span></button>
     </nav>
     <p class="note" id="play-note">The game plays in fullscreen so keys like Ctrl+W can't close it by accident. Hold Esc to leave fullscreen.</p>
+    <div id="update-note" class="hidden"><span>A newer version is out.</span><button>Reload</button></div>
     <div id="lockwarn" class="hidden">This page can't lock the mouse. Open the game in its own browser tab to look around with the mouse.</div>
   </div>
   <div class="m-panel hidden" id="m-panel">
@@ -139,7 +140,7 @@
     <div class="m-panel-body">
     <section class="tab hidden" id="tab-settings">
       <h3>Graphics</h3>
-      <div class="seg" data-setting="graphics"><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button><button data-v="ultra">Very High</button></div>
+      <div class="seg" data-setting="graphics"><button data-v="verylow">Very Low</button><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button><button data-v="ultra">Very High</button></div>
       <p class="note" id="gfx-note"></p>
       <div class="gpu" id="gfx-gpu"></div>
       <div class="gpu rec" id="gfx-rec"></div>
@@ -206,20 +207,19 @@
     <section class="tab hidden" id="tab-news">
       <div class="news">
         <p class="news-intro">Every update since the first draft. A new Alpha number is a big update; patches are smaller fixes on that version.</p>
-        <h3>Alpha 0.9 <span class="cur">current</span></h3>
-        <ul>
-          <li><b>Equip from the toolbox.</b> You start with only your fists. Open the toolbox (Tab), pick an item and press <b>Equip</b> (or double click it) to put it on your bar. The bar holds up to 9 items, numbered 1 to 9; <b>Remove from bar</b> takes one off again. With a full bar, equipping swaps out the item in your hands.</li>
-          <li><b>Ragdolls are back to how they were.</b> They no longer notice you: no hands up, ducking, running or crawling away from you. They wander, limp, fall, get back up, crawl and writhe like before 0.8. The temperament option is gone from the spawn menu.</li>
-          <li><b>What's new</b> now lists every update and patch.</li>
-        </ul>
-        <h3>Alpha 0.8</h3>
+        <h3>Alpha 0.8 <span class="cur">current</span></h3>
         <ul>
           <li><b>Machete.</b> Slash for long, deep cuts that bleed hard and get deeper on the same spot: enough of them chop through an arm, a leg or the neck. Cuts across the wrist, the back of the ankle or the back of the thigh sever tendons. Right click stabs deep into the organs.</li>
           <li><b>Medkit.</b> Hold left click on a body part to bandage its wounds, put a tourniquet above a stump, splint a broken bone or dress a burn. Right click gives morphine, R hangs a blood bag.</li>
           <li><b>Defibrillator.</b> Hold to charge, let go on the chest. It can restart a heart that has stopped, as long as the heart and enough blood are left. Shocking a beating heart can stop it.</li>
           <li><b>Spawn menu (B).</b> Spawn up to 12 ragdolls where you look, in a row, with a helmet and a vest. Armour stops pistol rounds, pellets and shrapnel until it wears out, but the hit still bruises and cracks ribs.</li>
-          <li><b>Smarter ragdolls</b> (taken out again in 0.9). They put their hands up when aimed at, ducked at gunshots, ran or crawled away and pressed a hand on their wounds.</li>
+          <li><b>Smarter ragdolls.</b> They put their hands up when you aim at them, duck and cover their heads at gunshots and explosions, run or crawl away from you when they are scared, back away from a blade, and press a hand on their worst wound to slow the bleeding.</li>
           <li><b>New menus.</b> This title screen with a slow camera around a badly hurt ragdoll, side panels for Settings, Controls and What's new, and a pause menu with Resume and Main menu.</li>
+          <li><span class="patch">Patch 1</span> <b>Equip from the toolbox.</b> You start with only your fists. Open the toolbox (Tab), pick an item and press Equip (or double click it) to put it on your bar. The bar holds up to 9 items, numbered 1 to 9, and Remove from bar takes one off again.</li>
+          <li><span class="patch">Patch 1</span> <b>Classic or V2 behaviour.</b> Ragdolls use the Classic behaviour by default. The smarter behaviour is now <b>V2 (experimental)</b>, which you choose in the spawn menu, together with its temperament.</li>
+          <li><span class="patch">Patch 1</span> The ragdoll on the title screen stays on the title screen: Play starts a fresh world.</li>
+          <li><span class="patch">Patch 1</span> <b>Very Low graphics</b> for slow computers and older phones: half resolution, no shadows and fewer blood drops for the most FPS.</li>
+          <li><span class="patch">Patch 1</span> The game tells you when a newer version is out, with a button to reload.</li>
         </ul>
         <h3>Alpha 0.7</h3>
         <ul>
@@ -274,7 +274,6 @@
           <li><span class="patch">Patch 1</span> Crouch moved to C (Ctrl+W closed the tab), and the browser asks before you leave mid-game.</li>
           <li><span class="patch">Patch 2</span> Full screen with keyboard lock, so Ctrl and Ctrl+W reach the game.</li>
         </ul>
-        <p class="news-intro">The version label first appeared in Alpha 0.5; the numbers before it were given afterwards.</p>
       </div>
     </section>
     </div>
@@ -306,6 +305,13 @@
         <h3>Armour</h3>
         <div class="chips"><button data-opt="helmet">Helmet</button><button data-opt="vest">Vest</button></div>
         <p class="note">Armour stops pistol rounds, shotgun pellets and shrapnel until it wears out. The body behind it still takes the blow.</p>
+        <h3>Behaviour</h3>
+        <div class="seg"><button data-opt="behavior" data-v="classic">Classic</button><button data-opt="behavior" data-v="v2">V2 <i class="exp">experimental</i></button></div>
+        <div id="sm-temper" class="hidden">
+          <p class="note">V2 ragdolls notice you: they put their hands up when you aim at them, duck at gunfire, run or crawl away and press on their wounds.</p>
+          <h3>Temperament</h3>
+          <div class="seg"><button data-opt="temper" data-v="brave">Brave</button><button data-opt="temper" data-v="normal">Normal</button><button data-opt="temper" data-v="timid">Timid</button></div>
+        </div>
         <h3>Where</h3>
         <div class="seg"><button data-opt="where" data-v="look">Where I look</button><button data-opt="where" data-v="front">In front of me</button><button data-opt="where" data-v="spawn">Spawn point</button></div>
         <button id="sm-spawn" class="sm-go">Spawn ragdoll</button>
