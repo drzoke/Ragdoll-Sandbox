@@ -7,6 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { SSRPass } from 'three/addons/postprocessing/SSRPass.js';
 import { setMaterialQuality } from './materials.js';
 import { IS_TOUCH } from './core/device.js';
+import { setLodDistance } from './ragdoll/batcher.js';
 
 /**
  * Graphics presets.
@@ -56,6 +57,8 @@ export class Graphics {
     if (shadowChange && prev) this.scene.traverse((o) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; });
 
     this.gore.particles.spawnScale = level === 'verylow' ? 0.3 : level === 'low' ? 0.5 : 1;
+    // ragdolls further than this are drawn with simpler shapes
+    setLodDistance({ verylow: 9, low: 12, medium: 16, high: 22, ultra: 28 }[level] ?? 16);
 
     setMaterialQuality(level);
     if (this.composer) { this.composer.dispose(); this.passes.ssr?.dispose(); this.composer = null; this.passes = null; }

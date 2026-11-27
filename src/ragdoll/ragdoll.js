@@ -64,7 +64,11 @@ const ballCache = new Map();
 /** Joint balls share one sphere per size (so the batcher draws all of them in a few calls). */
 function ballGeometry(r) {
   let g = ballCache.get(r);
-  if (!g) { g = new THREE.SphereGeometry(r, 18, 12); ballCache.set(r, g); }
+  if (!g) {
+    g = new THREE.SphereGeometry(r, 18, 12);
+    g.userData.lod = new THREE.SphereGeometry(r, 8, 6);      // far away (see batcher.js)
+    ballCache.set(r, g);
+  }
   return g;
 }
 
@@ -74,11 +78,18 @@ function partGeometry(def) {
   if (geoCache.has(def.name.replace(/[LR]$/, ''))) return geoCache.get(def.name.replace(/[LR]$/, ''));
   let g;
   const [sx, sy, sz] = def.size;
-  if (def.shape === 'sphere') g = new THREE.SphereGeometry(sx, 28, 20);
-  else if (/upperArm|lowerArm|thigh|shin/.test(def.name)) {
+  // each with a simpler version for ragdolls far from the camera (see batcher.js)
+  if (def.shape === 'sphere') {
+    g = new THREE.SphereGeometry(sx, 28, 20);
+    g.userData.lod = new THREE.SphereGeometry(sx, 12, 8);
+  } else if (/upperArm|lowerArm|thigh|shin/.test(def.name)) {
     const r = Math.min(sx, sz) / 2;
     g = new THREE.CapsuleGeometry(r, Math.max(0.01, sy - 2 * r), 6, 16);
-  } else g = new RoundedBoxGeometry(sx, sy, sz, 3, Math.min(sx, sy, sz) * 0.3);
+    g.userData.lod = new THREE.CapsuleGeometry(r, Math.max(0.01, sy - 2 * r), 2, 8);
+  } else {
+    g = new RoundedBoxGeometry(sx, sy, sz, 3, Math.min(sx, sy, sz) * 0.3);
+    g.userData.lod = new RoundedBoxGeometry(sx, sy, sz, 1, Math.min(sx, sy, sz) * 0.3);
+  }
   geoCache.set(def.name.replace(/[LR]$/, ''), g);
   return g;
 }
@@ -144,8 +155,9 @@ export class Ragdoll {
       p.constraint = new CANNON.ConeTwistConstraint(parent.body, p.body, {
         pivotA: new CANNON.Vec3(pivotA.x, pivotA.y, pivotA.z), pivotB: new CANNON.Vec3(pivotB.x, pivotB.y, pivotB.z),
         axisA: new CANNON.Vec3(axisA.x, axisA.y, axisA.z), axisB: new CANNON.Vec3(axis.x, axis.y, axis.z),
-        angle: j.angle, twistAngle: j.twist, collideConnected: false, maxForce: 1e5,
+        angle: j.angle, twistAngle: j.twist, collideConnected: true, maxForce: 1e5,
       });
+      p.constraint.skipCollide = true;     // the two parts don't collide: dropped in the broadphase (see broadphase.js)
       physics.world.addConstraint(p.constraint);
       p.pivotParent = pivotA; p.pivotChild = pivotB;
       const ball = new THREE.Mesh(ballGeometry(j.ball), BLACK);

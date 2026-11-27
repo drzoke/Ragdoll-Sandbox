@@ -679,14 +679,16 @@ function scheduleFrame() {
 // FPS: frames counted over half a second of real time (the game's dt is capped at 1/20 s, which
 // kept the old counter from ever showing less than 20)
 const fpsCount = { n: 0, t0: performance.now() };
-let cpuMs = 0;
-let drawCalls = 0;
-renderer.info.autoReset = false;              // time spent in frame() itself, smoothed (dynamic resolution reads it)
+let cpuMs = 0;              // time spent in frame() itself, smoothed (dynamic resolution reads it)
+let drawCalls = 0;          // the whole frame's, counted by hand (see the end of frame())
+renderer.info.autoReset = false;
 let last = performance.now();
 function frame() {
   scheduleFrame();
   const now = performance.now();
-  const dt = Math.min((now - last) / 1000, 1 / 20) * debug.timeScale;
+  // Frame time, capped at 0.1 s: down to 10 FPS the game still runs at real speed (it used to slow
+  // down below 20 FPS); only below that does it go into slow motion instead of jumping ahead.
+  const dt = Math.min((now - last) / 1000, 1 / 10) * debug.timeScale;
   last = now;
   fpsCount.n++;
   if (now - fpsCount.t0 >= 500) { fps = fpsCount.n * 1000 / (now - fpsCount.t0); fpsCount.n = 0; fpsCount.t0 = now; }
@@ -738,7 +740,7 @@ function frame() {
   const t = toolbox.active;
   vitals.update(dt, { input, playing: playing && !toolboxOpen, show: !titleMode && ragdolls.list.some((r) => r.zombie && !r.hidden) });
   map.cull(camera);
-  updateBatches(scene);     // ragdoll parts and the marks on them, drawn instanced
+  updateBatches(scene, camera);     // ragdoll parts and the marks on them, drawn instanced
   if (titleMode || vitals.dead) graphics.render(null, null);
   else graphics.render(t.scene, t.camera);
   drawCalls = renderer.info.render.calls; renderer.info.reset();   // the whole frame's (shadows and view model included)

@@ -2,9 +2,9 @@
 export const CONFIG = {
   physics: {
     step: 1 / 120,        // fixed physics step (s)
-    maxSubSteps: 6,
+    maxSubSteps: 12,
     gravity: -9.81,
-    solverIterations: 18,
+    solverIterations: 10,   // at 120 Hz: about as tight as 18 were (small steps matter more than iterations)
   },
 
   map: {

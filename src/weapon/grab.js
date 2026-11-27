@@ -353,7 +353,7 @@ export class GrabTool {
     this.anchor.velocity.set(0, 0, 0);
     this.anchorTarget.copy(t.point);
     const joint = new CANNON.PointToPointConstraint(this.anchor, new CANNON.Vec3(0, 0, 0), b, new CANNON.Vec3(local.x, local.y, local.z), G.maxForce);
-    joint.collideConnected = false;
+    joint.collideConnected = true; joint.skipCollide = true;   // dropped in the broadphase (see broadphase.js)
     this.physics.world.addConstraint(joint);
     this.held = { ...t, local: local.clone(), joint };
     this.held.set = t.kind === 'ragdoll' ? this.connectedSet(t.ragdoll, t.part) : [b];

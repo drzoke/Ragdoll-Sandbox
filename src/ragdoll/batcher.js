@@ -84,10 +84,29 @@ function attached(o) {
   return false;
 }
 
+// Level of detail: a holder further than this from the camera is drawn with its geometry's simpler
+// version (geometry.userData.lod) if it has one: about a fifth of the triangles for a whole ragdoll.
+let lodDist2 = 15 * 15;
+export function setLodDistance(d) { lodDist2 = d * d; }
+
+// The instanced meshes can't be frustum culled as a whole (their instances are all over the map),
+// so each holder is tested against the view instead, with a margin so bodies just out of view still
+// cast their shadows into it.
+const CULL_MARGIN = 3;
+const _frustum = new THREE.Frustum(), _pv = new THREE.Matrix4(), _sphere = new THREE.Sphere();
+
 const drawn = [];   // this frame's shown holders and their kinds
 /** Copy every holder into its instanced mesh. Call once per frame, right before rendering. */
-export function updateBatches(theScene) {
+export function updateBatches(theScene, camera) {
   scene = theScene;
+  if (camera) {
+    camera.updateMatrixWorld();
+    _frustum.setFromProjectionMatrix(_pv.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  }
+  // zoomed in (aiming, a rifle scope) things look closer: push the switch out by the same factor
+  const zoom = camera?.isPerspectiveCamera ? Math.max(1, Math.tan(0.6545) / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) : 1;   // vs a 75° view
+  const lod2 = lodDist2 * zoom * zoom;
+  const cx = camera ? camera.matrixWorld.elements[12] : 0, cy = camera ? camera.matrixWorld.elements[13] : 0, cz = camera ? camera.matrixWorld.elements[14] : 0;
   for (const r of roots) { if (r.parent) r.updateMatrixWorld(); else roots.delete(r); }
   for (const byGeo of kinds.values()) for (const k of byGeo.values()) k.n = 0;
   // 1. which holders are drawn, and how many of each kind
@@ -98,7 +117,18 @@ export function updateBatches(theScene) {
     if (!attached(h)) { h.material = h.userData.drawMat; delete h.userData.drawMat; continue; }   // gone: forget it
     holders[w++] = h;
     if (!shown(h)) continue;
-    const k = kindFor(h.geometry, h.userData.drawMat, h.castShadow, h.receiveShadow);
+    let geo = h.geometry;
+    if (camera) {
+      if (!geo.boundingSphere) geo.computeBoundingSphere();
+      _sphere.copy(geo.boundingSphere).applyMatrix4(h.matrixWorld);
+      _sphere.radius += CULL_MARGIN;
+      if (!_frustum.intersectsSphere(_sphere)) continue;
+      if (geo.userData.lod) {
+        const e = h.matrixWorld.elements, dx = e[12] - cx, dy = e[13] - cy, dz = e[14] - cz;
+        if (dx * dx + dy * dy + dz * dz > lod2) geo = geo.userData.lod;
+      }
+    }
+    const k = kindFor(geo, h.userData.drawMat, h.castShadow, h.receiveShadow);
     k.n++;
     drawn.push(h, k);
   }

@@ -7,9 +7,11 @@ export const GROUP = { STATIC: 1, RAGDOLL: 2, PLAYER: 4, DEBRIS: 8 };
 // step sizes, finest first, with the solver iterations used at each (fewer under heavy load: the
 // joints stretch a few millimetres more, which the joint balls hide)
 const RATES = [CONFIG.physics.step, 1 / 90, 1 / 60];
-const ITERATIONS = [CONFIG.physics.solverIterations, 14, 10];
-const FRAME_BUDGET = 12;    // ms of physics allowed per frame
-const HEAVY = 6;            // ms of physics per frame that counts as heavy
+const ITERATIONS = [CONFIG.physics.solverIterations, 8, 10];
+const MIN_BUDGET = 12;      // ms of physics always allowed per frame
+const SHARE = 0.7;          // or this share of the frame time, whichever is more
+const HEAVY = 0.3;          // share of real time spent on physics that counts as heavy
+const LIGHT = 0.1;          // ... and as light again
 
 // Wraps the cannon-es world with a fixed-step accumulator. Systems that need to run
 // in lock-step with the solver (ragdoll muscles) register with onStep().
@@ -95,10 +97,12 @@ export class Physics {
     const h = base * Math.min(1, timeScale);
     this.syncConstraintStiffness(h);
     this.accumulator += Math.min(dt, 0.1) * timeScale;
-    // Steps this frame: as many as the time needs, but never more than fit in the frame budget.
-    // A slow frame used to run up to 6 steps, which made the next frame slower still; now a heavy
-    // scene runs a little behind real time for a moment instead of the frame rate collapsing.
-    const fit = Math.max(1, Math.floor(FRAME_BUDGET / Math.max(0.05, this.stepCost)));
+    // Steps this frame: as many as real time needs, as long as they fit in 70% of the frame time
+    // (at least 12 ms). A slow frame from drawing gets the steps it needs, so the bodies keep real
+    // speed; only when the physics itself can't keep up does the game fall behind real time (slow
+    // motion) instead of each frame getting slower than the last.
+    const budget = Math.max(MIN_BUDGET, SHARE * dt * 1000);
+    const fit = Math.max(1, Math.floor(budget / Math.max(0.05, this.stepCost)));
     const max = Math.min(Math.ceil(CONFIG.physics.maxSubSteps * Math.max(1, timeScale)), fit);
     let n = 0;
     const t0 = performance.now();
@@ -122,12 +126,14 @@ export class Physics {
    */
   govern(ms, dt) {
     if (!(dt > 0)) return;
-    this.loadMs += (ms - this.loadMs) * Math.min(1, dt * 2);   // physics ms per frame, smoothed over ~0.5 s
+    const k = Math.min(1, dt * 2);                       // smoothed over ~0.5 s
+    this.loadMs += (ms - this.loadMs) * k;               // physics ms per frame (debug view)
+    this.load = (this.load ?? 0) + (Math.min(2, ms / (dt * 1000)) - (this.load ?? 0)) * k;   // share of real time
     this.rateHold -= dt;
     if (this.rateHold > 0) return;
     const was = this.rate;
-    if (this.loadMs > HEAVY && this.rate < RATES.length - 1) { this.rate++; this.rateHold = 3; }
-    else if (this.loadMs < HEAVY * 0.35 && this.rate > 0) { this.rate--; this.rateHold = 6; }
+    if (this.load > HEAVY && this.rate < RATES.length - 1) { this.rate++; this.rateHold = 3; }
+    else if (this.load < LIGHT && this.rate > 0) { this.rate--; this.rateHold = 6; }
     if (this.rate !== was) this.world.solver.iterations = ITERATIONS[this.rate];
   }
 

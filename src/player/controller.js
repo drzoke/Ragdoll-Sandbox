@@ -122,10 +122,18 @@ export class PlayerController {
     // ---------- Collide & move ----------
     const wasGround = this.onGround;
     const fallSpeed = this.vel.y;
-    this.moveAxis('x', this.vel.x * dt);
-    this.moveAxis('z', this.vel.z * dt);
-    this.onGround = false;
-    this.moveAxis('y', this.vel.y * dt);
+    // in pieces of at most ~12 cm, so a slow frame (up to 0.1 s) can't carry you through a wall or floor
+    const pieces = Math.min(8, Math.max(1, Math.ceil(Math.max(Math.hypot(this.vel.x, this.vel.z), Math.abs(this.vel.y)) * dt / 0.12)));
+    const sub = dt / pieces;
+    let grounded = false;
+    for (let i = 0; i < pieces; i++) {
+      this.moveAxis('x', this.vel.x * sub);
+      this.moveAxis('z', this.vel.z * sub);
+      this.onGround = false;
+      this.moveAxis('y', this.vel.y * sub);
+      grounded = grounded || this.onGround;
+    }
+    this.onGround = grounded;
     if (!wasGround && this.onGround && fallSpeed < -3) this.landSpring.kick(fallSpeed * 0.06);
     // fall height: from the highest point since last standing (for fall damage)
     if (!wasGround && this.onGround) this.onLand?.(-fallSpeed, (this.fallStart ?? this.pos.y) - this.pos.y);

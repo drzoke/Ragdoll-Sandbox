@@ -86,7 +86,7 @@
 <div id="vignette"></div>
 <!-- Alpha: one step per full update (feature batch). Patch: small fixes shipped on that version
      (back to 0 when the Alpha number goes up). -->
-<div id="version">Alpha 0.9<small>Patch 2</small></div>
+<div id="version">Alpha 0.9<small>Patch 3</small></div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
@@ -233,6 +233,9 @@
           <li><span class="patch">Patch 2</span> <b>V-sync</b> (Settings, on by default). Turn it off to let the game run above your screen's refresh rate, so your aim and the physics update more often. It uses more power.</li>
           <li><span class="patch">Patch 2</span> <b>The FPS counter is honest.</b> The debug view (F3) could never show less than 20 FPS, so a struggling scene looked steady. It now counts real frames and also shows how long each frame and the physics take and how many draw calls there are.</li>
           <li><span class="patch">Patch 2</span> <b>Smarter dynamic resolution.</b> It now notices when the processor, not the graphics card, is what's holding the frame rate back. Fewer pixels can't help then, which is why the resolution didn't seem to move.</li>
+          <li><span class="patch">Patch 3</span> <b>No more slow motion with lots of ragdolls.</b> When the frame rate dropped, the physics only got a fixed slice of each frame, so with many ragdolls everyone moved in slow motion, and below 20 FPS the whole game slowed down. Now the physics gets the steps real time needs, and the game keeps real speed down to 10 FPS.</li>
+          <li><span class="patch">Patch 3</span> <b>Physics twice as fast.</b> A hidden check that grew with the square of the number of ragdolls is gone, body parts are only checked against others close by, and limbs only against the ground when they're near it. Each step also does 10 solver passes instead of 18: at 120 steps a second the joints stay just as tight. With 24 ragdolls a physics step went from 7.7 to 3.9 ms.</li>
+          <li><span class="patch">Patch 3</span> <b>Far and off-screen bodies cost less to draw.</b> Ragdolls in the distance use simpler shapes (about a fifth of the triangles; you can't tell at that distance, and the switch moves further out when you zoom in), and bodies behind you or off to the side aren't drawn at all.</li>
         </ul>
         <h3>Alpha 0.8</h3>
         <ul>
