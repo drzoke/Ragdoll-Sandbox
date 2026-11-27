@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { CONFIG } from '../config.js';
 import { settings } from '../settings.js';
+import { clamp } from '../core/util.js';
 
 const W = CONFIG.weapon;
 const _dir = new THREE.Vector3();
@@ -60,7 +61,7 @@ export class Ballistics {
    * object for all pellets of one shot), range, life (s).
    */
   fire(origin, dir, visualFrom, opts = {}) {
-    const { energy = 1, impulse = W.impulse, size = 1, speed = this.speed, pellet = false, shot = null, range = W.range, life = 1.5, glowSize = 0.075 } = opts;
+    const { energy = 1, impulse = W.impulse, size = 1, speed = this.speed, pellet = false, fragment = false, shot = null, range = W.range, life = 1.5, glowSize = 0.075 } = opts;
     const tracer = new THREE.Mesh(tracerGeo, tracerMat);
     tracer.frustumCulled = false;
     const slug = new THREE.Mesh(slugGeo, slugMat);
@@ -71,7 +72,7 @@ export class Ballistics {
     tracer.userData.width = size;
     this.scene.add(tracer);
     this.bullets.push({
-      pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), energy, impulse, pellet, shot, range, life, size, traveled: 0, age: 0, bloody: 0,
+      pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), energy, impulse, pellet, fragment, shot, range, life, size, traveled: 0, age: 0, bloody: 0,
       skip: new Set(), offset: visualFrom ? visualFrom.clone().sub(origin) : new THREE.Vector3(), tracer, slug, dead: false,
     });
   }
@@ -133,6 +134,32 @@ export class Ballistics {
     b.slug.position.set(0, 0, 0);
   }
 
+  /**
+   * A shotgun up close puts most of its pellets into one spot: the wound is one big hole rather
+   * than eight small ones. When 4+ pellets of one shot land on the same part from under ~4.5 m,
+   * a hand, foot or head is blown apart, an arm or leg is torn off, and the torso is opened up.
+   */
+  pointBlank(r, partName, part, shot, res) {
+    const parts = shot.parts || (shot.parts = new Map());
+    const n = (parts.get(part) || 0) + 1;
+    parts.set(part, n);
+    if (n !== 4 || res.explode) return;
+    const h = r.health, hp = h.parts[partName];
+    const torso = /chest|abdomen|pelvis/.test(partName);
+    h.log(`Point-blank shotgun wound (${hp.label.toLowerCase()})`);
+    h.shock = Math.min(100, (h.shock || 0) + 18);
+    if (!settings.get('dismemberment')) { if (res.wound) { res.wound.rate += 3; res.wound.arterial = true; } return; }
+    if (torso) {
+      if (res.wound) { res.wound.rate += 7; res.wound.arterial = true; }
+      if (!hp.opened && res.wound) { hp.opened = true; res.opened = true; }
+      hp.overkill = (hp.overkill || 0) + 18;
+    } else if (partName === 'head' || /hand|foot/.test(partName) || !hp.attached) {
+      res.explode = true;
+    } else {
+      res.dismember = true;
+    }
+  }
+
   /** Apply a hit. Returns the exit point if the bullet keeps going, otherwise null. */
   processHit(b, hit, dir) {
     const obj = hit.object;
@@ -142,11 +169,17 @@ export class Ballistics {
       const partName = ud.part;
       const part = r.parts[partName];
       if (!part || part.removed) return null;
+      // shotgun pellets and shrapnel shed speed quickly: full power up close, weak at range
+      if ((b.pellet || b.fragment) && !b.slowed) {
+        b.slowed = true;
+        b.energy *= b.pellet ? clamp(1.15 - b.traveled / 30, 0.3, 1.15) : clamp(1.1 - b.traveled / 22, 0.35, 1.1);
+      }
       const energy = b.energy;
       const inv = part.group.quaternion.clone().invert();
       const localEntry = hit.point.clone().sub(part.group.position).applyQuaternion(inv);
       const localDir = dir.clone().applyQuaternion(inv);
       const res = r.health.bulletHit(partName, localEntry, localDir, energy, { dismember: settings.get('dismemberment') });
+      if (b.pellet && b.shot && b.traveled < 4.5) this.pointBlank(r, partName, part, b.shot, res);
       r.hitImpulse(partName, hit.point, dir, b.impulse * energy);
       this.gore.bulletWound(r, res, hit.point, dir);
       if (b.pellet) {

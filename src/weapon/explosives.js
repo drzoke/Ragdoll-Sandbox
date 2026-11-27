@@ -7,7 +7,8 @@ import { settings } from '../settings.js';
 
 const FUSE = 3.0;        // s (world time: slow motion stretches it)
 const RADIUS = 6.5;      // blast radius (m)
-const SHRAPNEL = 26;
+const SHRAPNEL = 48;        // random fragments (plus ones that are aimed at nearby bodies)
+const BURN_RADIUS = 2.6;    // fireball heat (m)
 
 // ---------------------------------------------------------------- textures
 function puffTexture(hot) {
@@ -52,6 +53,7 @@ export class Explosives {
     this.live = [];
     this.spoons = [];
     this.fx = [];           // sprites with an update function
+    this.smoulder = [];     // burnt body parts giving off smoke for a few seconds
     this.raycaster = new THREE.Raycaster();
     this.tex = { fire: puffTexture(true), smoke: puffTexture(false), flash: flashTexture(), ring: ringTexture() };
     this.template = buildGrenade();
@@ -130,11 +132,26 @@ export class Explosives {
     this.effects(c);
     this.scorch(c);
     this.blast(c);
-    // shrapnel: fast little fragments in every direction (mostly sideways/up)
+    // shrapnel: the casing breaks into hundreds of fragments. Fire a spread of random ones, plus
+    // the share of the cloud that would land on each nearby body part (more the closer it is).
     if (this.ballistics) {
-      for (let i = 0; i < SHRAPNEL; i++) {
-        const d = new THREE.Vector3(rand(-1, 1), rand(-0.45, 0.9), rand(-1, 1)).normalize();
-        this.ballistics.fire(c.clone().addScaledVector(d, 0.06), d, null, { energy: rand(0.25, 0.42), impulse: 2.2, size: 0.4, glowSize: 0.03, speed: rand(160, 260), range: 30, life: 0.4 });
+      const frag = (d) => this.ballistics.fire(c.clone().addScaledVector(d, 0.05), d, null,
+        { energy: rand(0.4, 0.72), impulse: 3.2, size: 0.4, glowSize: 0.03, speed: rand(260, 420), range: 40, life: 0.45, fragment: true });
+      for (let i = 0; i < SHRAPNEL; i++) frag(new THREE.Vector3(rand(-1, 1), rand(-0.45, 0.9), rand(-1, 1)).normalize());
+      for (const r of this.ragdolls.list) {
+        for (const part of Object.values(r.parts)) {
+          if (part.removed) continue;
+          const b = part.body;
+          const d = _v.set(b.position.x, b.position.y, b.position.z).distanceTo(c);
+          if (d > 10) continue;
+          const sz = part.def.shape === 'sphere' ? 1 : part.def.size[0] * part.def.size[1] * 22;
+          const expected = Math.min(5, 1.6 * sz / Math.max(0.25, d * d));
+          const n = Math.floor(expected + Math.random());
+          for (let i = 0; i < n; i++) {
+            const t = new THREE.Vector3(b.position.x + rand(-0.05, 0.05), b.position.y + rand(-0.08, 0.08), b.position.z + rand(-0.05, 0.05));
+            frag(t.sub(c).normalize());
+          }
+        }
       }
     }
     // camera shake + a shove if you're close
@@ -291,6 +308,13 @@ export class Explosives {
         const face = _v.clone().addScaledVector(_d, -0.08);
         this.gore.addBruise(r, name, face, Math.min(1, k * 1.6));
         if (k > 0.22) this.gore.addBruise(r, name, face, k, { soot: true });
+        // heat from the fireball: burns on the side facing it, and the part smoulders for a bit
+        const heat = blocked ? 0 : Math.pow(clamp(1 - d / BURN_RADIUS), 1.2);
+        if (heat > 0.03) {
+          r.health.burn(name, heat);
+          if (heat > 0.12) this.gore.addBruise(r, name, face.clone().add(new THREE.Vector3(rand(-0.03, 0.03), rand(-0.03, 0.03), rand(-0.03, 0.03))), Math.min(1, heat * 1.3), { burn: true });
+          if (heat > 0.3) this.smoulder.push({ r, name, t: 1.5 + heat * 4, acc: 0 });
+        }
         if (res.fractured && k > 0.3) this.gore.impactBlood(_v.clone(), 6 + k * 10);
         todo.push({ name, res, dir });
       }
@@ -301,7 +325,7 @@ export class Explosives {
       for (const { name, res, dir } of todo) {
         const part = r.parts[name];
         if (!part || part.removed) continue;
-        if (res.explode && blown < 4) { blown++; this.gore.explodePart(r, name, dir); }
+        if (res.explode && blown < 6) { blown++; this.gore.explodePart(r, name, dir); }
         else if (res.sever && r.sever(name).length) { this.gore.onSever(r, name); part.body.velocity.y += 3; }
       }
     }
@@ -346,6 +370,13 @@ export class Explosives {
         else { s.rest = true; s.mesh.rotation.set(0, Math.random() * 6.28, Math.PI / 2); }
       }
     }
+    for (const sm of this.smoulder) {
+      sm.t -= dt; sm.acc += dt;
+      const part = sm.r.parts[sm.name];
+      if (sm.r.removed || !part || part.removed) { sm.t = 0; continue; }
+      if (sm.acc > 0.12) { sm.acc = 0; this.wisp(part.group.position, 0.45); }
+    }
+    this.smoulder = this.smoulder.filter((sm) => sm.t > 0);
     for (const f of this.fx) {
       f.age += dt;
       const k = Math.min(1, f.age / f.life);
@@ -375,8 +406,8 @@ export class Explosives {
     sg.attributes.position.needsUpdate = true; sg.attributes.color.needsUpdate = true;
   }
 
-  wisp(pos) {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex.smoke, color: new THREE.Color(0.75, 0.75, 0.74), transparent: true, depthWrite: false, opacity: 0 }));
+  wisp(pos, shade = 0.75) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.tex.smoke, color: new THREE.Color(shade, shade, shade * 0.98), transparent: true, depthWrite: false, opacity: 0 }));
     s.position.copy(pos).add(new THREE.Vector3(0, 0.05, 0));
     this.scene.add(s);
     const vel = new THREE.Vector3(rand(-0.05, 0.05), rand(0.25, 0.45), rand(-0.05, 0.05));
@@ -388,6 +419,7 @@ export class Explosives {
     this.live = [];
     for (const s of this.spoons) this.scene.remove(s.mesh);
     this.spoons = [];
+    this.smoulder = [];
   }
 }
 

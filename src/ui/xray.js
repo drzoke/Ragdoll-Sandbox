@@ -212,6 +212,12 @@ export class FlatXRay {
       if (def.shape === 'sphere') g.arc(X(def.pos[0]), Y(def.pos[1]), def.size[0] * s, 0, Math.PI * 2);
       else roundRect(g, X(def.pos[0] - def.size[0] / 2), Y(def.pos[1] + def.size[1] / 2), def.size[0] * s, def.size[1] * s, Math.min(def.size[0], def.size[1]) * s * 0.3);
       g.fill(); g.stroke();
+      if (!gone && hp.burn > 0.05) {
+        // burns: a scorched brown-orange wash, darker the deeper they go
+        const bk = clamp(hp.burn);
+        g.fillStyle = `rgba(${Math.round(255 - bk * 120)},${Math.round(120 - bk * 70)},20,${(0.12 + bk * 0.3).toFixed(3)})`;
+        g.fill();
+      }
       if (hp.exploded) {
         g.setLineDash([]); g.strokeStyle = 'rgba(255,80,60,0.8)'; g.lineWidth = 2 * dpr;
         const r = (def.shape === 'sphere' ? def.size[0] : Math.min(def.size[0], def.size[1]) / 2) * s * 0.7;

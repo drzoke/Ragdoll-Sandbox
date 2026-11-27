@@ -179,6 +179,85 @@ function bruiseTexture(soot = false) {
   }, { srgb: false });
 }
 
+/** Burnt skin: charred black centre, blistered brown middle, raw red edge (colour texture). */
+function burnTexture() {
+  return canvasTexture(128, 128, (g, w, h) => {
+    g.translate(w / 2, h / 2);
+    const R = w * 0.46;
+    const blob = (r0, color, n = 40, jag = 0.18) => {
+      g.fillStyle = color; g.beginPath();
+      for (let i = 0; i <= n; i++) {
+        const a = (i / n) * Math.PI * 2, r = r0 * (1 - jag / 2 + Math.random() * jag);
+        i ? g.lineTo(Math.cos(a) * r, Math.sin(a) * r) : g.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      g.fill();
+    };
+    const edge = g.createRadialGradient(0, 0, R * 0.5, 0, 0, R);
+    edge.addColorStop(0, 'rgba(150,40,30,0.9)'); edge.addColorStop(1, 'rgba(170,60,45,0)');
+    g.fillStyle = edge; g.fillRect(-R, -R, R * 2, R * 2);
+    blob(R * 0.78, 'rgba(110,52,28,0.92)', 48, 0.25);   // blistered / cooked
+    blob(R * 0.55, 'rgba(38,22,14,0.97)', 40, 0.35);    // charred
+    // blisters + cracked char
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2, d = R * (0.5 + Math.random() * 0.25);
+      g.fillStyle = 'rgba(205,150,110,0.7)'; g.beginPath(); g.arc(Math.cos(a) * d, Math.sin(a) * d, 1.5 + Math.random() * 3, 0, Math.PI * 2); g.fill();
+    }
+    g.strokeStyle = 'rgba(8,4,2,0.9)'; g.lineWidth = 1.2;
+    for (let i = 0; i < 9; i++) {
+      let x = (Math.random() - 0.5) * R * 0.7, y = (Math.random() - 0.5) * R * 0.7;
+      g.beginPath(); g.moveTo(x, y);
+      for (let k = 0; k < 4; k++) { x += (Math.random() - 0.5) * 14; y += (Math.random() - 0.5) * 14; g.lineTo(x, y); }
+      g.stroke();
+    }
+  });
+}
+
+/**
+ * Mottled burn coverage for a whole body part (grey-scale, tinted by the material colour): blotchy
+ * alpha so the skin underneath shows through in places, with darker cracks and pale blisters.
+ */
+function charTexture() {
+  const tex = canvasTexture(256, 256, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    const spot = (x, y, r, a, v) => {
+      for (const ox of [-w, 0, w]) for (const oy of [-h, 0, h]) {   // wrap so it tiles
+        const grd = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+        grd.addColorStop(0, `rgba(${v},${v},${v},${a})`); grd.addColorStop(0.6, `rgba(${v},${v},${v},${a * 0.7})`); grd.addColorStop(1, `rgba(${v},${v},${v},0)`);
+        g.fillStyle = grd; g.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
+      }
+    };
+    for (let i = 0; i < 70; i++) spot(Math.random() * w, Math.random() * h, 18 + Math.random() * 46, 0.6 + Math.random() * 0.35, 170 + Math.floor(Math.random() * 60));
+    for (let i = 0; i < 24; i++) spot(Math.random() * w, Math.random() * h, 8 + Math.random() * 24, 0.9, 40 + Math.floor(Math.random() * 50));
+    g.strokeStyle = 'rgba(20,20,20,0.85)'; g.lineWidth = 1.4;
+    for (let i = 0; i < 26; i++) {
+      let x = Math.random() * w, y = Math.random() * h;
+      g.beginPath(); g.moveTo(x, y);
+      for (let k = 0; k < 5; k++) { x += (Math.random() - 0.5) * 22; y += (Math.random() - 0.5) * 22; g.lineTo(x, y); }
+      g.stroke();
+    }
+    for (let i = 0; i < 30; i++) {
+      g.fillStyle = 'rgba(255,235,215,0.55)'; g.beginPath();
+      g.arc(Math.random() * w, Math.random() * h, 1.2 + Math.random() * 2.5, 0, Math.PI * 2); g.fill();
+    }
+  });
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+/** Glowing ember specks (emissive map for freshly burnt skin). */
+function emberTexture() {
+  return canvasTexture(128, 128, (g, w, h) => {
+    g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
+    g.translate(w / 2, h / 2);
+    for (let i = 0; i < 70; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.random() * w * 0.3, r = 0.8 + Math.random() * 2.5;
+      const grd = g.createRadialGradient(Math.cos(a) * d, Math.sin(a) * d, 0, Math.cos(a) * d, Math.sin(a) * d, r * 2);
+      grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grd; g.fillRect(-w / 2, -h / 2, w, h);
+    }
+  });
+}
+
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
 const UP = new THREE.Vector3(0, 1, 0), Zf = new THREE.Vector3(0, 0, 1);
 
@@ -249,6 +328,9 @@ export class Decals {
     // ---- bruises / soot on the ragdoll (one small material per mark so each can age) ----
     this.bruiseTex = bruiseTexture(false);
     this.sootTex = bruiseTexture(true);
+    this.burnTex = burnTexture();
+    this.emberTex = emberTexture();
+    this.charTex = charTexture();
     this.bruiseGeo = new THREE.PlaneGeometry(1, 1);
 
     this.woundGeo = new THREE.PlaneGeometry(1, 1);
@@ -421,10 +503,12 @@ export class Decals {
 
   // ---------------------------------------------------------------- bruises
   /** A bruise (or soot mark) on a body-part group, in that part's local space. */
-  addBruise(group, localPoint, localNormal, size, soot = false) {
+  addBruise(group, localPoint, localNormal, size, kind = 'bruise') {
+    const burn = kind === 'burn', soot = kind === 'soot';
     const mat = new THREE.MeshStandardMaterial({
-      map: soot ? this.sootTex : this.bruiseTex, transparent: true, depthWrite: false, opacity: 0, roughness: soot ? 0.95 : 0.6,
-      polygonOffset: true, polygonOffsetFactor: -3.5, polygonOffsetUnits: -3.5,
+      map: burn ? this.burnTex : soot ? this.sootTex : this.bruiseTex, transparent: true, depthWrite: false, opacity: 0, roughness: soot || burn ? 0.95 : 0.6,
+      polygonOffset: true, polygonOffsetFactor: burn ? -3.8 : -3.5, polygonOffsetUnits: burn ? -3.8 : -3.5,
+      ...(burn ? { emissive: 0xff5a10, emissiveMap: this.emberTex, emissiveIntensity: 0 } : {}),
     });
     const m = new THREE.Mesh(this.bruiseGeo, mat);
     m.position.copy(localPoint).addScaledVector(localNormal, 0.0012);
@@ -433,6 +517,22 @@ export class Decals {
     m.scale.setScalar(size);
     m.userData.decal = true;
     group.add(m);
+    return m;
+  }
+
+  /**
+   * A thin shell over a whole body part that shows how badly it is burnt: a red flush (1st degree),
+   * blistered brown (2nd), charred black (3rd), with embers glowing while it is fresh.
+   */
+  burnShell(mesh) {
+    const mat = new THREE.MeshStandardMaterial({
+      map: this.charTex, color: 0xb03020, transparent: true, depthWrite: false, opacity: 0, roughness: 0.95,
+      emissive: 0xff5a10, emissiveMap: this.emberTex, emissiveIntensity: 0,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    });
+    const m = new THREE.Mesh(mesh.geometry, mat);
+    m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale).multiplyScalar(1.004);
+    m.userData.decal = true;
     return m;
   }
 

@@ -12,6 +12,7 @@ const G = CONFIG.gore;
 const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Quaternion();
 const Zf = new THREE.Vector3(0, 0, 1);
 const _w1 = new THREE.Vector3(), _w2 = new THREE.Vector3(), _w3 = new THREE.Vector3();
+const _c = new THREE.Color(), _c2 = new THREE.Color();
 
 const MAT = {
   meat: new THREE.MeshStandardMaterial({ color: 0x6e0b0b, roughness: 0.35, metalness: 0.05 }),
@@ -120,7 +121,8 @@ export class Gore {
    * Purple bruise where something blunt hit (punch, slam, blast). Nearby bruises merge and darken.
    * severity 0..1. soot = black blast residue instead of a bruise.
    */
-  addBruise(ragdoll, partName, worldPoint, severity, { soot = false } = {}) {
+  addBruise(ragdoll, partName, worldPoint, severity, { soot = false, burn = false } = {}) {
+    const kind = burn ? 'burn' : soot ? 'soot' : 'bruise';
     const part = ragdoll.parts[partName];
     if (!part || part.removed || severity <= 0.02) return;
     const g = part.group;
@@ -137,21 +139,22 @@ export class Gore {
     }
     // merge with a bruise close by on the same part
     for (const b of this.bruises) {
-      if (b.ragdoll !== ragdoll || b.part !== partName || b.soot !== soot) continue;
+      if (b.ragdoll !== ragdoll || b.part !== partName || b.kind !== kind) continue;
       if (b.local.distanceTo(local) < 0.05 + b.size * 0.3) {
         b.sev = Math.min(1.6, b.sev + severity * 0.6);
         b.size = Math.min(0.2, b.size + severity * 0.02);
         b.mesh.scale.setScalar(b.size);
         b.age = Math.min(b.age, 1);
+        if (burn) b.glow = Math.max(b.glow, severity);
         return;
       }
     }
     const surf = this.surfacePoint(part, local.clone().addScaledVector(n, -0.01), n);
-    const size = (soot ? 0.1 : 0.07) + severity * (soot ? 0.12 : 0.09);
-    const mesh = this.decals.addBruise(g, surf.point, surf.normal, size, soot);
+    const size = burn ? 0.09 + severity * 0.11 : (soot ? 0.1 : 0.07) + severity * (soot ? 0.12 : 0.09);
+    const mesh = this.decals.addBruise(g, surf.point, surf.normal, size, kind);
     const mine = this.bruises.filter((b) => b.ragdoll === ragdoll);
-    if (mine.length >= 28) { const old = mine[0]; old.mesh.parent?.remove(old.mesh); old.mesh.material.dispose(); this.bruises.splice(this.bruises.indexOf(old), 1); }
-    this.bruises.push({ ragdoll, part: partName, mesh, local: surf.point.clone(), sev: severity, size, age: 0, soot });
+    if (mine.length >= 40) { const old = mine[0]; old.mesh.parent?.remove(old.mesh); old.mesh.material.dispose(); this.bruises.splice(this.bruises.indexOf(old), 1); }
+    this.bruises.push({ ragdoll, part: partName, mesh, local: surf.point.clone(), sev: severity, size, age: 0, soot, kind, glow: burn ? severity : 0 });
   }
 
   /** Bruises come up over a second or two, then darken from red-purple to deep purple. */
@@ -162,6 +165,13 @@ export class Gore {
       if (b.ragdoll.removed) { this.bruises.splice(i, 1); continue; }
       b.age += dt;
       const m = b.mesh.material;
+      if (b.kind === 'burn') {
+        // fresh burns smoulder: embers glow and fade over a few seconds
+        m.color.setRGB(1, 1, 1);
+        m.opacity = Math.min(0.97, b.age * 5) * Math.min(1, 0.5 + b.sev * 0.6);
+        m.emissiveIntensity = b.glow * 3.2 * Math.max(0, 1 - b.age / 5) * (0.75 + 0.25 * Math.sin(b.age * 13 + b.size * 50));
+        continue;
+      }
       if (b.soot) { m.color.setRGB(0.02, 0.018, 0.016); m.opacity = Math.min(0.92, b.age * 6) * Math.min(1, 0.55 + b.sev * 0.5); continue; }
       const k1 = Math.min(1, b.age / 6), k2 = Math.min(1, Math.max(0, b.age - 20) / 120);
       m.color.copy(fresh).lerp(deep, k1).lerp(old, k2);
@@ -415,6 +425,7 @@ export class Gore {
 
   // ---------------------------------------------------------------- continuous bleeding
   updateRagdoll(ragdoll, dt) {
+    this.updateBurns(ragdoll, dt);
     const h = ragdoll.health;
     const press = h.pressure();
     const beat = h.heartRate > 1 ? (h.time * h.heartRate / 60) % 1 : 0.5;
@@ -464,6 +475,31 @@ export class Gore {
         vis.stainSize = Math.min(maxStain, vis.stainSize + flow * dt * 0.0012);
         vis.stain.scale.setScalar(vis.stainSize);
       }
+    }
+  }
+
+  /** Burnt parts: tint the shell by burn depth and let the embers die down over a few seconds. */
+  updateBurns(ragdoll, dt) {
+    const h = ragdoll.health;
+    for (const [name, part] of Object.entries(ragdoll.parts)) {
+      const b = h.parts[name].burn || 0;
+      if (b < 0.04 || part.removed) continue;
+      let s = part.burnShell;
+      if (!s) { s = part.burnShell = this.decals.burnShell(part.mesh); s.userData.age = 0; part.group.add(s); }
+      const u = s.userData, m = s.material;
+      if (u.k !== b) {
+        if (u.k !== undefined && b > u.k + 0.05) u.age = Math.min(u.age, 0.5);   // burnt again: embers flare up
+        u.k = b;
+        // red flush -> blistered brown -> char
+        if (b < 0.3) _c.setRGB(0.5, 0.09, 0.06);
+        else if (b < 0.66) _c.setRGB(0.5, 0.09, 0.06).lerp(_c2.setRGB(0.24, 0.08, 0.035), (b - 0.3) / 0.36);
+        else _c.setRGB(0.24, 0.08, 0.035).lerp(_c2.setRGB(0.045, 0.032, 0.025), Math.min(1, (b - 0.66) / 0.3));
+        m.color.copy(_c);
+        u.opacity = Math.min(0.95, 0.3 + b * 0.95);
+      }
+      u.age += dt;
+      m.opacity += (u.opacity - m.opacity) * Math.min(1, dt * 6);
+      m.emissiveIntensity = b > 0.25 ? b * 2.4 * Math.max(0, 1 - u.age / 5) * (0.8 + 0.2 * Math.sin(u.age * 11)) : 0;
     }
   }
 

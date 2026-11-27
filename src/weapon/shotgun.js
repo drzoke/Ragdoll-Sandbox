@@ -14,7 +14,7 @@ const S = {
   pellets: 8,              // 00 buckshot
   hipSpread: 0.05,         // pattern cone (rad)
   adsSpread: 0.036,
-  pelletEnergy: 0.5,
+  pelletEnergy: 0.58,
   pelletImpulse: 3.4,
   pelletSpeed: 380,
   hipPos: [0.13, -0.155, -0.4],

@@ -308,7 +308,7 @@ export class Health {
     const out = { fractured: false, sever: false, explode: false };
     const part = this.parts[partName];
     const anat = ANATOMY[partName];
-    const dmg = 150 * k * k + 30 * k;
+    const dmg = 95 * k * k + 22 * k;
     part.tissue = Math.max(0, part.tissue - dmg);
     if (part.tissue <= 0) part.overkill = (part.overkill || 0) + dmg * 0.5;
     if (part.attached) {
@@ -336,17 +336,54 @@ export class Health {
     if (partName === 'head' && part.attached) {
       this.consciousness = Math.max(0, this.consciousness - 110 * k);
       this.organs.brain.hp = Math.max(0, this.organs.brain.hp - 60 * k * k);
+      if (k > 0.18 && !this.eardrums) { this.eardrums = true; this.log('Eardrums ruptured (blast)', 'warn'); }
+      if (k > 0.3) this.log('Concussion', 'warn');
     }
     if (k > 0.2 && part.attached) this.wounds.push({ part: partName, pos: null, blunt: true, normal: null, rate: 0.6 + 5 * k * k, arterial: k > 0.65, exit: false, age: 0 });
     if (dismember && !part.exploded) {
       const isTorso = partName === 'chest' || partName === 'abdomen' || partName === 'pelvis';
       const roll = Math.random();
-      if (isTorso) { if (k > 0.88 && roll < 0.6) out.explode = true; }
-      else if (partName === 'head') { if (k > 0.82 && roll < 0.7) out.explode = true; }
-      else if (k > 0.8 && roll < 0.55) out.explode = true;
-      else if (k > 0.55 && part.attached && roll < (k - 0.45) * 1.4) out.sever = true;
+      // limbs closest to the blast are shredded, a little further out they are torn off at the joint
+      const light = /hand|foot|lowerArm/.test(partName);
+      // k: ~0.85 at 0.5 m, 0.71 at 1 m, 0.59 at 1.5 m, 0.48 at 2 m, 0.29 at 3 m
+      if (isTorso) { if (k > 0.84 && roll < 0.7) out.explode = true; }
+      else if (partName === 'head') { if (k > 0.76 && roll < 0.75) out.explode = true; }
+      else if (k > (light ? 0.68 : 0.78) && roll < 0.75) out.explode = true;
+      else if (k > (light ? 0.4 : 0.46) && part.attached && roll < (k - 0.3) * 1.5) out.sever = true;
     }
     return out;
+  }
+
+  /**
+   * Burn from the fireball / flash heat. k = 0..1 heat at that part. Burns build up per part:
+   * first degree (red, painful), second degree (blisters, very painful, leaks fluid) and third
+   * degree (charred: the nerves are gone so it hurts less locally, but the tissue is destroyed).
+   * Returns the burn degree reached (0..3).
+   */
+  burn(partName, k) {
+    const p = this.parts[partName];
+    if (k <= 0.02) return 0;
+    const was = p.burn || 0;
+    p.burn = clamp(was + k);
+    const deg = p.burn > 0.66 ? 3 : p.burn > 0.3 ? 2 : 1;
+    const wasDeg = was > 0.66 ? 3 : was > 0.3 ? 2 : was > 0 ? 1 : 0;
+    p.tissue = Math.max(0, p.tissue - 16 * k * (deg >= 3 ? 1.5 : 1));
+    if (p.attached) {
+      this.rawPain += (deg === 3 ? 18 : deg === 2 ? 34 : 16) * k + 4;
+      this.shock = Math.min(100, this.shock + 9 * k * deg);
+      this.adrenaline = Math.min(1, this.adrenaline + 0.2 * k);
+    }
+    // plasma leak grows with the burned area (2nd/3rd degree)
+    if (deg >= 2) this.burnArea = (this.burnArea || 0) + k * (/chest|abdomen|pelvis|thigh/.test(partName) ? 1.4 : 0.7);
+    if (deg > wasDeg) {
+      // one fireball burns many parts at once: merge them into one line per degree
+      const name = p.label.toLowerCase(), bl = this._burnLog;
+      const text = (parts) => `${['', 'First', 'Second', 'Third'][deg]}-degree burns (${parts.slice(0, 2).join(', ')}${parts.length > 2 ? ` +${parts.length - 2} more` : ''})`;
+      if (bl && bl.deg === deg && this.time - bl.t < 0.5 && this.events.includes(bl.ev)) { bl.parts.push(name); bl.ev.text = text(bl.parts); }
+      else { this.log(text([name]), deg >= 2 ? 'bad' : 'warn'); this._burnLog = { t: this.time, deg, parts: [name], ev: this.events[0] }; }
+    }
+    if (partName === 'head' && deg >= 2 && !this.eyesBurned && k > 0.35) { this.eyesBurned = true; this.log('Face and eyes burned'); }
+    return deg;
   }
 
   // ---------------------------------------------------------------- Capabilities
@@ -388,6 +425,8 @@ export class Health {
       const tc = w.arterial ? PH.arterialClotTime : PH.clotTime;
       w.rate *= Math.exp(-dt / tc);
     }
+    // burns leak plasma (slowly), which counts towards volume loss / shock
+    if (this.burnArea > 0) loss += this.burnArea * 0.9 * dt;
     this.blood = Math.max(0, this.blood - loss);
     const lossFrac = 1 - this.bloodFrac;
 
