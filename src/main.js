@@ -32,6 +32,7 @@ import { Graphics } from './graphics.js';
 import { watchForUpdates } from './ui/update.js';
 import { settings } from './settings.js';
 import { trackMaterials } from './materials.js';
+import { updateBatches, batchStats } from './ragdoll/batcher.js';
 import { GRAY as RAGDOLL_GRAY, BLACK as RAGDOLL_BLACK, ZOMBIE_SKIN, ZOMBIE_JOINT, ARMOR_MATERIALS } from './ragdoll/ragdoll.js';
 import { IS_TOUCH, IS_IOS, IS_STANDALONE } from './core/device.js';
 import { TouchControls } from './ui/touch.js';
@@ -640,6 +641,8 @@ function watchResolution(now) {
   if (fps < 48) {
     drs.good = 0;
     if (drs.stuck || s <= 0.61) return;
+    // the game's own work (physics, ragdolls, draw calls) fills the frame: fewer pixels won't help
+    if (cpuMs > 0.8 * 1000 / fps) return;
     if (drs.lastDownFps && fps < drs.lastDownFps * 1.04) { drs.stuck = true; graphics.setResScale(s + 0.1); drs.wait = 1; return; }
     drs.lastDownFps = fps;
     graphics.setResScale(s - 0.1);
@@ -651,13 +654,42 @@ function watchResolution(now) {
 }
 
 // ------------------------------------------------------------------ loop
+// V-sync on: one frame per screen refresh (requestAnimationFrame). Off: extra frames run between
+// refreshes as soon as the last one is done (a message to ourselves is the fastest way to yield to
+// the browser), so the game runs above the refresh rate and input and physics are sampled more
+// often. The refresh frame still runs right before each paint, so the screen always shows the
+// newest frame; if the browser falls behind on its refreshes the extra frames pause until it
+// catches up, so they can never starve the page.
+const loopChannel = new MessageChannel();
+let rafPending = false, msgPending = false, lastRaf = performance.now(), rafGap = 1000 / 60;
+loopChannel.port1.onmessage = () => { msgPending = false; frame(); };
+function onRaf() {
+  rafPending = false;
+  const now = performance.now();
+  rafGap += (Math.min(34, Math.max(4, now - lastRaf)) - rafGap) * 0.1;
+  lastRaf = now;
+  frame();
+}
+function scheduleFrame() {
+  if (!rafPending) { rafPending = true; requestAnimationFrame(onRaf); }
+  if (settings.get('vsync') === false && !document.hidden && !msgPending && performance.now() - lastRaf < rafGap * 1.5) {
+    msgPending = true; loopChannel.port2.postMessage(0);
+  }
+}
+// FPS: frames counted over half a second of real time (the game's dt is capped at 1/20 s, which
+// kept the old counter from ever showing less than 20)
+const fpsCount = { n: 0, t0: performance.now() };
+let cpuMs = 0;
+let drawCalls = 0;
+renderer.info.autoReset = false;              // time spent in frame() itself, smoothed (dynamic resolution reads it)
 let last = performance.now();
 function frame() {
-  requestAnimationFrame(frame);
+  scheduleFrame();
   const now = performance.now();
   const dt = Math.min((now - last) / 1000, 1 / 20) * debug.timeScale;
   last = now;
-  fps += (1 / Math.max(dt, 1e-4) - fps) * 0.05;
+  fpsCount.n++;
+  if (now - fpsCount.t0 >= 500) { fps = fpsCount.n * 1000 / (now - fpsCount.t0); fpsCount.n = 0; fpsCount.t0 = now; }
 
   if (input.wasPressed('KeyX')) {
     // Shift+X switches the x-ray between the 3D view and the flat diagram
@@ -692,9 +724,9 @@ function frame() {
   hud.update(dt, {
     pistol, tool: toolbox.active, player, target, viewerPos,
     debugText: debugOn ? [
-      `fps ${fps.toFixed(0)}`,
+      `fps ${fps.toFixed(0)}  frame ${cpuMs.toFixed(1)} ms  physics ${physics.loadMs.toFixed(1)} ms at ${Math.round(physics.rateHz)} Hz`,
       `pos ${player.pos.x.toFixed(2)} ${player.pos.y.toFixed(2)} ${player.pos.z.toFixed(2)}  speed ${player.speed2D.toFixed(2)}`,
-      `particles ${gore.particles.alive.size}  pools ${gore.decals.pools.length}  gibs ${gore.gibs.length}`,
+      `particles ${gore.particles.alive.size}  pools ${gore.decals.pools.length}  gibs ${gore.gibs.length}  draw calls ${drawCalls}  ragdoll batches ${batchStats().draws} (${batchStats().instances})`,
       r0 ? `${r0.name}: ${r0.brain.state} / ${r0.brain.activity}  pelvis y ${r0.pelvis.position.y.toFixed(2)}` : '',
       `pistol ${pistol.state}  mag ${pistol.mag}  chamber ${pistol.chambered}  shotgun ${shotgun.state} ${shotgun.tube}+${shotgun.chamber}  bullets ${ballistics.bullets.length}  grenades ${explosives.live.length}`,
       `time ${world.timeScale}x  gfx ${graphics.level} res ${(graphics.resScale * 100).toFixed(0)}%  tool ${toolbox.active.name}${grab.held ? ' holding ' + (grab.held.part || 'gib') : ''}`,
@@ -706,9 +738,12 @@ function frame() {
   const t = toolbox.active;
   vitals.update(dt, { input, playing: playing && !toolboxOpen, show: !titleMode && ragdolls.list.some((r) => r.zombie && !r.hidden) });
   map.cull(camera);
+  updateBatches(scene);     // ragdoll parts and the marks on them, drawn instanced
   if (titleMode || vitals.dead) graphics.render(null, null);
   else graphics.render(t.scene, t.camera);
+  drawCalls = renderer.info.render.calls; renderer.info.reset();   // the whole frame's (shadows and view model included)
   input.endFrame();
+  cpuMs += (performance.now() - now - cpuMs) * 0.1;
 }
 
 // ---- finish loading: compile shaders, then hand over to the menu ----
@@ -725,4 +760,4 @@ setTimeout(() => {
 
 // Exposed for debugging from the console and for automated tests.
 watchForUpdates({ hud });
-window.game = { vitals, map, loadMap, MAPS, machete, medkit, defib, spawnMenu, title, showTitle, get titleMode() { return titleMode; }, fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, sniper, musket, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };
+window.game = { batchStats, vitals, map, loadMap, MAPS, machete, medkit, defib, spawnMenu, title, showTitle, get titleMode() { return titleMode; }, fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, sniper, musket, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };

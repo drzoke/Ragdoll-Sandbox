@@ -6,6 +6,7 @@ import { Decals, bandageTexture } from './decals.js';
 import { PART_BY_NAME } from '../ragdoll/skeleton.js';
 import { GROUP } from '../core/physics.js';
 import { rand } from '../core/util.js';
+import { batch } from '../ragdoll/batcher.js';
 import { settings } from '../settings.js';
 
 const G = CONFIG.gore;
@@ -13,6 +14,26 @@ const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Quatern
 const Zf = new THREE.Vector3(0, 0, 1);
 const _w1 = new THREE.Vector3(), _w2 = new THREE.Vector3(), _w3 = new THREE.Vector3();
 const _c = new THREE.Color(), _c2 = new THREE.Color();
+
+// Shared geometries (sized with mesh.scale) so gibs, stumps and exposed organs can be drawn in
+// batches instead of one draw call each.
+const GEO = new Map();
+const geo = (key, make) => { let g = GEO.get(key); if (!g) { g = make(); GEO.set(key, g); } return g; };
+const lumpy = (detail, i) => geo(`lump${detail}.${i}`, () => {
+  const g = new THREE.IcosahedronGeometry(1, detail), pa = g.attributes.position, v = new THREE.Vector3();
+  // the same jitter for vertices that share a position, so the lump stays closed
+  const seen = new Map();
+  for (let k = 0; k < pa.count; k++) {
+    v.fromBufferAttribute(pa, k);
+    const key = `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`;
+    let f = seen.get(key); if (f === undefined) { f = rand(0.75, 1.25); seen.set(key, f); }
+    v.multiplyScalar(f); pa.setXYZ(k, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals();
+  return g;
+});
+const LUMPS = 6;
+const mm = (r) => Math.round(r * 1000);
 
 const MAT = {
   meat: new THREE.MeshStandardMaterial({ color: 0x6e0b0b, roughness: 0.35, metalness: 0.05 }),
@@ -161,7 +182,7 @@ export class Gore {
     const size = burn ? 0.09 + severity * 0.11 : (soot ? 0.1 : 0.07) + severity * (soot ? 0.12 : 0.09);
     const mesh = this.decals.addBruise(g, surf.point, surf.normal, size, kind);
     const mine = this.bruises.filter((b) => b.ragdoll === ragdoll);
-    if (mine.length >= 40) { const old = mine[0]; old.mesh.parent?.remove(old.mesh); old.mesh.material.dispose(); this.bruises.splice(this.bruises.indexOf(old), 1); }
+    if (mine.length >= 40) { const old = mine[0]; old.mesh.parent?.remove(old.mesh); this.bruises.splice(this.bruises.indexOf(old), 1); }
     this.bruises.push({ ragdoll, part: partName, mesh, local: surf.point.clone(), sev: severity, size, age: 0, soot, kind, glow: burn ? severity : 0 });
   }
 
@@ -172,12 +193,12 @@ export class Gore {
       const b = this.bruises[i];
       if (b.ragdoll.removed) { this.bruises.splice(i, 1); continue; }
       b.age += dt;
-      const m = b.mesh.material;
+      const m = b.mesh.userData.fx;      // per-mark colour / opacity / glow (drawn instanced)
       if (b.kind === 'burn') {
         // fresh burns smoulder: embers glow and fade over a few seconds
         m.color.setRGB(1, 1, 1);
         m.opacity = Math.min(0.97, b.age * 5) * Math.min(1, 0.5 + b.sev * 0.6);
-        m.emissiveIntensity = b.glow * 3.2 * Math.max(0, 1 - b.age / 5) * (0.75 + 0.25 * Math.sin(b.age * 13 + b.size * 50));
+        m.emissive = b.glow * 3.2 * Math.max(0, 1 - b.age / 5) * (0.75 + 0.25 * Math.sin(b.age * 13 + b.size * 50));
         continue;
       }
       if (b.soot) { m.color.setRGB(0.02, 0.018, 0.016); m.opacity = Math.min(0.92, b.age * 6) * Math.min(1, 0.55 + b.sev * 0.5); continue; }
@@ -465,20 +486,23 @@ export class Gore {
     const g = new THREE.Group();
     g.position.copy(localPos);
     g.quaternion.setFromUnitVectors(Zf, outward);
-    const cap = new THREE.Mesh(new THREE.CircleGeometry(r * 1.08, 18), MAT.meat);
+    const k = mm(r);
+    const cap = new THREE.Mesh(geo(`cap${k}`, () => new THREE.CircleGeometry(r * 1.08, 18)), MAT.meat);
     cap.position.z = 0.004;
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 0.95, r * 0.22, 6, 18), MAT.meatDark);
-    const bone = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.28, r * 0.33, 0.035, 10).rotateX(Math.PI / 2), MAT.bone);
+    const ring = new THREE.Mesh(geo(`ring${k}`, () => new THREE.TorusGeometry(r * 0.95, r * 0.22, 6, 18)), MAT.meatDark);
+    const bone = new THREE.Mesh(geo(`bone${k}`, () => new THREE.CylinderGeometry(r * 0.28, r * 0.33, 0.035, 10).rotateX(Math.PI / 2)), MAT.bone);
     bone.position.z = 0.012;
     for (const m of [cap, ring, bone]) { m.castShadow = true; g.add(m); }
     // a few ragged meat chunks
     for (let i = 0; i < 4; i++) {
-      const c = new THREE.Mesh(new THREE.IcosahedronGeometry(r * rand(0.2, 0.35), 0), MAT.meat);
+      const c = new THREE.Mesh(lumpy(0, i % LUMPS), MAT.meat);
+      c.scale.setScalar(r * rand(0.2, 0.35));
       const a = Math.random() * Math.PI * 2;
       c.position.set(Math.cos(a) * r * 0.75, Math.sin(a) * r * 0.75, 0.006);
       g.add(c);
     }
     group.add(g);
+    g.traverse((m) => m.isMesh && batch(m));
   }
 
   // ---------------------------------------------------------------- exposed organs
@@ -489,25 +513,26 @@ export class Gore {
     const g = new THREE.Group();
     g.position.copy(surf.point);
     g.quaternion.setFromUnitVectors(Zf, surf.normal);
-    const hole = new THREE.Mesh(new THREE.CircleGeometry(partName === 'head' ? 0.045 : 0.07, 20), MAT.meatDark);
+    const hr = partName === 'head' ? 0.045 : 0.07;
+    const hole = new THREE.Mesh(geo(`hole${hr}`, () => new THREE.CircleGeometry(hr, 20)), MAT.meatDark);
     hole.scale.set(1, 0.75, 1);
     hole.position.z = 0.002;
     g.add(hole);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(partName === 'head' ? 0.045 : 0.07, 0.012, 6, 22), MAT.meat);
+    const rim = new THREE.Mesh(geo(`rim${hr}`, () => new THREE.TorusGeometry(hr, 0.012, 6, 22)), MAT.meat);
     rim.scale.set(1, 0.75, 1);
     g.add(rim);
 
     const organs = settings.get('showOrgans');
     if (partName === 'chest') {
       for (let i = -2; i <= 2; i++) {
-        const rib = new THREE.Mesh(new THREE.CapsuleGeometry(0.0055, 0.1, 3, 6).rotateZ(Math.PI / 2), MAT.bone);
+        const rib = new THREE.Mesh(geo('rib', () => new THREE.CapsuleGeometry(0.0055, 0.1, 3, 6).rotateZ(Math.PI / 2)), MAT.bone);
         rib.position.set(0, i * 0.02, -0.004);
         rib.rotation.z = (Math.random() - 0.5) * 0.25;
         if (Math.random() < 0.35) { rib.scale.x = 0.45; rib.position.x = rand(-0.03, 0.03); rib.rotation.y = rand(-0.4, 0.4); }
         g.add(rib);
       }
       if (organs) {
-        const lung = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 10), MAT.lung);
+        const lung = new THREE.Mesh(geo('lung', () => new THREE.SphereGeometry(0.04, 12, 10)), MAT.lung);
         lung.scale.set(1, 1.2, 0.45); lung.position.set(0.02, 0.005, -0.012);
         g.add(lung);
       }
@@ -526,12 +551,14 @@ export class Gore {
       }
     } else if (partName === 'head') {
       for (let i = 0; i < (organs ? 6 : 0); i++) {
-        const b = new THREE.Mesh(new THREE.SphereGeometry(rand(0.012, 0.02), 8, 6), MAT.brain);
+        const b = new THREE.Mesh(geo('blob', () => new THREE.SphereGeometry(1, 8, 6)), MAT.brain);
+        b.scale.setScalar(rand(0.012, 0.02));
         b.position.set(rand(-0.025, 0.025), rand(-0.018, 0.018), rand(-0.01, 0.004));
         g.add(b);
       }
       for (let i = 0; i < 5; i++) {
-        const s = new THREE.Mesh(new THREE.BoxGeometry(rand(0.01, 0.02), rand(0.006, 0.012), 0.004), MAT.bone);
+        const s = new THREE.Mesh(geo('box', () => new THREE.BoxGeometry(1, 1, 1)), MAT.bone);
+        s.scale.set(rand(0.01, 0.02), rand(0.006, 0.012), 0.004);
         const a = Math.random() * Math.PI * 2;
         s.position.set(Math.cos(a) * 0.045, Math.sin(a) * 0.034, 0.003);
         s.rotation.z = a;
@@ -539,6 +566,7 @@ export class Gore {
       }
     }
     part.group.add(g);
+    g.traverse((m) => m.isMesh && m.geometry.type !== 'TubeGeometry' && batch(m));
     const world = surf.point.clone().applyQuaternion(part.group.quaternion).add(part.group.position);
     const wn = surf.normal.clone().applyQuaternion(part.group.quaternion);
     this.spray(world, wn, 40, { speed: 2.5, spread: 0.6, size: 0.022, volume: 1.5 });
@@ -628,15 +656,13 @@ export class Gore {
     body.velocity.set(vel.x + rand(-1, 1), vel.y + rand(0, 1.5), vel.z + rand(-1, 1));
     body.angularVelocity.set(rand(-10, 10), rand(-10, 10), rand(-10, 10));
     this.physics.world.addBody(body);
-    const geo = new THREE.IcosahedronGeometry(r, 1);
-    const pa = geo.attributes.position;
-    for (let i = 0; i < pa.count; i++) { _v.fromBufferAttribute(pa, i).multiplyScalar(rand(0.75, 1.25)); pa.setXYZ(i, _v.x, _v.y, _v.z); }
-    geo.computeVertexNormals();
-    const mesh = new THREE.Mesh(geo, material);
+    const mesh = new THREE.Mesh(lumpy(1, Math.floor(Math.random() * LUMPS)), material);
+    mesh.scale.setScalar(r);
     mesh.castShadow = true;
     mesh.userData.surface = 'gib';
     this.scene.add(mesh);
-    const gib = { body, mesh, bleed: 2.5, acc: 0 };
+    batch(mesh, mesh);
+    const gib = { body, mesh, bleed: 2.5, acc: 0, keepGeometry: true };
     mesh.userData.gib = gib;
     this.gibs.push(gib);
   }
@@ -710,8 +736,8 @@ export class Gore {
       const b = h.parts[name].burn || 0;
       if (b < 0.04 || part.removed) continue;
       let s = part.burnShell;
-      if (!s) { s = part.burnShell = this.decals.burnShell(part.mesh); s.userData.age = 0; part.group.add(s); }
-      const u = s.userData, m = s.material;
+      if (!s) { s = part.burnShell = this.decals.burnShell(part.mesh); s.userData.age = 0; part.group.add(s); batch(s); }
+      const u = s.userData, m = u.fx;
       if (u.k !== b) {
         if (u.k !== undefined && b > u.k + 0.05) u.age = Math.min(u.age, 0.5);   // burnt again: embers flare up
         u.k = b;
@@ -724,7 +750,7 @@ export class Gore {
       }
       u.age += dt;
       m.opacity += (u.opacity - m.opacity) * Math.min(1, dt * 6);
-      m.emissiveIntensity = b > 0.25 ? b * 2.4 * Math.max(0, 1 - u.age / 5) * (0.8 + 0.2 * Math.sin(u.age * 11)) : 0;
+      m.emissive = b > 0.25 ? b * 2.4 * Math.max(0, 1 - u.age / 5) * (0.8 + 0.2 * Math.sin(u.age * 11)) : 0;
     }
   }
 

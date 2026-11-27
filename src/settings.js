@@ -4,6 +4,7 @@ const KEY = 'ragdoll-sandbox-settings-v1';
 const DEFAULTS = {
   graphics: 'medium',      // 'verylow' | 'low' | 'medium' | 'high' | 'ultra'
   dynamicRes: true,        // lower the resolution a little while the frame rate is low
+  vsync: true,             // false: run frames as fast as possible (above the refresh rate)
   showOrgans: true,        // exposed organs + organ gibs
   bloodColor: 'red',       // 'red' | 'purple'
   dismemberment: true,     // severing + exploding body parts

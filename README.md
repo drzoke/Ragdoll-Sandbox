@@ -110,9 +110,15 @@ The game detects phones and tablets (the browser says it's a phone or tablet and
 
 **FPS check:** while you play, if the game averages under 40 FPS on the recommended preset it steps the graphics down one level (at most twice) and remembers that for this device. If you picked the preset yourself it only suggests lowering it.
 
-**Dynamic resolution** (Settings, on by default): below 48 FPS the resolution steps down 10% at a time (to 60% at most) and back up after a while above 57 FPS. If a step down doesn't raise the frame rate (the game is held back by something other than pixels, or the screen runs at 30 Hz) it goes back and stops trying until the preset or the map changes.
+**Dynamic resolution** (Settings, on by default): below 48 FPS the resolution steps down 10% at a time (to 60% at most) and back up after a while above 57 FPS. If a step down doesn't raise the frame rate (the game is held back by something other than pixels, or the screen runs at 30 Hz) it goes back and stops trying until the preset or the map changes. It also leaves the resolution alone while the game's own work (physics, ragdolls, draw calls) fills most of the frame, since fewer pixels can't help then.
 
-**Culling and physics:** the map hides what the camera can't see before each frame. In the skyscraper only the floor you're on is drawn while you're inside (its ceiling, lights, carpet, furniture, elevator doors and the ragdolls on it), all floors' surfaces as one merged mesh from outside, and nothing inside from the roof; the far skyline casts and receives no shadows. Static collision boxes are grouped into compound bodies per 16 m cell, a grid broadphase (`core/broadphase.js`) pairs each moving body only with the static bodies whose boxes it touches, and a dead body that has stopped moving sleeps (its joints leave the solver) until something hits, pushes or grabs it.
+**V-sync** (Settings, on by default): off, the game runs extra frames between screen refreshes as fast as it can (input and physics update more often); the frame right before each refresh is still the one shown, and the extra frames pause if the browser falls behind on its refreshes.
+
+**Debug view** (F3): real FPS (frames counted over half a second), the time one frame and the physics take, the physics rate, draw calls for the whole frame and the ragdoll batches.
+
+**Culling and physics:** the map hides what the camera can't see before each frame. In the skyscraper only the floor you're on is drawn while you're inside (its ceiling, lights, carpet, furniture, elevator doors and the ragdolls on it), all floors' surfaces as one merged mesh from outside, and nothing inside from the roof; the far skyline casts and receives no shadows. Static collision boxes are grouped into compound bodies per 16 m cell, a grid broadphase (`core/broadphase.js`) pairs each moving body only with the static bodies whose boxes it touches, and a dead body that has stopped moving sleeps (its joints leave the solver) until something hits, pushes or grabs it. When the physics falls behind (it measures its own cost each frame) it steps at 90 or 60 Hz with fewer solver iterations instead of 120 Hz, never runs more steps in a frame than fit in about 12 ms, and goes back up when the load drops.
+
+**Batched bodies** (`ragdoll/batcher.js`): ragdoll parts, joint balls, eyes, wound and bruise decals, burn shells, stumps, exposed organs and gibs keep their meshes in the scene (so bullets, the grab tool and culling still see them), but with an invisible material; each frame their world matrices are copied into one `InstancedMesh` per material and geometry, so all bodies draw in a few calls. Bruises and burns share one material each and get their colour, opacity and glow per instance.
 
 Settings are saved in the browser (localStorage).
 
@@ -169,7 +175,7 @@ src/settings.js          saved player settings (graphics, gore, HUD)
 src/graphics.js          Low / Medium / High / Very High presets and post-processing
 src/materials.js         material detail (grime, wear, normal maps) per preset
 src/ui/preview.js        spinning item previews for the toolbox
-src/ragdoll/             skeleton layout, anatomy data, health/physiology, brain/AI (Classic, V2, zombie), ragdoll body, manager
+src/ragdoll/             skeleton layout, anatomy data, health/physiology, brain/AI (Classic, V2, zombie), ragdoll body, manager, batched drawing
 src/gore/                particles, decals/pools, gore orchestration (stumps, organs, gibs, bleeding)
 src/ui/                  HUD, X-ray, touch controls (touch.js), spawn menu, title scene
 src/core/device.js       phone / tablet detection

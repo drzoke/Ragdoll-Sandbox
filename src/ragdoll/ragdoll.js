@@ -8,6 +8,7 @@ import { BrainV2 } from './brainV2.js';
 import { ZombieBrain } from './zombie.js';
 import { GROUP } from '../core/physics.js';
 import { clamp, canvasTexture } from '../core/util.js';
+import { batch, setDrawMaterial } from './batcher.js';
 
 export const GRAY = new THREE.MeshStandardMaterial({ color: 0x7f8286, roughness: 0.7, metalness: 0.0 });
 export const BLACK = new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.35, metalness: 0.1 });
@@ -58,6 +59,14 @@ const CORE = ['pelvis', 'abdomen', 'chest', 'head'];
 const CORE_SHARE = 1.45;
 const qx = (a, out = new THREE.Quaternion()) => out.setFromAxisAngle(X, a);
 const qz = (a, out = new THREE.Quaternion()) => out.setFromAxisAngle(Z, a);
+
+const ballCache = new Map();
+/** Joint balls share one sphere per size (so the batcher draws all of them in a few calls). */
+function ballGeometry(r) {
+  let g = ballCache.get(r);
+  if (!g) { g = new THREE.SphereGeometry(r, 18, 12); ballCache.set(r, g); }
+  return g;
+}
 
 let geoCache = null;
 function partGeometry(def) {
@@ -115,6 +124,7 @@ export class Ragdoll {
       mesh.castShadow = true; mesh.receiveShadow = true;
       mesh.userData = { ragdoll: this, part: def.name, surface: 'flesh' };
       group.add(mesh);
+      batch(mesh, this.root);       // drawn together with every other ragdoll's (see batcher.js)
       this.root.add(group);
 
       this.parts[def.name] = { def, body, group, mesh, ball: null, constraint: null, restPos };
@@ -138,11 +148,12 @@ export class Ragdoll {
       });
       physics.world.addConstraint(p.constraint);
       p.pivotParent = pivotA; p.pivotChild = pivotB;
-      const ball = new THREE.Mesh(new THREE.SphereGeometry(j.ball, 18, 12), BLACK);
+      const ball = new THREE.Mesh(ballGeometry(j.ball), BLACK);
       ball.position.copy(pivotB);
       ball.castShadow = true;
       ball.userData = { ragdoll: this, part: def.name, surface: 'flesh' };
       p.group.add(ball);
+      batch(ball);
       p.ball = ball;
     }
 
@@ -221,8 +232,8 @@ export class Ragdoll {
     h.undead = true; h.alive = true; h.infected = false; h.infection = 0;
     h.cardiacArrest = false; h.brainDeath = 0; h.noCirculationTime = 0; h.deathCause = '';
     for (const p of Object.values(this.parts)) {
-      p.mesh.material = ZOMBIE_SKIN;
-      if (p.ball) p.ball.material = ZOMBIE_JOINT;
+      setDrawMaterial(p.mesh, ZOMBIE_SKIN);
+      if (p.ball) setDrawMaterial(p.ball, ZOMBIE_JOINT);
     }
     if (!this.eyes) {
       this.eyes = [];
@@ -231,6 +242,7 @@ export class Ragdoll {
         e.position.set(s * 0.037, 0.018, 0.093);
         e.userData = { ragdoll: this, part: 'head', surface: 'flesh' };
         this.parts.head.group.add(e); this.eyes.push(e);
+        batch(e);
       }
     }
     const pp = at || this.bodyPos('pelvis');

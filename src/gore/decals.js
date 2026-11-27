@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { canvasTexture, rand } from '../core/util.js';
+import { batch, fxMaterial } from '../ragdoll/batcher.js';
 
 // ---------------------------------------------------------------- textures
 function blobTexture(irregular = 1) {
@@ -393,6 +394,18 @@ export class Decals {
     this.emberTex = emberTexture();
     this.charTex = charTexture();
     this.bruiseGeo = new THREE.PlaneGeometry(1, 1);
+    // one material per kind of mark: each mark's colour, opacity and glow are per instance
+    // (holder.userData.fx), so all the marks on all the bodies draw in three calls
+    this.bruiseMats = {
+      bruise: fxMaterial({ map: this.bruiseTex, transparent: true, depthWrite: false, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -3.5, polygonOffsetUnits: -3.5 }),
+      soot: fxMaterial({ map: this.sootTex, transparent: true, depthWrite: false, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -3.5, polygonOffsetUnits: -3.5 }),
+      burn: fxMaterial({ map: this.burnTex, transparent: true, depthWrite: false, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -3.8, polygonOffsetUnits: -3.8, emissive: 0xff5a10, emissiveMap: this.emberTex, emissiveIntensity: 1 }),
+    };
+    this.shellMat = fxMaterial({
+      map: this.charTex, transparent: true, depthWrite: false, roughness: 0.95,
+      emissive: 0xff5a10, emissiveMap: this.emberTex, emissiveIntensity: 1,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    });
 
     this.gashMat = new THREE.MeshStandardMaterial({ map: gashTexture(), transparent: true, depthWrite: false, roughness: 0.3, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
     this.dentMat = new THREE.MeshStandardMaterial({ map: dentTexture(), transparent: true, depthWrite: false, roughness: 0.4, metalness: 0.5, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
@@ -568,20 +581,15 @@ export class Decals {
   // ---------------------------------------------------------------- bruises
   /** A bruise (or soot mark) on a body-part group, in that part's local space. */
   addBruise(group, localPoint, localNormal, size, kind = 'bruise') {
-    const burn = kind === 'burn', soot = kind === 'soot';
-    const mat = new THREE.MeshStandardMaterial({
-      map: burn ? this.burnTex : soot ? this.sootTex : this.bruiseTex, transparent: true, depthWrite: false, opacity: 0, roughness: soot || burn ? 0.95 : 0.6,
-      polygonOffset: true, polygonOffsetFactor: burn ? -3.8 : -3.5, polygonOffsetUnits: burn ? -3.8 : -3.5,
-      ...(burn ? { emissive: 0xff5a10, emissiveMap: this.emberTex, emissiveIntensity: 0 } : {}),
-    });
-    const m = new THREE.Mesh(this.bruiseGeo, mat);
+    const m = new THREE.Mesh(this.bruiseGeo, this.bruiseMats[kind] || this.bruiseMats.bruise);
+    m.userData.fx = { color: new THREE.Color(1, 1, 1), opacity: 0, emissive: 0 };
     m.position.copy(localPoint).addScaledVector(localNormal, 0.0012);
     m.quaternion.setFromUnitVectors(Zf, localNormal);
     m.rotateZ(Math.random() * Math.PI * 2);
     m.scale.setScalar(size);
     m.userData.decal = true;
     group.add(m);
-    return m;
+    return batch(m);
   }
 
   /**
@@ -589,15 +597,11 @@ export class Decals {
    * blistered brown (2nd), charred black (3rd), with embers glowing while it is fresh.
    */
   burnShell(mesh) {
-    const mat = new THREE.MeshStandardMaterial({
-      map: this.charTex, color: 0xb03020, transparent: true, depthWrite: false, opacity: 0, roughness: 0.95,
-      emissive: 0xff5a10, emissiveMap: this.emberTex, emissiveIntensity: 0,
-      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-    });
-    const m = new THREE.Mesh(mesh.geometry, mat);
+    const m = new THREE.Mesh(mesh.geometry, this.shellMat);
+    m.userData.fx = { color: new THREE.Color(0xb03020), opacity: 0, emissive: 0 };
     m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale).multiplyScalar(1.004);
     m.userData.decal = true;
-    return m;
+    return m;      // batched by the caller once it is on its part
   }
 
   // ---------------------------------------------------------------- bullet holes
@@ -628,7 +632,7 @@ export class Decals {
     st.scale.setScalar(0.001);
     st.userData.decal = true;
     group.add(st);
-    return { decal: m, stain: st, stainSize: 0 };
+    return { decal: batch(m), stain: batch(st), stainSize: 0 };
   }
 
   /**
@@ -654,7 +658,7 @@ export class Decals {
     st.scale.setScalar(0.001);
     st.userData.decal = true;
     group.add(st);
-    return { decal: m, stain: st, stainSize: 0 };
+    return { decal: batch(m), stain: batch(st), stainSize: 0 };
   }
 
   /** A bullet stopped by armour: a dent / lead smear on the armour, in the group's local space. */
@@ -666,7 +670,7 @@ export class Decals {
     m.scale.setScalar(size);
     m.userData.decal = true;
     group.add(m);
-    return m;
+    return batch(m);
   }
 
   clear() {

@@ -86,7 +86,7 @@
 <div id="vignette"></div>
 <!-- Alpha: one step per full update (feature batch). Patch: small fixes shipped on that version
      (back to 0 when the Alpha number goes up). -->
-<div id="version">Alpha 0.9<small>Patch 1</small></div>
+<div id="version">Alpha 0.9<small>Patch 2</small></div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
@@ -150,6 +150,7 @@
       <div class="gpu" id="gfx-gpu"></div>
       <div class="gpu rec" id="gfx-rec"></div>
       <label class="row"><span>Dynamic resolution (a little softer while the game is busy, smoother frame rate)</span><input type="checkbox" data-setting="dynamicRes"><i class="sw"></i></label>
+      <label class="row"><span>V-sync (off: frames above your screen's refresh rate, uses more power)</span><input type="checkbox" data-setting="vsync"><i class="sw"></i></label>
       <h3>Gore</h3>
       <label class="row"><span>Show organs</span><input type="checkbox" data-setting="showOrgans"><i class="sw"></i></label>
       <label class="row"><span>Dismemberment &amp; exploding parts</span><input type="checkbox" data-setting="dismemberment"><i class="sw"></i></label>
@@ -227,6 +228,11 @@
           <li><span class="patch">Patch 1</span> <b>Faster physics.</b> Each body part is now only checked against the walls and furniture right around it, instead of against most of the map every step. With 10 ragdolls the physics takes about half the time it did.</li>
           <li><span class="patch">Patch 1</span> <b>Resting bodies cost nothing.</b> A dead body that has stopped moving is taken out of the simulation until something touches it: a bullet, a blast, the grab tool, another body or you walking into it. Lots of bodies lying around no longer slow the game down.</li>
           <li><span class="patch">Patch 1</span> <b>Dynamic resolution</b> (Settings, on by default). When the frame rate drops, the game draws a little fewer pixels (down to 60%) to keep it smooth, and goes back to full sharpness when there's room.</li>
+          <li><span class="patch">Patch 2</span> <b>Bodies are drawn together.</b> Every ragdoll and zombie, with their wounds, bruises, burns, stumps and gibs, is now drawn in a handful of batches instead of piece by piece. A busy scene needs about 8 times fewer draw calls, so drawing barely gets slower as bodies pile up.</li>
+          <li><span class="patch">Patch 2</span> <b>Heavy scenes stay playable.</b> When lots of living ragdolls make the physics fall behind, it steps 90 or 60 times a second instead of 120 until the load drops, and it never tries to catch up with more steps than fit in a frame (that used to make a slow frame slower and slower).</li>
+          <li><span class="patch">Patch 2</span> <b>V-sync</b> (Settings, on by default). Turn it off to let the game run above your screen's refresh rate, so your aim and the physics update more often. It uses more power.</li>
+          <li><span class="patch">Patch 2</span> <b>The FPS counter is honest.</b> The debug view (F3) could never show less than 20 FPS, so a struggling scene looked steady. It now counts real frames and also shows how long each frame and the physics take and how many draw calls there are.</li>
+          <li><span class="patch">Patch 2</span> <b>Smarter dynamic resolution.</b> It now notices when the processor, not the graphics card, is what's holding the frame rate back. Fewer pixels can't help then, which is why the resolution didn't seem to move.</li>
         </ul>
         <h3>Alpha 0.8</h3>
         <ul>
