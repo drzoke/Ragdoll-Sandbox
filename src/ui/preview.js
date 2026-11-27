@@ -4,6 +4,7 @@ import { buildM1911, muzzleFlashTexture } from '../weapon/model1911.js';
 import { buildGadget } from '../weapon/grab.js';
 import { buildRemington870 } from '../weapon/model870.js';
 import { buildGrenade } from '../weapon/grenadeModel.js';
+import { buildMachete, buildMedkit, buildPaddle, buildAED } from '../weapon/modelsMedical.js';
 import { ARM_MATERIALS } from '../weapon/arms.js';
 import { trackMaterials } from '../materials.js';
 
@@ -62,6 +63,9 @@ export class ItemPreview {
     this.items.Fists = this.makeFists();
     this.items['Remington 870'] = this.makeShotgun();
     this.items.Grenade = this.makeGrenade();
+    this.items.Machete = this.makeMachete();
+    this.items.Medkit = this.makeMedkit();
+    this.items.Defibrillator = this.makeDefib();
     this.level = 'medium';
   }
 
@@ -199,6 +203,61 @@ export class ItemPreview {
         gr.ring.rotation.z = 0.5 + Math.sin(t * 3) * 0.25 * (on ? 1 : 0);
         gr.spoon.rotation.z = spoonRot - out * 0.12;
         return 0;
+      },
+    };
+  }
+
+  makeMachete() {
+    const m = buildMachete();
+    m.root.rotation.set(0, 0, -Math.PI / 2 + 0.25);
+    const f = this.frame(m.root, 1.25);
+    return {
+      ...f, effects: (t, on) => {
+        // a quick chop every 2.5 s, the edge glints
+        const ph = on ? t % 2.5 : 9;
+        const k = ph < 0.25 ? Math.sin((ph / 0.25) * Math.PI) : 0;
+        f.inner.rotation.z = -k * 0.5;
+        m.steel.emissive?.setRGB(k * 0.25, k * 0.25, k * 0.28);
+        return k;
+      },
+    };
+  }
+
+  makeMedkit() {
+    const m = buildMedkit();
+    const root = new THREE.Group();
+    root.add(m.pouch);
+    m.roll.position.set(0.12, -0.03, 0.03); m.roll.rotation.y = 0.5; root.add(m.roll);
+    m.injector.position.set(-0.11, -0.04, 0.04); m.injector.rotation.set(0, 0, 1.3); root.add(m.injector);
+    const f = this.frame(root, 0.95);
+    return {
+      ...f, effects: (t, on) => {
+        // the bandage roll unrolls a little and bobs
+        m.roll.position.y = -0.03 + (on ? Math.sin(t * 2.4) * 0.008 : 0);
+        m.roll.rotation.x = on ? t * 2 : 0;
+        return 0;
+      },
+    };
+  }
+
+  makeDefib() {
+    const unit = buildAED();
+    const root = new THREE.Group();
+    root.add(unit.root);
+    const pr = buildPaddle(1), pl = buildPaddle(-1);
+    pr.root.position.set(0.19, -0.02, 0.07); pr.root.rotation.set(0.2, -0.5, -0.3);
+    pl.root.position.set(-0.19, -0.02, 0.07); pl.root.rotation.set(0.2, 0.5, 0.3);
+    for (const p of [pr, pl]) { p.root.scale.setScalar(1.3); root.add(p.root); }
+    const f = this.frame(root, 1.05);
+    return {
+      ...f, effects: (t, on) => {
+        // charge up and zap every 3 s
+        const ph = on ? t % 3 : 9;
+        const charge = ph < 1.2 ? ph / 1.2 : 0;
+        const zap = ph > 1.2 && ph < 1.35 ? 1 : 0;
+        unit.screen.emissiveIntensity = 0.5 + charge * 1.2 + zap * 3;
+        for (const p of [pr, pl]) p.buttonMat.emissive.setRGB(1, 0.5, 0.15).multiplyScalar(charge * 0.8 + zap);
+        return zap;
       },
     };
   }

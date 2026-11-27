@@ -69,6 +69,7 @@ export const CONFIG = {
     spawn: [0, 0, -2],
     wanderRadius: 3.2,
     walkSpeed: 0.85,
+    runSpeed: 1.75,            // running away from the player
     standHeight: 0.972,        // pelvis target height while standing (legs straight = 0.98)
   },
 

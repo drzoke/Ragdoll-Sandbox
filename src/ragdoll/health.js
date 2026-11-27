@@ -66,6 +66,13 @@ export class Health {
     this.deathCause = '';
     this.lastHitTime = -99;
     this.lastHitPart = null;
+
+    // Treatment (medkit / defibrillator)
+    this.morphine = 0;           // in the blood, 1 = one full dose
+    this.transfusing = 0;        // ml of a blood bag still to run in
+    this.rosc = 0;               // s since the heart was restarted (it is fragile for a while)
+    this.shocks = 0;             // defibrillator shocks during this arrest
+    this.pressing = null;        // wound the ragdoll presses on with its own hand
   }
 
   log(text, severity = 'bad') {
@@ -386,12 +393,261 @@ export class Health {
     return deg;
   }
 
+
+  // ---------------------------------------------------------------- Blades
+  /**
+   * Machete hit. kind 'slash': a long cut across the surface that gets deeper with every hit on
+   * the same spot (enough of them chop through a limb or the neck), can cut tendons and vessels
+   * near the surface. kind 'stab': a deep, narrow wound along the blade into organs.
+   * o = entry point (local), d = direction into the body (local, unit), power 0..1.
+   */
+  cut(partName, o, d, power, kind = 'slash', { dismember = true } = {}) {
+    const def = PART_BY_NAME[partName];
+    const part = this.parts[partName];
+    const anat = ANATOMY[partName];
+    const res = { partName, kind, organs: [], bones: [], vessels: [], dismember: false, opened: false, explode: false, tendon: null, throat: false, exit: false, bleed: 0, pain: 0 };
+    const isTorso = partName === 'chest' || partName === 'abdomen' || partName === 'pelvis';
+    const span = rayThroughPart(def, o, d) || { tIn: 0, tOut: 0.06 };
+    const t0 = span.tIn, path = Math.max(0.02, span.tOut - span.tIn);
+    const entry = o.clone().addScaledVector(d, t0);
+    let depth = kind === 'stab' ? 0.11 + 0.09 * power : 0.032 + 0.034 * power;
+    const throat = partName === 'head' && entry.y < -0.035;
+    if (kind === 'slash') {
+      part.cutDepth = (part.cutDepth || 0) + depth * (0.75 + Math.random() * 0.5);
+      depth = Math.min(part.cutDepth, path);
+    }
+    const reach = t0 + Math.min(depth, path);
+
+    // Bones stop a stab; a slash nicks or chops them once it is deep enough
+    for (const b of anat.bones) {
+      const bone = this.bones[b.id];
+      let hit;
+      if (b.shell) hit = kind === 'stab' ? Math.random() < b.chance * 0.8 : (part.cutDepth || 0) > 0.05 && Math.random() < 0.5;
+      else hit = segSegDistance(o, d, t0, reach, b.a, b.b).dist < b.r + 0.008;
+      if (!hit) continue;
+      const dmg = (kind === 'stab' ? 28 : 34) * power * (0.8 + Math.random() * 0.4);
+      bone.integrity = Math.max(0, bone.integrity - dmg);
+      res.bones.push(bone);
+      if (!bone.fractured && bone.integrity < 55) { bone.fractured = true; this.rawPain += 22; this.log(`${bone.name} ${kind === 'stab' ? 'cracked' : 'chopped'}`); }
+      if (b.spine && !this.paralyzed && bone.integrity < 30) { this.paralyzed = true; this.log('Spinal cord cut: legs paralysed'); }
+      if (kind === 'stab' && !(b.shell && bone.fractured)) depth *= 0.6; // the blade glances off
+    }
+    const reach2 = t0 + Math.min(depth, path);
+
+    // Organs the blade reaches
+    for (const og of anat.organs) {
+      const hit = rayEllipsoid(o, d, og.c, og.r);
+      if (!hit || hit[1] < t0 || hit[0] > reach2) continue;
+      if (partName === 'head' && !this.bones.skull.fractured) continue;
+      const organ = this.organs[og.id];
+      const dmg = (kind === 'stab' ? 75 : 40) * power * (0.75 + Math.random() * 0.5);
+      const was = organ.hp;
+      organ.hp = Math.max(0, organ.hp - dmg);
+      res.organs.push(organ);
+      res.bleed += og.bleed * (kind === 'stab' ? 1.1 : 0.7);
+      this.rawPain += 12;
+      if (was > 0 && organ.hp <= 0) this.log(`${organ.name} destroyed`);
+      else this.log(`${organ.name} ${kind === 'stab' ? 'stabbed' : 'cut'}`, 'warn');
+    }
+    // Vessels: a slash cuts the ones close to the surface it crosses, a stab the ones on its line
+    for (const v of anat.vessels) {
+      const vessel = this.vessels[v.id];
+      const near = segSegDistance(o, d, t0, reach2, v.a, v.b).dist < v.r + (kind === 'slash' ? 0.03 : 0.012);
+      if (!near) continue;
+      res.vessels.push(vessel);
+      if (!vessel.cut) { vessel.cut = true; this.log(`${vessel.name} severed`); }
+      res.bleed += v.bleed;
+    }
+    if (throat) {
+      res.throat = true;
+      if (!this.throatCut) { this.throatCut = true; this.log('Throat cut'); }
+      res.bleed += 4;
+    }
+
+    // Tendons: wrist / Achilles / hamstring cuts take away the use of the limb below
+    if (!isTorso && kind === 'slash' && !part.tendon) {
+      const back = entry.z < -0.01;
+      let tendon = null;
+      if (/lowerArm|hand/.test(partName)) tendon = partName.startsWith('hand') ? 'lowerArm' + partName.slice(-1) : partName;
+      else if (/shin|foot/.test(partName) && back) tendon = 'shin' + partName.slice(-1);
+      else if (/thigh/.test(partName) && back) tendon = partName;
+      if (tendon && Math.random() < 0.45 + power * 0.4) {
+        this.parts[tendon].tendon = true;
+        res.tendon = tendon;
+        const nm = /lowerArm/.test(tendon) ? 'wrist' : /shin/.test(tendon) ? 'Achilles' : 'hamstring';
+        this.log(`${nm === 'Achilles' ? 'Achilles' : nm[0].toUpperCase() + nm.slice(1)} tendons cut (${tendon.endsWith('L') ? 'left' : 'right'})`);
+      }
+    }
+
+    // Tissue, pain, bleeding
+    const tissueDmg = (kind === 'stab' ? 22 + 30 * power : 14 + 18 * power) * (0.85 + Math.random() * 0.3);
+    if (part.tissue <= 0) part.overkill = (part.overkill || 0) + tissueDmg * 0.5;
+    part.tissue = Math.max(0, part.tissue - tissueDmg);
+    part.hits++;
+    res.bleed += kind === 'stab' ? 1.6 + depth * 8 : 1.4 + (part.cutDepth || 0) * 22;
+    res.pain = (kind === 'stab' ? 28 : 20) * (0.6 + power * 0.6) * (partName === 'head' ? 1.2 : 1);
+    this.rawPain += res.pain;
+    this.adrenaline = Math.min(1, this.adrenaline + 0.3);
+    this.shock = Math.min(100, this.shock + (kind === 'stab' ? 6 : 3));
+    this.lastHitTime = this.time; this.lastHitPart = partName;
+
+    // Through-and-through stab on a thin part
+    if (kind === 'stab' && depth > path + 0.01) res.exit = true;
+
+    // Chopped through: limbs come off; the neck after a few deep cuts; the belly opens up
+    if (dismember && kind === 'slash') {
+      const thick = def.shape === 'sphere' ? 0.13 : Math.min(def.size[0], def.size[2]) * (partName.startsWith('thigh') ? 1.35 : 1.15);
+      if (!isTorso && part.attached && (part.cutDepth || 0) >= thick && (partName !== 'head' || throat)) res.dismember = true;
+      if (partName === 'abdomen' && !part.opened && (part.cutDepth || 0) > 0.11) { part.opened = true; res.opened = true; this.log('Abdomen cut open: intestines exposed'); }
+      if (partName === 'chest' && !part.opened && (part.cutDepth || 0) > 0.16 && this.bones.ribs.fractured) { part.opened = true; res.opened = true; this.log('Chest hacked open'); }
+    }
+    if (dismember && kind === 'stab' && isTorso && !part.opened && part.hits > 5 && part.tissue / part.maxTissue < 0.3) { part.opened = true; res.opened = true; this.log(`${part.label} torn open`); }
+
+    const n = d.clone().negate();
+    const wound = { part: partName, pos: entry.clone(), normal: n, rate: res.bleed, arterial: res.vessels.length > 0 || res.throat || res.organs.some((x) => x.id === 'heart'), exit: false, age: 0, cut: kind };
+    this.wounds.push(wound);
+    res.wound = wound;
+    if (res.exit) {
+      const ew = { part: partName, pos: o.clone().addScaledVector(d, span.tOut), normal: d.clone(), rate: 0.6 + res.bleed * 0.3, arterial: wound.arterial, exit: true, age: 0, cut: 'stab' };
+      this.wounds.push(ew);
+      res.exitWound = ew;
+    }
+    return res;
+  }
+
+  /**
+   * A hit that armour stopped: the plate or helmet takes the bullet, the body takes the blow
+   * (bruise, pain, sometimes a cracked rib; a helmet hit rings the head). k = 0..1 hit strength.
+   */
+  blunt(partName, k, { helmet = false } = {}) {
+    const out = { fractured: false };
+    const part = this.parts[partName];
+    part.tissue = Math.max(0, part.tissue - 5 * k);
+    if (part.attached) { this.rawPain += 6 + 16 * k; this.adrenaline = Math.min(1, this.adrenaline + 0.2); }
+    this.lastHitTime = this.time; this.lastHitPart = partName;
+    if (helmet) {
+      this.consciousness = Math.max(0, this.consciousness - (10 + 30 * k) * (0.7 + Math.random() * 0.6));
+      if (k > 0.5) this.log('Helmet hit: dazed', 'warn');
+    } else if (Math.random() < k * 0.22) {
+      const ribs = this.bones.ribs;
+      if (partName === 'chest' && !ribs.fractured) { ribs.integrity = Math.max(0, ribs.integrity - 50); if (ribs.integrity < 55) { ribs.fractured = true; out.fractured = true; this.rawPain += 18; this.log('Rib cracked behind the vest'); } }
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------- Treatment
+  /**
+   * Medkit on one body part: pressure bandage on its wounds, a tourniquet above a stump on it, a
+   * splint on its broken bones and a dressing on its burns. Returns what was done.
+   */
+  treat(partName) {
+    const p = this.parts[partName];
+    const out = { bandaged: 0, tourniquet: 0, splinted: 0, dressed: false, any: false };
+    if (!p.attached && partName !== 'head') return out;
+    for (const w of this.wounds) {
+      if (w.part !== partName || w.rate < 0.04) continue;
+      if (w.stump) { w.rate *= 0.04; w.tourniquet = true; out.tourniquet++; }
+      else if (!w.bandaged) { w.rate *= w.arterial ? 0.12 : 0.05; w.bandaged = true; out.bandaged++; }
+      else { w.rate *= 0.4; out.bandaged++; }
+    }
+    for (const b of ANATOMY[partName].bones) {
+      const bone = this.bones[b.id];
+      if (bone.fractured && !bone.splinted && !b.shell && !b.spine) { bone.splinted = true; out.splinted++; this.rawPain = Math.max(0, this.rawPain - 10); }
+    }
+    if ((p.burn || 0) > 0.3 && !p.dressed) {
+      p.dressed = true; out.dressed = true;
+      this.burnArea = Math.max(0, (this.burnArea || 0) - p.burn * (/chest|abdomen|pelvis|thigh/.test(partName) ? 1.4 : 0.7) * 0.6);
+    }
+    out.any = out.bandaged + out.tourniquet + out.splinted > 0 || out.dressed;
+    const name = p.label.toLowerCase();
+    if (out.tourniquet) {
+      const w = this.wounds.find((x) => x.part === partName && x.tourniquet);
+      const child = PARTS.find((d) => d.joint?.name === w?.joint);
+      this.log(`Tourniquet above the ${child ? child.label.toLowerCase() : name} stump`, 'good');
+    }
+    if (out.bandaged) this.log(`Bandaged ${out.bandaged > 1 ? `${out.bandaged} wounds` : 'the wound'} (${name})`, 'good');
+    if (out.splinted) this.log(`Splinted the ${name}`, 'good');
+    if (out.dressed) this.log(`Burn dressing (${name})`, 'good');
+    return out;
+  }
+
+  /** What the medkit could do for a part (for the HUD). */
+  treatable(partName) {
+    const p = this.parts[partName];
+    if (!p.attached && partName !== 'head') return [];
+    const out = [];
+    const ws = this.wounds.filter((w) => w.part === partName && w.rate >= 0.04);
+    if (ws.some((w) => w.stump)) out.push('Tourniquet');
+    if (ws.some((w) => !w.stump)) out.push('Bandage');
+    if (ANATOMY[partName].bones.some((b) => this.bones[b.id].fractured && !this.bones[b.id].splinted && !b.shell && !b.spine)) out.push('Splint');
+    if ((p.burn || 0) > 0.3 && !p.dressed) out.push('Burn dressing');
+    return out;
+  }
+
+  giveMorphine() {
+    const was = this.morphine;
+    this.morphine = Math.min(2.2, this.morphine + 1);
+    if (!this.alive) return;
+    this.log(was > 0.6 ? 'Morphine again: too much, breathing slows' : 'Morphine given: pain fades', was > 0.6 ? 'warn' : 'good');
+  }
+
+  giveBlood(ml = 750) {
+    this.transfusing += ml;
+    this.log(`Blood bag (${ml} ml) running in`, 'good');
+  }
+
+  /**
+   * Defibrillator shock. On a heart that has stopped it can bring the rhythm back if there is
+   * enough heart and blood left to pump; on a beating heart it can stop it. Returns
+   * { result: 'restarted' | 'failed' | 'arrest' | 'shock' | 'dead', text }.
+   */
+  defibrillate(partName = 'chest') {
+    const onChest = partName === 'chest';
+    if (!this.alive || this.decapitated) { this.log('Shock: no response (dead)', 'info'); return { result: 'dead', text: 'No response' }; }
+    this.rawPain += this.consciousness > 30 ? 30 : 8;
+    this.adrenaline = Math.min(1, this.adrenaline + 0.4);
+    this.burn(partName, 0.05);
+    if (!onChest) { this.log('Electric shock', 'warn'); return { result: 'shock', text: 'Shock (put the paddles on the chest)' }; }
+    if (this.cardiacArrest) {
+      this.shocks++;
+      const heart = this.organs.heart.hp / 100;
+      if (heart < 0.08) { this.log('Shock: no rhythm (heart destroyed)'); return { result: 'failed', text: 'No rhythm: the heart is destroyed' }; }
+      if (this.bloodFrac < 0.56) { this.log('Shock: no rhythm (too little blood)'); return { result: 'failed', text: 'No rhythm: too much blood lost. Give a blood bag first' }; }
+      const chance = clamp((0.45 + 0.12 * this.shocks) * (1 - this.brainDeath * 0.8) * (heart > 0.5 ? 1 : 0.6), 0.05, 0.92);
+      if (Math.random() < chance) {
+        this.cardiacArrest = false;
+        this.heartRate = 48;
+        this.rosc = 0.001;
+        this.shocks = 0;
+        this.noCirculationTime *= 0.5;
+        this.log('Heart restarted (defibrillator)', 'good');
+        return { result: 'restarted', text: 'Heart restarted' };
+      }
+      this.log('Shock delivered: no rhythm yet', 'warn');
+      return { result: 'failed', text: 'No rhythm yet. Charge and shock again' };
+    }
+    // shocking a heart that is still beating can throw it into fibrillation
+    this.consciousness = Math.max(0, this.consciousness - 35);
+    if (Math.random() < 0.45) {
+      this.cardiacArrest = true;
+      this.log('Shocked a beating heart: cardiac arrest');
+      return { result: 'arrest', text: 'The heart was beating: now it has stopped' };
+    }
+    this.log('Electric shock to the chest', 'warn');
+    return { result: 'shock', text: 'The heart was already beating' };
+  }
+
   // ---------------------------------------------------------------- Capabilities
   partCap(name) {
     const p = this.parts[name];
     if (!p.attached) return 0;
     let c = clamp(0.25 + 0.75 * (p.tissue / p.maxTissue));
-    for (const b of ANATOMY[name].bones) if (this.bones[b.id].fractured) c *= this.bones[b.id].integrity <= 0 ? 0.02 : 0.15;
+    for (const b of ANATOMY[name].bones) {
+      const bone = this.bones[b.id];
+      // a splint holds a broken bone still: the limb can carry some weight again
+      if (bone.fractured) c *= bone.integrity <= 0 ? (bone.splinted ? 0.12 : 0.02) : (bone.splinted ? 0.55 : 0.15);
+    }
+    if (p.tendon) c *= 0.3;      // cut tendons: the muscle can't pull on the joint below
     return c;
   }
   legCap(s) {
@@ -428,6 +684,20 @@ export class Health {
     // burns leak plasma (slowly), which counts towards volume loss / shock
     if (this.burnArea > 0) loss += this.burnArea * 0.9 * dt;
     this.blood = Math.max(0, this.blood - loss);
+    // blood bag running in (fast, squeezed)
+    if (this.transfusing > 0) {
+      const give = Math.min(this.transfusing, 70 * dt, Math.max(0, this.maxBlood - this.blood));
+      this.blood += give; this.transfusing -= 70 * dt;
+      if (this.transfusing <= 0) { this.transfusing = 0; this.log('Blood bag finished', 'good'); }
+    }
+    // the ragdoll pressing its hand on a wound slows the bleeding
+    const pw = this.pressing;
+    if (pw && this.alive && this.consciousness > 30 && this.wounds.includes(pw)) {
+      pw.rate *= Math.exp(-dt / (pw.arterial ? 22 : 10));
+      if (!this.pressLogged && pw.rate > 0.5) { this.pressLogged = true; this.log(`Pressing a hand on the wound (${this.parts[pw.part].label.toLowerCase()})`, 'info'); }
+    }
+    this.morphine = Math.max(0, this.morphine - dt / 150);
+    if (this.rosc > 0) this.rosc += dt;
     const lossFrac = 1 - this.bloodFrac;
 
     // Lungs / airway
@@ -435,14 +705,15 @@ export class Health {
     const brainHp = o.brain.hp / 100;
     const breathing = this.alive && !this.decapitated && brainHp > 0.05 && this.brainDeath < 1;
     const lungFn = breathing ? clamp(0.15 + 0.85 * lungs, 0, 1) * (lungs < 0.05 ? 0 : 1) : 0;
-    this.breathRate += ((breathing ? 14 + lossFrac * 30 + this.pain * 0.1 - (lungs < 0.5 ? -8 : 0) : 0) - this.breathRate) * clamp(dt * 1.5);
+    const opioid = clamp(this.morphine - 1.1, 0, 1);   // more than one dose slows breathing
+    this.breathRate += ((breathing ? (14 + lossFrac * 30 + this.pain * 0.1 - (lungs < 0.5 ? -8 : 0)) * (1 - opioid * 0.7) : 0) - this.breathRate) * clamp(dt * 1.5);
 
     // Heart
     const heartHp = o.heart.hp / 100;
     if (!this.cardiacArrest && this.alive) {
       if (heartHp <= 0) { this.cardiacArrest = true; this.log('Cardiac arrest: heart destroyed'); }
       else if (lossFrac > 0.45) { this.cardiacArrest = true; this.log('Cardiac arrest: blood loss'); }
-      else if (this.o2 < 45) { this.cardiacArrest = true; this.log('Cardiac arrest: hypoxia'); }
+      else if (this.o2 < 45 && !(this.rosc > 0 && this.rosc < 14)) { this.cardiacArrest = true; this.log('Cardiac arrest: hypoxia'); }
       else if (this.decapitated && this.time > 0) { /* heart keeps going briefly */ }
     }
     let hrTarget = 0;
@@ -456,7 +727,7 @@ export class Health {
 
     // Oxygen
     const circulation = this.cardiacArrest || !this.alive ? 0 : clamp(Math.pow(this.bloodFrac, 1.3) * clamp(this.heartRate / 72, 0.4, 1.2));
-    const o2Target = 98 * lungFn * (0.35 + 0.65 * circulation) + (1 - lungFn) * 30;
+    const o2Target = (98 - opioid * 22) * lungFn * (0.35 + 0.65 * circulation) + (1 - lungFn) * 30;
     const o2Rate = o2Target < this.o2 ? (circulation < 0.1 ? 1.6 : 0.6) : 0.5;
     this.o2 += (o2Target - this.o2) * clamp(dt * o2Rate);
     this.o2 = clamp(this.o2, 0, 100);
@@ -469,7 +740,10 @@ export class Health {
     let tissuePain = 0;
     for (const p of Object.values(this.parts)) if (p.attached) tissuePain += (1 - p.tissue / p.maxTissue) * 22;
     this.adrenaline = Math.max(0, this.adrenaline - dt * 0.03);
-    const felt = (this.rawPain + fracturePain + tissuePain) * (1 - this.adrenaline * 0.4);
+    // splinted fractures hurt much less (the bone ends stop grinding)
+    let splintRelief = 0;
+    for (const b of Object.values(this.bones)) if (b.fractured && b.splinted && this.parts[b.part].attached) splintRelief += 8;
+    const felt = (this.rawPain + fracturePain - splintRelief + tissuePain) * (1 - this.adrenaline * 0.4) * (1 - 0.7 * Math.min(1, this.morphine));
     const consciousGate = clamp(this.consciousness / 60);
     this.pain += (clamp(felt, 0, 100) * consciousGate - this.pain) * clamp(dt * 3);
 
@@ -496,6 +770,7 @@ export class Health {
     cTarget -= clamp(lossFrac - 0.2) * 280;
     cTarget -= (1 - brainHp) * 140;
     cTarget -= this.shock * 0.35;
+    cTarget -= Math.max(0, this.morphine - 0.6) * 30;   // drowsy on morphine, out cold on too much
     if (this.cardiacArrest || this.decapitated || !this.alive) cTarget = 0;
     if (this.time - this.lastHitTime < 0.4 && this.lastHitPart === 'head') cTarget -= 50;
     cTarget = clamp(cTarget, 0, 100);

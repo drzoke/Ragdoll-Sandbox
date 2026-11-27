@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { CONFIG } from '../config.js';
 import { Particles } from './particles.js';
-import { Decals } from './decals.js';
+import { Decals, bandageTexture } from './decals.js';
 import { PART_BY_NAME } from '../ragdoll/skeleton.js';
 import { GROUP } from '../core/physics.js';
 import { rand } from '../core/util.js';
@@ -23,6 +23,13 @@ const MAT = {
   brain: new THREE.MeshStandardMaterial({ color: 0xd59aa0, roughness: 0.4 }),
   organ: new THREE.MeshStandardMaterial({ color: 0x7a1c22, roughness: 0.3 }),
 };
+// medical kit on the ragdoll
+const MED = {
+  bandage: null,   // made on first use (canvas texture)
+  splint: new THREE.MeshStandardMaterial({ color: 0xd9782b, roughness: 0.7 }),
+  strap: new THREE.MeshStandardMaterial({ color: 0x1d2024, roughness: 0.85 }),
+  rod: new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.5, metalness: 0.4 }),
+};
 
 /**
  * All blood & gore: droplets, spurts, pools, wound decals, stumps, exposed organs, gibs.
@@ -39,6 +46,7 @@ export class Gore {
     this.bruises = [];       // { ragdoll, part, mesh, local, sev, age, soot }
     this.gibs = [];
     this.woundVisuals = new Map(); // wound object -> {decal, stain}
+    this.dressings = [];     // bandages that soak up blood: { ragdoll, part, soak, wounds, absorbed }
     this.applyBloodColor();
     settings.onChange((k) => { if (k === 'bloodColor') this.applyBloodColor(); });
   }
@@ -223,6 +231,222 @@ export class Gore {
     return { point: localPoint, normal: localNormal };
   }
 
+
+  // ---------------------------------------------------------------- blades
+  /**
+   * Machete wound visuals. res = Health.cut result, along = the swing direction (world) so the
+   * gash lines up with the blade.
+   */
+  bladeWound(ragdoll, res, entryWorld, dirWorld, alongWorld) {
+    const part = ragdoll.parts[res.partName];
+    const group = part.group;
+    const inv = _q.copy(group.quaternion).invert();
+    const w = res.wound;
+    const surf = this.surfacePoint(part, w.pos.clone(), w.normal.clone());
+    if (res.kind === 'slash') {
+      const along = alongWorld.clone().applyQuaternion(inv);
+      const len = 0.07 + Math.min(0.06, (ragdoll.health.parts[res.partName].cutDepth || 0) * 0.6);
+      this.woundVisuals.set(w, this.decals.addGash(group, surf.point, surf.normal, along, len));
+      // blood flicked off along the swing, and a spray out of the cut
+      this.spray(entryWorld, alongWorld.clone().multiplyScalar(0.8).add(new THREE.Vector3(0, 0.3, 0)), 22, { speed: 3.2, spread: 0.45, size: 0.014, volume: 0.8 });
+      this.spray(entryWorld, _n.copy(dirWorld).negate(), 10, { speed: 1.4, spread: 0.6, size: 0.012, volume: 0.6 });
+    } else {
+      this.woundVisuals.set(w, this.decals.addWound(group, surf.point, surf.normal, false, 0.028));
+      this.spray(entryWorld, _n.copy(dirWorld).negate().add(new THREE.Vector3(0, 0.25, 0)), 18, { speed: 2, spread: 0.5, size: 0.016, volume: 1 });
+      if (res.exitWound) {
+        const ew = res.exitWound;
+        const es = this.surfacePoint(part, ew.pos.clone(), ew.normal.clone());
+        this.woundVisuals.set(ew, this.decals.addWound(group, es.point, es.normal, false, 0.024));
+        const exitWorld = es.point.clone().applyQuaternion(group.quaternion).add(group.position);
+        this.spray(exitWorld, dirWorld, 14, { speed: 2.2, spread: 0.4, size: 0.014, volume: 0.9 });
+      }
+    }
+    if (res.throat || w.arterial) this.spray(entryWorld, _n.copy(dirWorld).negate().add(new THREE.Vector3(0, 0.5, 0)), 30, { speed: 3.5, spread: 0.3, size: 0.018, volume: 1.4 });
+    if (res.organs.some((o) => o.hp <= 0) && Math.random() < 0.4) this.spawnGib(entryWorld, _n.copy(dirWorld).negate().multiplyScalar(2), this.organMat(MAT.organ));
+  }
+
+  // ---------------------------------------------------------------- armour
+  /** A bullet, pellet or blade stopped by armour: dent, lead smear and a few sparks. */
+  armorHit(ragdoll, partName, worldPoint, worldNormal, size = 0.03) {
+    const part = ragdoll.parts[partName];
+    if (!part || part.removed) return;
+    const g = part.group;
+    const inv = _q.copy(g.quaternion).invert();
+    const local = worldPoint.clone().sub(g.position).applyQuaternion(inv);
+    const n = worldNormal.clone().applyQuaternion(inv).normalize();
+    this.decals.addDent(g, local, n, size);
+    this.sparks(worldPoint, worldNormal, 6);
+  }
+
+  /** Metal on metal / concrete: a few short-lived bright sparks. */
+  sparks(point, normal, count = 8) {
+    for (let i = 0; i < count; i++) {
+      const s = rand(1.5, 4.5);
+      this.particles.spawn(point.x, point.y, point.z, (normal.x + rand(-0.6, 0.6)) * s, (normal.y + rand(-0.2, 0.9)) * s, (normal.z + rand(-0.6, 0.6)) * s,
+        { size: rand(0.008, 0.016), life: 0.35, color: [1.6, 1.25, 0.7], kind: 1 });
+    }
+  }
+
+  /** The helmet comes off (head blown apart): a loose, bouncing shell. */
+  dropHelmet(ragdoll, at, vel) {
+    const a = ragdoll.armor?.helmet;
+    if (!a || a.dropped) return;
+    a.dropped = true;
+    const src = a.meshes[0];
+    const mesh = new THREE.Mesh(src.geometry, src.material);
+    mesh.castShadow = true;
+    if (this.gibs.length >= G.maxGibs) this.removeGib(this.gibs[0]);
+    const body = new CANNON.Body({
+      mass: 1.4, material: this.physics.materials.debris, linearDamping: 0.1, angularDamping: 0.4,
+      collisionFilterGroup: GROUP.DEBRIS, collisionFilterMask: GROUP.STATIC | GROUP.RAGDOLL | GROUP.PLAYER,
+    });
+    body.addShape(new CANNON.Sphere(0.1));
+    body.position.set(at.x, at.y + 0.05, at.z);
+    body.velocity.set(vel.x + rand(-1.5, 1.5), vel.y + rand(2, 4), vel.z + rand(-1.5, 1.5));
+    body.angularVelocity.set(rand(-8, 8), rand(-8, 8), rand(-8, 8));
+    this.physics.world.addBody(body);
+    mesh.userData.surface = 'armor';
+    this.scene.add(mesh);
+    const gib = { body, mesh, bleed: 0, acc: 0, keepGeometry: true };
+    mesh.userData.gib = gib;
+    this.gibs.push(gib);
+  }
+
+  // ---------------------------------------------------------------- medical
+  /** Where to put a band around a part: local y of the wound, clamped to the part. */
+  bandAt(part, y) {
+    const def = part.def;
+    const hy = def.shape === 'sphere' ? 0.03 : def.size[1] / 2 - 0.035;
+    return THREE.MathUtils.clamp(y, -hy, hy);
+  }
+
+  /** Band geometry that wraps a body part: a short tube for limbs/head, an open box for the torso. */
+  bandGeometry(part, height) {
+    const def = part.def, sz = def.size;
+    if (def.shape === 'sphere') return new THREE.CylinderGeometry(sz[0] * 1.03, sz[0] * 1.03, height, 24, 1, true);
+    if (/upperArm|lowerArm|thigh|shin/.test(def.name)) { const r = Math.min(sz[0], sz[2]) / 2 * 1.13; return new THREE.CylinderGeometry(r, r, height, 18, 1, true); }
+    return new THREE.BoxGeometry(sz[0] * 1.07, height, sz[2] * 1.12);
+  }
+
+  /** Bandages on the treated wounds of a part (one band per spot), with blood soaking through. */
+  bandage(ragdoll, partName, wounds) {
+    const part = ragdoll.parts[partName];
+    if (!part || part.removed) return;
+    if (!MED.bandage) {
+      const t = bandageTexture(); t.repeat.set(2, 1);
+      MED.bandage = new THREE.MeshStandardMaterial({ map: t, roughness: 0.95, side: THREE.DoubleSide });
+    }
+    part.bands ??= [];
+    for (const w of wounds) {
+      if (w.stump || !w.pos) {
+        if (w.stump) this.tourniquet(ragdoll, partName, w);
+        continue;
+      }
+      const y = this.bandAt(part, w.pos.y);
+      let band = part.bands.find((b) => Math.abs(b.y - y) < 0.06);
+      if (!band) {
+        const h = part.def.shape === 'sphere' ? 0.06 : 0.085;
+        const mesh = new THREE.Mesh(this.bandGeometry(part, h), MED.bandage);
+        mesh.position.y = y;
+        if (partName === 'head') { mesh.position.y = 0.035; mesh.rotation.x = -0.25; }
+        mesh.castShadow = true; mesh.userData.decal = true;
+        part.group.add(mesh);
+        band = { y, mesh, wounds: [] };
+        part.bands.push(band);
+      }
+      band.wounds.push(w);
+      // blood soaking through on the side of the wound
+      const n = w.normal.clone().setY(0);
+      if (n.lengthSq() < 1e-4) n.set(0, 0, 1);
+      n.normalize();
+      const surf = this.surfacePoint(part, new THREE.Vector3(n.x * 0.01, band.y, n.z * 0.01), n);
+      const soak = new THREE.Mesh(this.decals.woundGeo, new THREE.MeshStandardMaterial({
+        alphaMap: this.decals.soakTex, color: new THREE.Color(...settings.blood.decal).multiplyScalar(0.55), transparent: true, depthWrite: false, opacity: 0,
+        roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+      }));
+      soak.position.copy(surf.point).addScaledVector(n, 0.012);
+      soak.quaternion.setFromUnitVectors(Zf, n);
+      soak.scale.setScalar(0.025);
+      soak.userData.decal = true;
+      part.group.add(soak);
+      this.dressings.push({ ragdoll, part: partName, soak, wound: w, absorbed: 0 });
+      // hide the open wound under the bandage
+      const vis = this.woundVisuals.get(w);
+      if (vis) { vis.decal.visible = false; vis.stain.visible = false; }
+    }
+  }
+
+  /** Black strap with a windlass rod, tied just above a stump. */
+  tourniquet(ragdoll, partName, w) {
+    const part = ragdoll.parts[partName];
+    const child = Object.values(ragdoll.parts).find((p) => p.def.joint?.name === w.joint);
+    if (!child) return;
+    const pos = child.pivotParent.clone();
+    const toCentre = pos.clone().multiplyScalar(-1).normalize();
+    pos.addScaledVector(toCentre, 0.06);
+    const def = part.def;
+    const g = new THREE.Group();
+    g.position.copy(pos);
+    // along the limb: the child's joint axis
+    g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...child.def.joint.axis));
+    const r = def.shape === 'sphere' ? 0.09 : Math.max(def.size[0], def.size[2]) / 2 * 1.12;
+    const strap = new THREE.Mesh(/chest|pelvis|abdomen/.test(partName) ? new THREE.BoxGeometry(def.size[0] * 0.5, 0.035, def.size[2] * 1.1) : new THREE.CylinderGeometry(r, r, 0.035, 18, 1, true), MED.strap);
+    strap.material.side = THREE.DoubleSide;
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.1, 8).rotateZ(Math.PI / 2), MED.rod);
+    rod.position.set(0, 0.005, r + 0.01);
+    g.add(strap, rod);
+    for (const m of [strap, rod]) { m.castShadow = true; m.userData.decal = true; }
+    part.group.add(g);
+  }
+
+  /** Two orange splint boards strapped along a broken limb. */
+  splint(ragdoll, partName) {
+    const part = ragdoll.parts[partName];
+    if (!part || part.removed || part.splinted) return;
+    part.splinted = true;
+    const def = part.def, sz = def.size;
+    const len = (def.shape === 'sphere' ? 0.1 : sz[1]) * 0.9;
+    const g = new THREE.Group();
+    const half = def.shape === 'sphere' ? sz[0] : Math.min(sz[0], sz[2]) / 2 * 1.15;
+    for (const sx of [1, -1]) {
+      const board = new THREE.Mesh(new THREE.BoxGeometry(0.008, len, 0.034), MED.splint);
+      board.position.x = sx * (half + 0.005);
+      g.add(board);
+    }
+    for (const y of [-len * 0.32, len * 0.32]) {
+      const strap = new THREE.Mesh(new THREE.CylinderGeometry(half + 0.012, half + 0.012, 0.022, 16, 1, true), MED.strap);
+      strap.material.side = THREE.DoubleSide;
+      strap.position.y = y;
+      g.add(strap);
+    }
+    g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.userData.decal = true; } });
+    part.group.add(g);
+  }
+
+  /** Paddle burns: two red marks on the chest where the defibrillator touched. */
+  paddleMarks(ragdoll) {
+    const part = ragdoll.parts.chest;
+    if (!part || part.removed) return;
+    const g = part.group;
+    for (const [x, y] of [[-0.09, 0.07], [0.1, -0.07]]) {
+      const local = new THREE.Vector3(x, y, part.def.size[2] / 2);
+      const world = local.applyQuaternion(g.quaternion).add(g.position);
+      this.addBruise(ragdoll, 'chest', world, 0.35, { burn: true });
+    }
+  }
+
+  updateDressings(dt) {
+    for (let i = this.dressings.length - 1; i >= 0; i--) {
+      const d = this.dressings[i];
+      if (d.ragdoll.removed) { this.dressings.splice(i, 1); continue; }
+      const flow = d.wound.rate * d.ragdoll.health.pressure();
+      d.absorbed += flow * dt;
+      const m = d.soak.material;
+      m.opacity = Math.min(0.92, 0.25 + d.absorbed * 0.02);
+      d.soak.scale.setScalar(0.025 + Math.min(0.065, d.absorbed * 0.0012));
+    }
+  }
+
   // ---------------------------------------------------------------- dismemberment
   onSever(ragdoll, partName) {
     const def = PART_BY_NAME[partName];
@@ -329,6 +553,7 @@ export class Gore {
     const centre = ragdoll.bodyPos(partName);
     const vel = part.body.velocity;
     const torso = /chest|abdomen|pelvis/.test(partName);
+    if (partName === 'head' && ragdoll.armor?.helmet) this.dropHelmet(ragdoll, centre, new THREE.Vector3(vel.x, vel.y, vel.z).addScaledVector(dir, 3));
     const out = ragdoll.explodePart(partName);
     const organs = settings.get('showOrgans');
     const scale = partName === 'head' ? 1.2 : torso ? 1.5 : /thigh|upperArm/.test(partName) ? 1 : 0.6;
@@ -419,7 +644,7 @@ export class Gore {
   removeGib(g) {
     this.physics.world.removeBody(g.body);
     this.scene.remove(g.mesh);
-    g.mesh.geometry.dispose();
+    if (!g.keepGeometry) g.mesh.geometry.dispose();
     this.gibs = this.gibs.filter((x) => x !== g);
   }
 
@@ -508,6 +733,7 @@ export class Gore {
     this.decals.updatePools(dt);
     this.decals.updateWalls(dt);
     this.updateBruises(dt);
+    this.updateDressings(dt);
     for (const g of this.gibs) {
       g.mesh.position.copy(g.body.position);
       g.mesh.quaternion.copy(g.body.quaternion);

@@ -39,13 +39,18 @@
     var tips = ['Press X to open the X-ray panel. It shows the bones, organs, blood and oxygen of the ragdoll you look at.',
       'Grab a ragdoll and swing it into the floor or a wall to break its bones.',
       'Press Z to slow time down and V to speed it up.',
-      'Press Tab to open the toolbox. Press 1 to 5 to switch items.',
+      'Press Tab to open the toolbox. Press 1 to 8 to switch items.',
       'Throw a grenade with left click, or lob it underhand with right click. It goes off after 3 seconds.',
       'Shoot the ragdoll with the shotgun while it stands by a wall and the blood ends up on the wall too.',
       'Punch the ragdoll with your fists to leave bruises. A hook to the head can knock it out.',
       'Press X to open the x-ray, X again to switch between the 3D view and a flat picture, and once more to close it.',
       'Press Esc and open Settings to change the graphics and gore options.',
-      'Press E on the red button to get a new ragdoll, and on the blue button to clean up the blood.'];
+      'Press E on the red button to get a new ragdoll, and on the blue button to clean up the blood.',
+      'Press B to open the spawn menu: spawn up to 12 ragdolls, with a helmet and a vest if you like.',
+      'Slash the same spot with the machete again and again to chop through a limb.',
+      'Hold left click with the medkit on a wound to bandage it. A tourniquet stops a stump from bleeding.',
+      'A heart that stopped from blood loss needs a blood bag (medkit, R) before the defibrillator can restart it.',
+      'Aim a gun at a ragdoll and it puts its hands up. Keep aiming and it may run.'];
     document.getElementById('ld-tip').textContent = tips[(Math.random() * tips.length) | 0];
     var expected = 47, seen = 0;
     window.__loader = { p: 0, set: function (p, text) {
@@ -68,6 +73,7 @@
 <div id="hud">
   <div id="crosshair"><i class="t"></i><i class="b"></i><i class="l"></i><i class="r"></i></div>
   <div id="hitmarker"></div>
+  <div id="useprog"><i></i></div>
   <div id="prompt"></div>
   <div id="ammo"><span id="ammo-mag">7</span><span id="ammo-chamber">+1</span><span class="sep">/</span><span id="ammo-reserve">56</span><div id="ammo-name">M1911 · .45 ACP</div></div>
   <div id="toolstatus" class="hidden"><div id="ts-title"></div><div id="ts-sub"></div></div>
@@ -80,7 +86,7 @@
 <div id="vignette"></div>
 <!-- Alpha: one step per full update (feature batch). Patch: small fixes shipped on that version
      (back to 0 when the Alpha number goes up). -->
-<div id="version">Alpha 0.7<small>Patch 5</small></div>
+<div id="version">Alpha 0.8<small>Patch 0</small></div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
@@ -110,18 +116,27 @@
   <section><h4>Events</h4><ul id="xr-log"></ul></section>
 </aside>
 
-<div id="menu" class="hidden">
-  <div class="card">
-    <h1>Ragdoll Sandbox</h1>
-    <p class="sub">Physics sandbox</p>
-    <nav class="tabs"><button data-tab="play" class="on">Play</button><button data-tab="settings">Settings</button><button data-tab="keys">Controls</button></nav>
-
-    <section class="tab" id="tab-play">
-      <button id="play">Click to play</button>
-      <p class="note" id="play-note">The game plays in fullscreen so keys like Ctrl+W can't close it by accident. Hold Esc to leave fullscreen.</p>
-      <div id="lockwarn" class="hidden">This page can't lock the mouse. Open the game in its own browser tab to look around with the mouse.</div>
-    </section>
-
+<div id="menu" class="hidden title">
+  <div class="m-shade"></div>
+  <div class="m-side">
+    <div class="m-brand">
+      <div class="m-logo"><span>RAGDOLL</span><b>SANDBOX</b></div>
+      <div class="m-ver">Alpha 0.8 · physics and gore sandbox</div>
+      <div class="m-paused">Paused</div>
+    </div>
+    <nav class="m-nav">
+      <button id="play" class="m-btn primary"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg><span>Play</span></button>
+      <button class="m-btn" data-panel="settings"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zm8.6 4.9l1.9 1.5-2 3.4-2.3-.8a8 8 0 01-2.1 1.2L15.7 21h-4l-.4-2.3a8 8 0 01-2.1-1.2l-2.3.8-2-3.4 1.9-1.5a8 8 0 010-2.4L4.9 9.6l2-3.4 2.3.8a8 8 0 012.1-1.2L11.7 3h4l.4 2.3a8 8 0 012.1 1.2l2.3-.8 2 3.4-1.9 1.5a8 8 0 010 2.4z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Settings</span></button>
+      <button class="m-btn" data-panel="keys"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 10h1M10 10h1M14 10h1M18 10h1M7 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Controls</span></button>
+      <button class="m-btn" data-panel="news"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>What's new</span></button>
+      <button class="m-btn pause-only" id="to-title"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Main menu</span></button>
+    </nav>
+    <p class="note" id="play-note">The game plays in fullscreen so keys like Ctrl+W can't close it by accident. Hold Esc to leave fullscreen.</p>
+    <div id="lockwarn" class="hidden">This page can't lock the mouse. Open the game in its own browser tab to look around with the mouse.</div>
+  </div>
+  <div class="m-panel hidden" id="m-panel">
+    <header><h2 id="m-panel-title">Settings</h2><button id="m-panel-close" aria-label="Close">✕</button></header>
+    <div class="m-panel-body">
     <section class="tab hidden" id="tab-settings">
       <h3>Graphics</h3>
       <div class="seg" data-setting="graphics"><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button><button data-v="ultra">Very High</button></div>
@@ -154,14 +169,14 @@
       <table class="controls touch-only">
         <tr><td>Left thumb</td><td>Move (the stick appears where you touch). Push it forward past the ring to sprint.</td></tr>
         <tr><td>Right thumb</td><td>Drag anywhere to look around</td></tr>
-        <tr><td>Big button</td><td>Fire, punch, throw or push (drag on it to aim while firing)</td></tr>
+        <tr><td>Big button</td><td>Fire, punch, slash, throw, push, treat or shock (drag on it to aim while firing)</td></tr>
         <tr><td>Top-left fire</td><td>Fire with your left thumb while the right one aims</td></tr>
         <tr><td>Aim</td><td>Aim down sights (tap to toggle). Hook with fists, lob a grenade, grab or drop with Grab.</td></tr>
         <tr><td>Reload / Inspect</td><td>Guns. With Grab they pull what you hold closer or push it farther.</td></tr>
         <tr><td>Jump / Crouch</td><td>Crouch stays on until you tap it again</td></tr>
         <tr><td>Press</td><td>Appears when you look at a button (respawn, clean up)</td></tr>
         <tr><td>Bottom bar</td><td>Tap an item to switch to it</td></tr>
-        <tr><td>Top left</td><td>Pause, toolbox</td></tr>
+        <tr><td>Top left</td><td>Pause, toolbox, spawn menu</td></tr>
         <tr><td>Top right</td><td>Slow down time, speed up time, x-ray (tap again for the flat view, again to close)</td></tr>
       </table>
       <table class="controls desk-only">
@@ -170,11 +185,12 @@
         <tr><td>Shift</td><td>Sprint</td></tr>
         <tr><td>Space</td><td>Jump</td></tr>
         <tr><td>C / Ctrl</td><td>Crouch (hold)</td></tr>
-        <tr><td>1 – 5 or Q</td><td>Switch item (Fists, M1911, Shotgun, Grenade, Grab)</td></tr>
+        <tr><td>1 – 8 or Q</td><td>Switch item (Fists, M1911, Shotgun, Grenade, Grab, Machete, Medkit, Defibrillator)</td></tr>
         <tr><td>Mouse wheel</td><td>Switch item (or move what you're holding with Grab)</td></tr>
-        <tr><td>Left / right click</td><td>Use the item (fire, punch, throw, grab)</td></tr>
+        <tr><td>Left / right click</td><td>Use the item (fire, punch, slash, stab, throw, grab, treat, shock)</td></tr>
         <tr><td>R</td><td>Reload</td></tr>
         <tr><td>Tab</td><td>Open toolbox</td></tr>
+        <tr><td>B</td><td>Spawn menu (more ragdolls, armour)</td></tr>
         <tr><td>Z</td><td>Slow down time</td></tr>
         <tr><td>V</td><td>Speed up time</td></tr>
         <tr><td>E</td><td>Press button</td></tr>
@@ -186,6 +202,65 @@
       <p class="note desk-only">The controls for the tool you're holding are listed on the left side of the screen.</p>
       <p class="note touch-only">Change the layout, button size and sensitivity in Settings, under Touch controls.</p>
     </section>
+
+    <section class="tab hidden" id="tab-news">
+      <div class="news">
+        <h3>Alpha 0.8</h3>
+        <ul>
+          <li><b>Machete.</b> Slash for long, deep cuts that bleed hard and get deeper on the same spot: enough of them chop through an arm, a leg or the neck. Cuts across the wrist, the back of the ankle or the back of the thigh sever tendons. Right click stabs deep into the organs.</li>
+          <li><b>Medkit.</b> Hold left click on a body part to bandage its wounds, put a tourniquet above a stump, splint a broken bone or dress a burn. Right click gives morphine, R hangs a blood bag.</li>
+          <li><b>Defibrillator.</b> Hold to charge, let go on the chest. It can restart a heart that has stopped, as long as the heart and enough blood are left. Shocking a beating heart can stop it.</li>
+          <li><b>Spawn menu (B).</b> Spawn up to 12 ragdolls where you look, in a row, with a helmet and a vest. Armour stops pistol rounds, pellets and shrapnel until it wears out, but the hit still bruises and cracks ribs.</li>
+          <li><b>Smarter ragdolls.</b> They put their hands up when you aim at them, duck and cover their heads at gunshots and explosions, run or crawl away from you when they are scared, back away from a blade, and press a hand on their worst wound to slow the bleeding. You can make them brave or timid in the spawn menu.</li>
+          <li><b>New menus.</b> This title screen, and a pause menu with Resume and Main menu.</li>
+        </ul>
+        <h3>Alpha 0.7</h3>
+        <ul>
+          <li>Phone and tablet version with touch controls and four layouts, played sideways in full screen.</li>
+          <li>Grenade throw arc, a bigger explosion, compact x-ray, a hardware check that picks the graphics, and fixes for Mac mouse lock.</li>
+        </ul>
+        <h3>Alpha 0.6</h3>
+        <ul><li>Grenade shrapnel, burns, blast dismemberment and point-blank shotgun wounds.</li></ul>
+      </div>
+    </section>
+    </div>
+  </div>
+</div>
+
+<div id="spawnmenu" class="hidden">
+  <div class="sm-card">
+    <header><h2>Spawn</h2><span class="desk-only">B or Esc to close</span><button id="sm-close" aria-label="Close">✕</button></header>
+    <div class="sm-body">
+      <div class="sm-figure" id="sm-figure">
+        <svg viewBox="0 0 120 230">
+          <g class="body" fill="#8a8e93">
+            <circle cx="60" cy="26" r="17"/>
+            <rect x="40" y="48" width="40" height="44" rx="8"/><rect x="42" y="94" width="36" height="28" rx="7"/><rect x="43" y="124" width="34" height="20" rx="6"/>
+            <rect x="24" y="50" width="12" height="44" rx="6"/><rect x="84" y="50" width="12" height="44" rx="6"/>
+            <rect x="23" y="96" width="11" height="38" rx="5"/><rect x="86" y="96" width="11" height="38" rx="5"/>
+            <rect x="44" y="146" width="14" height="40" rx="7"/><rect x="62" y="146" width="14" height="40" rx="7"/>
+            <rect x="45" y="188" width="12" height="34" rx="6"/><rect x="63" y="188" width="12" height="34" rx="6"/>
+          </g>
+          <g class="joints" fill="#1a1b1d"><circle cx="60" cy="45" r="5"/><circle cx="31" cy="50" r="5"/><circle cx="89" cy="50" r="5"/><circle cx="29" cy="95" r="4"/><circle cx="91" cy="95" r="4"/><circle cx="51" cy="146" r="5"/><circle cx="69" cy="146" r="5"/><circle cx="51" cy="187" r="4"/><circle cx="69" cy="187" r="4"/></g>
+          <g class="helmet"><path d="M41 26a19 19 0 0138 0v3H41z" fill="#4d5434"/><rect x="40" y="27" width="40" height="4" rx="2" fill="#3e442a"/></g>
+          <g class="vest"><rect x="37" y="47" width="46" height="62" rx="8" fill="#3c4134"/><rect x="45" y="55" width="30" height="30" rx="3" fill="#353a2e"/><rect x="42" y="92" width="10" height="12" rx="2" fill="#474d3c"/><rect x="55" y="92" width="10" height="12" rx="2" fill="#474d3c"/><rect x="68" y="92" width="10" height="12" rx="2" fill="#474d3c"/></g>
+        </svg>
+      </div>
+      <div class="sm-opts">
+        <h3>How many</h3>
+        <div class="seg"><button data-opt="count" data-v="1">1</button><button data-opt="count" data-v="2">2</button><button data-opt="count" data-v="3">3</button><button data-opt="count" data-v="5">5</button><button data-opt="count" data-v="8">8</button></div>
+        <h3>Armour</h3>
+        <div class="chips"><button data-opt="helmet">Helmet</button><button data-opt="vest">Vest</button></div>
+        <p class="note">Armour stops pistol rounds, shotgun pellets and shrapnel until it wears out. The body behind it still takes the blow.</p>
+        <h3>Temperament</h3>
+        <div class="seg"><button data-opt="temper" data-v="brave">Brave</button><button data-opt="temper" data-v="normal">Normal</button><button data-opt="temper" data-v="timid">Timid</button></div>
+        <h3>Where</h3>
+        <div class="seg"><button data-opt="where" data-v="look">Where I look</button><button data-opt="where" data-v="front">In front of me</button><button data-opt="where" data-v="spawn">Spawn point</button></div>
+        <button id="sm-spawn" class="sm-go">Spawn ragdoll</button>
+        <div class="sm-row"><button id="sm-clear">Remove all ragdolls</button><button id="sm-clean">Clean up blood</button></div>
+        <p class="note" id="sm-count"></p>
+      </div>
+    </div>
   </div>
 </div>
 

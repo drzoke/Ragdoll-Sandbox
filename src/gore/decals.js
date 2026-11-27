@@ -262,6 +262,67 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vect
 const UP = new THREE.Vector3(0, 1, 0), Zf = new THREE.Vector3(0, 0, 1);
 
 /** Floor pools/splats (instanced) + bullet holes (instanced) + body wound decals. */
+
+/** A long ragged cut (machete slash): dark centre line, torn edges, grey so the blood tint applies. */
+function gashTexture() {
+  return canvasTexture(256, 64, (g, w, h) => {
+    const cy = h / 2;
+    const edge = (sign, spread) => {
+      for (let i = 0; i <= 40; i++) {
+        const x = 8 + (i / 40) * (w - 16), t = i / 40;
+        const half = Math.sin(t * Math.PI) ** 0.7 * spread * (0.8 + Math.random() * 0.4);
+        g.lineTo(x, cy + sign * half);
+      }
+    };
+    // bruised, bloody rim
+    g.fillStyle = 'rgba(120,120,120,0.55)'; g.beginPath(); g.moveTo(8, cy); edge(-1, h * 0.42); edge(1, h * 0.42); g.fill();
+    g.fillStyle = 'rgba(70,70,70,0.95)'; g.beginPath(); g.moveTo(8, cy); edge(-1, h * 0.24); g.lineTo(w - 8, cy); edge(1, h * 0.24); g.fill();
+    // the open cut
+    g.fillStyle = '#0a0a0a'; g.beginPath(); g.moveTo(10, cy);
+    for (let i = 0; i <= 30; i++) { const x = 10 + (i / 30) * (w - 20), t = i / 30; g.lineTo(x, cy - Math.sin(t * Math.PI) * h * 0.09 - Math.random() * 2); }
+    for (let i = 30; i >= 0; i--) { const x = 10 + (i / 30) * (w - 20), t = i / 30; g.lineTo(x, cy + Math.sin(t * Math.PI) * h * 0.09 + Math.random() * 2); }
+    g.fill();
+  }, { srgb: false });
+}
+
+/** Bullet strike on armour: a grey smear of lead with a dark dent in the middle. */
+function dentTexture() {
+  return canvasTexture(64, 64, (g, w, h) => {
+    g.translate(w / 2, h / 2);
+    const grd = g.createRadialGradient(0, 0, 0, 0, 0, w * 0.48);
+    grd.addColorStop(0, 'rgba(25,25,25,1)'); grd.addColorStop(0.25, 'rgba(60,60,58,1)'); grd.addColorStop(0.45, 'rgba(150,150,145,0.9)');
+    grd.addColorStop(0.7, 'rgba(110,110,105,0.45)'); grd.addColorStop(1, 'rgba(100,100,100,0)');
+    g.fillStyle = grd; g.beginPath(); g.arc(0, 0, w * 0.48, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = 'rgba(200,200,195,0.6)'; g.lineWidth = 1.2;
+    for (let i = 0; i < 7; i++) { const a = Math.random() * Math.PI * 2; g.beginPath(); g.moveTo(Math.cos(a) * 6, Math.sin(a) * 6); g.lineTo(Math.cos(a) * rand(14, 24), Math.sin(a) * rand(14, 24)); g.stroke(); }
+  });
+}
+
+/** Crepe bandage: off-white weave with diagonal wraps (blood seeps through as a separate stain). */
+export function bandageTexture() {
+  return canvasTexture(128, 128, (g, w, h) => {
+    g.fillStyle = '#e9e4d8'; g.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 3) { g.fillStyle = `rgba(150,140,120,${0.08 + Math.random() * 0.08})`; g.fillRect(0, y, w, 1); }
+    for (let x = 0; x < w; x += 4) { g.fillStyle = 'rgba(255,255,255,0.08)'; g.fillRect(x, 0, 1, h); }
+    g.strokeStyle = 'rgba(120,110,95,0.35)'; g.lineWidth = 2;
+    for (let i = -4; i < 8; i++) { g.beginPath(); g.moveTo(0, i * 22); g.lineTo(w, i * 22 + 34); g.stroke(); }
+  }, { repeat: true });
+}
+
+/** Blood soaking through a bandage from the middle. */
+function soakTexture() {
+  return canvasTexture(128, 128, (g, w, h) => {
+    g.translate(w / 2, h / 2);
+    g.fillStyle = 'rgba(255,255,255,1)';
+    g.beginPath();
+    for (let i = 0; i <= 48; i++) {
+      const a = (i / 48) * Math.PI * 2, r = w * (0.26 + Math.sin(a * 5 + 1) * 0.04 + Math.random() * 0.05);
+      i ? g.lineTo(Math.cos(a) * r, Math.sin(a) * r * 1.3) : g.moveTo(Math.cos(a) * r, Math.sin(a) * r * 1.3);
+    }
+    g.fill();
+  }, { srgb: false });
+}
+
 export class Decals {
   constructor(scene, maxPools, maxHoles) {
     this.scene = scene;
@@ -333,6 +394,9 @@ export class Decals {
     this.charTex = charTexture();
     this.bruiseGeo = new THREE.PlaneGeometry(1, 1);
 
+    this.gashMat = new THREE.MeshStandardMaterial({ map: gashTexture(), transparent: true, depthWrite: false, roughness: 0.3, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    this.dentMat = new THREE.MeshStandardMaterial({ map: dentTexture(), transparent: true, depthWrite: false, roughness: 0.4, metalness: 0.5, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+    this.soakTex = soakTexture();
     this.woundGeo = new THREE.PlaneGeometry(1, 1);
     this.stainGeo = new THREE.PlaneGeometry(1, 2).translate(0, -0.8, 0);
   }
@@ -390,7 +454,7 @@ export class Decals {
   /** Blood colour setting: decal hue multiplies the grayscale wound/stain textures. */
   setBloodTint(blood) {
     this.poolHue = blood.pool;
-    for (const m of [...this.woundMat, this.stainMat]) m.color.setRGB(...blood.decal);
+    for (const m of [...this.woundMat, this.stainMat, this.gashMat]) m.color.setRGB(...blood.decal);
     this.poolDirty = true; this.wallDirty = true;
   }
 
@@ -565,6 +629,44 @@ export class Decals {
     st.userData.decal = true;
     group.add(st);
     return { decal: m, stain: st, stainSize: 0 };
+  }
+
+  /**
+   * A machete slash on a body-part group (local space): a long gash along `along` (local,
+   * perpendicular to the normal), plus the usual blood run stain. Returns { decal, stain, stainSize }.
+   */
+  addGash(group, localPoint, localNormal, along, length) {
+    const m = new THREE.Mesh(this.woundGeo, this.gashMat);
+    m.position.copy(localPoint).addScaledVector(localNormal, 0.0015);
+    // plane X axis along the cut, Z out of the surface
+    const z = localNormal.clone().normalize();
+    const x = along.clone().addScaledVector(z, -along.dot(z));
+    if (x.lengthSq() < 1e-6) x.set(1, 0, 0).addScaledVector(z, -z.x);
+    x.normalize();
+    const y = new THREE.Vector3().crossVectors(z, x);
+    m.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+    m.scale.set(length, length * 0.25, 1);
+    m.userData.decal = true;
+    group.add(m);
+    const st = new THREE.Mesh(this.stainGeo, this.stainMat);
+    st.position.copy(m.position).addScaledVector(localNormal, 0.0005);
+    st.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), localNormal);
+    st.scale.setScalar(0.001);
+    st.userData.decal = true;
+    group.add(st);
+    return { decal: m, stain: st, stainSize: 0 };
+  }
+
+  /** A bullet stopped by armour: a dent / lead smear on the armour, in the group's local space. */
+  addDent(group, localPoint, localNormal, size = 0.03) {
+    const m = new THREE.Mesh(this.woundGeo, this.dentMat);
+    m.position.copy(localPoint).addScaledVector(localNormal, 0.002);
+    m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), localNormal);
+    m.rotateZ(Math.random() * Math.PI * 2);
+    m.scale.setScalar(size);
+    m.userData.decal = true;
+    group.add(m);
+    return m;
   }
 
   clear() {

@@ -9,6 +9,15 @@ import { clamp } from '../core/util.js';
 
 export const GRAY = new THREE.MeshStandardMaterial({ color: 0x7f8286, roughness: 0.7, metalness: 0.0 });
 export const BLACK = new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.35, metalness: 0.1 });
+// Armour: an olive ballistic helmet and a dark plate carrier
+export const ARMOR_MATERIALS = {
+  helmet: new THREE.MeshStandardMaterial({ color: 0x4d5434, roughness: 0.78, metalness: 0.05 }),
+  vest: new THREE.MeshStandardMaterial({ color: 0x3c4134, roughness: 0.9, metalness: 0 }),
+  plate: new THREE.MeshStandardMaterial({ color: 0x353a2e, roughness: 0.82, metalness: 0.05 }),
+  strap: new THREE.MeshStandardMaterial({ color: 0x24271f, roughness: 0.9, metalness: 0 }),
+  pouch: new THREE.MeshStandardMaterial({ color: 0x474d3c, roughness: 0.92, metalness: 0 }),
+};
+export const ARMOR_HP = { helmet: 100, vest: 220 };
 
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qa = new THREE.Quaternion();
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
@@ -40,7 +49,7 @@ function partGeometry(def) {
  * towards a target pose supplied by the Brain. Damage and physiology live in Health.
  */
 export class Ragdoll {
-  constructor({ scene, physics, position, yaw = 0, name = 'Subject' }) {
+  constructor({ scene, physics, position, yaw = 0, name = 'Subject', armor = null }) {
     this.scene = scene;
     this.physics = physics;
     this.name = name;
@@ -151,12 +160,112 @@ export class Ragdoll {
     this.chestTargetVel = new THREE.Vector3();
     this.chestPosStrength = 0;
 
+    this.armor = {};
+    if (armor?.helmet) this.addArmor('helmet');
+    if (armor?.vest) this.addArmor('vest');
+
     this.brain = new Brain(this, origin, yaw);
     this._unsub = physics.onStep((h) => this.applyMuscles(h));
     this.sync();
   }
 
   get pelvis() { return this.parts.pelvis.body; }
+
+  /**
+   * Put on a helmet or a vest. The shells are real hit targets (bullets, blades and fists hit them
+   * first); straps and pouches are just for looks.
+   */
+  addArmor(kind) {
+    if (this.armor[kind]) return;
+    const M = ARMOR_MATERIALS;
+    const hitMeshes = [], all = [];
+    const mk = (geo, mat, part, hit = true, parent = null) => {
+      const m = new THREE.Mesh(geo, mat);
+      all.push(m);
+      m.castShadow = true; m.receiveShadow = true;
+      m.userData = { ragdoll: this, part, surface: 'armor', armor: kind, disposable: true };
+      (parent || this.parts[part].group).add(m);
+      if (hit) hitMeshes.push(m);
+      return m;
+    };
+    if (kind === 'helmet') {
+      // shell over the top, back and sides (tilted back so the face stays open), with a rim
+      const holder = new THREE.Group();
+      holder.position.set(0, 0.012, -0.01); holder.rotation.x = -0.32;
+      this.parts.head.group.add(holder);
+      all.push(holder);
+      const R = 0.122, edge = Math.PI * 0.56;
+      mk(new THREE.SphereGeometry(R, 28, 14, 0, Math.PI * 2, 0, edge), M.helmet, 'head', true, holder);
+      const rim = mk(new THREE.TorusGeometry(Math.sin(edge) * R, 0.0075, 6, 32).rotateX(Math.PI / 2), M.helmet, 'head', false, holder);
+      rim.position.y = Math.cos(edge) * R;
+      // night-vision mount plate and the chin strap
+      const mount = mk(new THREE.BoxGeometry(0.04, 0.03, 0.012), M.strap, 'head', false);
+      mount.position.set(0, 0.075, 0.098); mount.rotation.x = 0.62;
+      for (const sx of [1, -1]) {
+        const strap = mk(new THREE.BoxGeometry(0.008, 0.11, 0.014), M.strap, 'head', false);
+        strap.position.set(sx * 0.098, -0.04, 0.028); strap.rotation.set(-0.35, 0, sx * -0.18);
+      }
+    } else {
+      const chest = PART_BY_NAME.chest.size, ab = PART_BY_NAME.abdomen.size;
+      const front = mk(new RoundedBoxGeometry(chest[0] + 0.03, chest[1] + 0.02, chest[2] + 0.05, 2, 0.03), M.vest, 'chest');
+      front.position.set(0, -0.005, 0.004);
+      const low = mk(new RoundedBoxGeometry(ab[0] + 0.035, ab[1] * 0.85, ab[2] + 0.05, 2, 0.03), M.vest, 'abdomen');
+      low.position.set(0, 0.012, 0.004);
+      // front and back plates
+      for (const z of [1, -1]) {
+        const plate = mk(new RoundedBoxGeometry(0.25, 0.26, 0.022, 2, 0.008), M.plate, 'chest');
+        plate.position.set(0, 0.005, z * (chest[2] / 2 + 0.034));
+      }
+      // shoulder straps
+      for (const sx of [1, -1]) {
+        const st = mk(new THREE.BoxGeometry(0.06, 0.03, chest[2] + 0.07), M.strap, 'chest', false);
+        st.position.set(sx * 0.1, chest[1] / 2 + 0.012, 0.004);
+      }
+      // magazine / medical pouches on the belly
+      for (let i = -1; i <= 1; i++) {
+        const pouch = mk(new RoundedBoxGeometry(0.075, 0.1, 0.04, 2, 0.01), M.pouch, 'abdomen', false);
+        pouch.position.set(i * 0.085, 0.01, ab[2] / 2 + 0.042);
+        const flap = mk(new THREE.BoxGeometry(0.078, 0.022, 0.044), M.strap, 'abdomen', false);
+        flap.position.set(i * 0.085, 0.058, ab[2] / 2 + 0.043);
+      }
+    }
+    this.armor[kind] = { hp: ARMOR_HP[kind], max: ARMOR_HP[kind], meshes: hitMeshes, all, broken: false };
+    this.meshesDirty = true;
+  }
+
+  /** Take a piece of armour off (it is gone from the body; see Gore.dropHelmet for a loose one). */
+  removeArmor(kind) {
+    const a = this.armor[kind];
+    if (!a) return;
+    for (const m of a.all) m.parent?.remove(m);
+    delete this.armor[kind];
+    this.meshesDirty = true;
+  }
+
+  /**
+   * Place every body part straight into a pose (forward kinematics from the pelvis), e.g. to
+   * start the title-screen corpse sitting against a wall. pelvisQ = world orientation.
+   */
+  placeInPose(pose, pelvisPos, pelvisQ) {
+    this.setPose({ ...pose, relative: false }, pelvisQ);
+    const wp = {}, wq = {};
+    for (const def of PARTS) {
+      const p = this.parts[def.name], q = this.targetQ[def.name];
+      let pos;
+      if (!def.parent) pos = pelvisPos.clone();
+      else {
+        const pivot = p.pivotParent.clone().applyQuaternion(wq[def.parent]).add(wp[def.parent]);
+        pos = pivot.sub(p.pivotChild.clone().applyQuaternion(q));
+      }
+      wp[def.name] = pos; wq[def.name] = q.clone();
+      const b = p.body;
+      b.position.set(pos.x, pos.y, pos.z);
+      b.quaternion.set(q.x, q.y, q.z, q.w);
+      b.velocity.set(0, 0, 0); b.angularVelocity.set(0, 0, 0);
+      b.previousPosition?.copy(b.position);
+    }
+    this.sync();
+  }
 
   bodyQuat(name, out = new THREE.Quaternion()) { const q = this.parts[name].body.quaternion; return out.set(q.x, q.y, q.z, q.w); }
   bodyPos(name, out = new THREE.Vector3()) { const p = this.parts[name].body.position; return out.set(p.x, p.y, p.z); }
@@ -362,7 +471,11 @@ export class Ragdoll {
     }
   }
 
-  meshes() { return Object.values(this.parts).filter((p) => !p.removed).flatMap((p) => (p.ball && p.ball.visible ? [p.mesh, p.ball] : [p.mesh])); }
+  meshes() {
+    const list = Object.values(this.parts).filter((p) => !p.removed).flatMap((p) => (p.ball && p.ball.visible ? [p.mesh, p.ball] : [p.mesh]));
+    for (const a of Object.values(this.armor || {})) for (const m of a.meshes) if (!this.parts[m.userData.part].removed && m.parent) list.push(m);
+    return list;
+  }
 
   dispose() {
     this.removed = true;

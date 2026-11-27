@@ -14,6 +14,11 @@ import { HUD } from './ui/hud.js';
 import { GrabTool } from './weapon/grab.js';
 import { Shotgun } from './weapon/shotgun.js';
 import { Fists } from './weapon/fists.js';
+import { Machete } from './weapon/machete.js';
+import { Medkit } from './weapon/medkit.js';
+import { Defibrillator } from './weapon/defib.js';
+import { SpawnMenu } from './ui/spawnmenu.js';
+import { TitleScene } from './ui/title.js';
 import { GrenadeTool } from './weapon/grenade.js';
 import { Explosives } from './weapon/explosives.js';
 import { ThrowArc } from './weapon/trajectory.js';
@@ -22,7 +27,7 @@ import { Toolbox } from './weapon/toolbox.js';
 import { Graphics } from './graphics.js';
 import { settings } from './settings.js';
 import { trackMaterials } from './materials.js';
-import { GRAY as RAGDOLL_GRAY, BLACK as RAGDOLL_BLACK } from './ragdoll/ragdoll.js';
+import { GRAY as RAGDOLL_GRAY, BLACK as RAGDOLL_BLACK, ARMOR_MATERIALS } from './ragdoll/ragdoll.js';
 import { IS_TOUCH, IS_IOS, IS_STANDALONE } from './core/device.js';
 import { TouchControls } from './ui/touch.js';
 import { benchmark, LEVEL_NAMES, savePerfCap } from './core/bench.js';
@@ -77,8 +82,20 @@ const buttons = [
   new PressButton({ scene, physics, map, position: [-3, 0, 4], label: 'RESPAWN', sub: 'Press E · new ragdoll', color: 0xd8302a,
     onPress: () => { audio.play('button'); grab.release(); ragdolls.respawn(); pistol.refill(); hud.toast('Ragdoll respawned'); } }),
   new PressButton({ scene, physics, map, position: [-4.2, 0, 4], label: 'CLEAN UP', sub: 'Press E · blood & gibs', color: 0x2a7bd8,
-    onPress: () => { audio.play('button'); if (grab.held?.kind === 'gib') grab.release(); gore.clear(); ballistics.clear(); explosives.clear(); pistol.casings.clear(); shotgun.hulls.clear(); hud.toast('Cleaned up'); } }),
+    onPress: () => { audio.play('button'); cleanUp(); } }),
 ];
+
+function cleanUp() {
+  if (grab.held?.kind === 'gib') grab.release();
+  gore.clear(); ballistics.clear(); explosives.clear(); pistol.casings.clear(); shotgun.hulls.clear();
+  hud.toast('Cleaned up');
+}
+function removeAllRagdolls() {
+  grab.release();
+  const n = ragdolls.list.length;
+  ragdolls.clear();
+  hud.toast(n ? `Removed ${n} ragdoll${n > 1 ? 's' : ''}` : 'No ragdolls to remove');
+}
 
 await stage(0.8, 'Loading weapons');
 const ballistics = new Ballistics({ scene, ragdolls, gore, map, buttons, audio, hud });
@@ -95,6 +112,11 @@ const explosives = new Explosives({ scene, physics, ragdolls, gore, map, audio, 
 explosives.ballistics = ballistics;
 ballistics.explosives = explosives;
 const fists = new Fists({ mainCamera: camera, player, audio, environment: scene.environment, gore, hud, targets: () => ballistics.targets() });
+// close-range tools: they hit the same things bullets do, and show their target in the x-ray
+const near = { mainCamera: camera, player, audio, environment: scene.environment, gore, hud, targets: () => ballistics.targets(), onTarget: (r) => { ballistics.lastTarget = r; } };
+const machete = new Machete(near);
+const medkit = new Medkit(near);
+const defib = new Defibrillator({ ...near, mainScene: scene });
 const throwRay = new THREE.Raycaster();
 const throwArc = new ThrowArc(scene, () => [...map.solidMeshes, ...ragdolls.meshes()]);
 const grenade = new GrenadeTool({
@@ -114,16 +136,24 @@ const grenade = new GrenadeTool({
 trackMaterials(RAGDOLL_GRAY); trackMaterials(RAGDOLL_BLACK, { grime: false });
 trackMaterials(pistol.gun.root); trackMaterials(grab.gadget.root); trackMaterials(shotgun.gun.root); trackMaterials(grenade.model.root);
 trackMaterials(explosives.template.root);
+trackMaterials(machete.model.root); trackMaterials(medkit.left); trackMaterials(medkit.right); trackMaterials(defib.pr.root); trackMaterials(defib.pl.root);
+for (const m of Object.values(ARMOR_MATERIALS)) trackMaterials(m);
 trackMaterials(ARM_MATERIALS.skin, { grime: false }); trackMaterials(ARM_MATERIALS.sleeve); trackMaterials(ARM_MATERIALS.cuff);
 for (const m of map.solidMeshes) trackMaterials(m);
 for (const b of buttons) for (const m of b.meshes) trackMaterials(m, { grime: false });
 graphics.apply(settings.get('graphics'));
 grab.setQuality(settings.get('graphics'));
-const tools = [fists, pistol, shotgun, grenade, grab];
+const tools = [fists, pistol, shotgun, grenade, grab, machete, medkit, defib];
 const toolbox = new Toolbox(tools, { audio, start: 1, onOpenChange: (open) => onToolboxChange(open) });
 
 await stage(0.86, 'Spawning ragdoll');
 ragdolls.spawn();
+const spawnMenu = new SpawnMenu({ ragdolls, camera, map, audio, hud, onOpenChange: (open) => onToolboxChange(open), onRemoveAll: removeAllRagdolls, onCleanUp: cleanUp });
+await stage(0.88, 'Setting the scene');
+const title = new TitleScene({ scene, ragdolls, gore, ballistics, physics, camera });
+title.ensure();
+title.setActive(true);
+trackMaterials(title.prop.root);
 
 // ------------------------------------------------------------------ menu / pointer lock
 const menu = document.getElementById('menu');
@@ -131,14 +161,58 @@ const lockWarn = document.getElementById('lockwarn');
 let playing = false;
 let freeMouse = false; // fallback when pointer lock is unavailable (e.g. sandboxed iframe)
 
-let toolboxOpen = false;
+let toolboxOpen = false;       // toolbox or spawn menu open (the mouse is free)
+// Title screen (cinematic camera on the corpse scene) until you press Play; after that Esc opens
+// the pause menu, which has a Main menu button back to the title screen.
+let titleMode = true;
+const playLabel = document.querySelector('#play span');
+function setMenuMode(mode) {
+  menu.classList.toggle('title', mode === 'title');
+  menu.classList.toggle('pause', mode === 'pause');
+  document.body.classList.toggle('title', mode === 'title');
+  playLabel.textContent = mode === 'title' ? 'Play' : 'Resume';
+}
 function setPlaying(p) {
   playing = p;
   input.enabled = p;
   menu.classList.toggle('hidden', p);
-  if (!p) { input.clear(); toolbox.close(); }
+  if (p) {
+    if (titleMode) { titleMode = false; title.setActive(false); setMenuMode('pause'); }
+    closePanel();
+  } else { input.clear(); toolbox.close(); spawnMenu.close(); }
   touch.setPlaying(p);
 }
+function showTitle() {
+  titleMode = true;
+  if (document.pointerLockElement) document.exitPointerLock();
+  setPlaying(false);
+  title.ensure();
+  title.setActive(true);
+  setMenuMode('title');
+  closePanel();
+}
+// side panels: Settings, Controls, What's new
+const panel = document.getElementById('m-panel');
+const PANEL_TITLES = { settings: 'Settings', keys: 'Controls', news: "What's new" };
+let panelName = null;
+function openPanel(name) {
+  if (panelName === name) { closePanel(); return; }
+  panelName = name;
+  panel.classList.remove('hidden');
+  document.getElementById('m-panel-title').textContent = PANEL_TITLES[name];
+  for (const t of panel.querySelectorAll('.tab')) t.classList.toggle('hidden', t.id !== `tab-${name}`);
+  for (const b of menu.querySelectorAll('.m-btn[data-panel]')) b.classList.toggle('on', b.dataset.panel === name);
+  panel.querySelector('.m-panel-body').scrollTop = 0;
+}
+function closePanel() {
+  panelName = null;
+  panel.classList.add('hidden');
+  for (const b of menu.querySelectorAll('.m-btn[data-panel]')) b.classList.remove('on');
+}
+for (const b of menu.querySelectorAll('.m-btn[data-panel]')) b.addEventListener('click', () => { audio.unlock(); audio.play('click'); openPanel(b.dataset.panel); });
+document.getElementById('m-panel-close').addEventListener('click', () => closePanel());
+document.getElementById('to-title').addEventListener('click', () => { audio.play('click'); showTitle(); });
+setMenuMode('title');
 
 // ---- touch controls (phones and tablets, played sideways) ----
 /** X-ray button on touch screens: off -> 3D -> flat -> off. */
@@ -151,7 +225,7 @@ function cycleXray() {
 }
 const touch = new TouchControls({
   input, toolbox, mouseSensitivity: CONFIG.player.mouseSensitivity, isAiming: () => player.aiming,
-  onPause: () => setPlaying(false), onXray: cycleXray,
+  onPause: () => setPlaying(false), onXray: cycleXray, onSpawn: () => { toolbox.close(); spawnMenu.toggle(); }, onToolbox: () => { spawnMenu.close(); toolbox.toggle(); },
   onEditDone: () => menu.classList.remove('hidden'),
 });
 // Auto: start from the device check, then follow the input actually used (a finger on the
@@ -172,7 +246,6 @@ addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' && (Math.
 addEventListener('keydown', (e) => { if (!e.repeat && e.key !== 'Unidentified') setAutoTouch(false); }, true);
 function applyTouchMode() {
   touch.setActive(touchWanted());
-  document.getElementById('play').textContent = touch.active ? 'Tap to play' : 'Click to play';
   document.getElementById('play-note').textContent = !touch.active
     ? (IS_MAC || IS_SAFARI
       ? 'The mouse is locked to the game while you play, so it can\'t slide onto another screen. Press Esc to get it back.'
@@ -234,23 +307,18 @@ function onToolboxChange(open) {
     if (playing && !freeMouse && !document.pointerLockElement) {
       // Re-lock straight away (Tab/click count as a user gesture). If the browser refuses, fall
       // back to the pause menu so one click on Play resumes.
-      Promise.resolve().then(() => canvas.requestPointerLock()).catch(() => setPlaying(false));
+      // (skipped if another overlay opened in the meantime, e.g. Tab -> B)
+      Promise.resolve().then(() => { if (!toolboxOpen && playing) return canvas.requestPointerLock(); }).catch(() => setPlaying(false));
     }
   }
 }
 addEventListener('keydown', (e) => {
-  if (e.code !== 'Tab' || !playing) return;
-  e.preventDefault();
-  toolbox.toggle();
+  if (!playing || e.repeat) return;
+  if (e.code === 'Tab') { e.preventDefault(); if (spawnMenu.isOpen) spawnMenu.close(); toolbox.toggle(); }
+  if (e.code === 'KeyB') { if (toolbox.isOpen) toolbox.close(); spawnMenu.toggle(); }
 });
 
-// ---- menu tabs + settings ----
-for (const b of menu.querySelectorAll('.tabs button')) {
-  b.addEventListener('click', () => {
-    for (const x of menu.querySelectorAll('.tabs button')) x.classList.toggle('on', x === b);
-    for (const t of menu.querySelectorAll('.tab')) t.classList.toggle('hidden', t.id !== `tab-${b.dataset.tab}`);
-  });
-}
+// ---- settings ----
 const GFX_NOTES = {
   low: 'No shadows, lower resolution and fewer blood drops. Runs on almost anything.',
   medium: 'Sharp sun shadows and full resolution.',
@@ -338,7 +406,7 @@ document.getElementById('play').addEventListener('click', async () => {
 canvas.addEventListener('mousedown', () => { if (!touch.active && playing && !freeMouse && document.pointerLockElement !== canvas) lockPointer(); });
 document.addEventListener('pointerlockchange', () => {
   if (touch.active) return;
-  if (document.pointerLockElement === canvas) { lockFails = 0; lockedAt = performance.now(); lockWarn.classList.add('hidden'); setPlaying(true); if (toolboxOpen) toolbox.close(); }
+  if (document.pointerLockElement === canvas) { lockFails = 0; lockedAt = performance.now(); lockWarn.classList.add('hidden'); setPlaying(true); if (toolboxOpen) { toolbox.close(); spawnMenu.close(); } }
   else if (!freeMouse && !toolboxOpen) {
     setPlaying(false);
     // lost straight away (not by Esc): the browser or the OS took it back, e.g. while switching
@@ -354,7 +422,7 @@ addEventListener('keydown', (e) => {
   if (!playing) return;
   // With the keyboard locked the browser no longer handles Esc for us.
   if (e.code === 'Escape') {
-    if (toolboxOpen) { toolbox.close(); return; }
+    if (toolboxOpen) { toolbox.close(); spawnMenu.close(); return; }
     if (document.pointerLockElement) document.exitPointerLock();
     else setPlaying(false);
   }
@@ -381,6 +449,18 @@ const debug = { timeScale: 1 }; // set to 0 from the console to freeze the simul
 let target = null;
 let fps = 60;
 let lastFocused = null;
+let lookedRagdoll = null;
+// what the ragdolls know about you: where you are, whether a weapon is out and what it points at
+const playerInfo = { pos: new THREE.Vector3(), armed: false, melee: false, aimedAt: null };
+function updatePlayerInfo() {
+  if (titleMode || !playing) { ragdolls.player = null; return; }
+  const t = toolbox.active, out = t.raise > 0.6;
+  playerInfo.pos.copy(player.pos);
+  playerInfo.armed = out && (t === pistol || t === shotgun || t === machete || t === grenade);
+  playerInfo.melee = out && (t === machete || t === fists);
+  playerInfo.aimedAt = lookedRagdoll;
+  ragdolls.player = playerInfo;
+}
 
 // ---- time warp: world time scale (the player and weapons stay real-time) ----
 const TIME_STEPS = [0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1, 1.5, 2, 3];
@@ -406,6 +486,7 @@ function updateInteraction(dt) {
 
   centerRay.far = 60;
   const looked = ragdolls.pick(centerRay);
+  lookedRagdoll = looked;
   if (looked) target = looked;
   if (ballistics.lastTarget && !ragdolls.list.includes(ballistics.lastTarget)) ballistics.lastTarget = null;
   if (!looked && ballistics.lastTarget) target = ballistics.lastTarget;
@@ -467,6 +548,7 @@ function frame() {
 
   touch.update(dt, { tool: toolbox.active, useVisible: !!lastFocused, xrayMode: hud.xrayOpen ? settings.get('xrayMode') : 'off' });
   player.update(dt, input, playing && !toolboxOpen && !touch.portrait);
+  if (titleMode) title.update(dt);         // cinematic camera on the title screen
   player.aiming = false;                   // the gun in your hands sets it again
   toolbox.update(dt, input, playing, wdt); // tools aim before the physics step
   physics.update(dt, ts);
@@ -476,6 +558,7 @@ function frame() {
   gore.update(wdt, camera, renderer.domElement.height);
   map.update(player.pos);
   updateInteraction(dt);
+  updatePlayerInfo();
 
   const viewerPos = camera.getWorldPosition(new THREE.Vector3());
   const r0 = target;
@@ -493,7 +576,8 @@ function frame() {
 
   watchFps(dt, now);
   const t = toolbox.active;
-  graphics.render(t.scene, t.camera);
+  if (titleMode) graphics.render(null, null);
+  else graphics.render(t.scene, t.camera);
   input.endFrame();
 }
 
@@ -510,4 +594,4 @@ setTimeout(() => {
 }, 250);
 
 // Exposed for debugging from the console and for automated tests.
-window.game = { fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };
+window.game = { machete, medkit, defib, spawnMenu, title, showTitle, get titleMode() { return titleMode; }, fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };

@@ -9,6 +9,9 @@ const ICONS = {
   'Remington 870': `<svg viewBox="0 0 64 40"><path d="M2 15h30v-2h4v2h26v3H36v2h12v3H34l-2 2H22l-3 3-12 6-4-4 9-6v-3H2z" fill="currentColor"/><rect x="38" y="19" width="12" height="5" rx="1" fill="currentColor" opacity=".7"/></svg>`,
   Grenade: `<svg viewBox="0 0 64 40"><circle cx="30" cy="24" r="13" fill="currentColor"/><rect x="25" y="6" width="10" height="7" fill="currentColor"/><path d="M35 8h6l3 6-2 12" stroke="currentColor" stroke-width="3" fill="none"/><circle cx="20" cy="10" r="5" stroke="currentColor" stroke-width="2" fill="none"/></svg>`,
   M1911: `<svg viewBox="0 0 64 40"><path d="M4 9h50l3 3v6H31l-2 3h-6l-3 15H8l5-18H4z" fill="currentColor"/></svg>`,
+  Machete: `<svg viewBox="0 0 64 40"><path d="M2 27l7-5 4 4-6 6z" fill="currentColor"/><path d="M12 21L50 6c6-2 10 0 11 3-1 3-5 5-11 7L15 26z" fill="currentColor"/><path d="M15 26l35-10c4-1 8-3 10-6" stroke="#fff" stroke-opacity=".45" stroke-width="1.3" fill="none"/><rect x="9" y="19" width="4" height="10" rx="1" transform="rotate(-38 11 24)" fill="currentColor" opacity=".7"/></svg>`,
+  Medkit: `<svg viewBox="0 0 64 40"><rect x="12" y="9" width="40" height="27" rx="5" fill="currentColor"/><path d="M25 9V5h14v4" stroke="currentColor" stroke-width="3" fill="none"/><path d="M32 15v15M24.5 22.5h15" stroke="#000" stroke-opacity=".5" stroke-width="4.5" stroke-linecap="round"/></svg>`,
+  Defibrillator: `<svg viewBox="0 0 64 40"><rect x="4" y="10" width="18" height="16" rx="3" fill="currentColor"/><rect x="42" y="10" width="18" height="16" rx="3" fill="currentColor"/><rect x="10" y="26" width="6" height="10" rx="2" fill="currentColor" opacity=".7"/><rect x="48" y="26" width="6" height="10" rx="2" fill="currentColor" opacity=".7"/><path d="M34 6l-7 12h5l-2 10 8-13h-5z" fill="currentColor"/></svg>`,
   Grab: `<svg viewBox="0 0 64 40"><path d="M8 13h30v12H20l-3 11h-8l3-11H8z" fill="currentColor"/><rect x="38" y="15" width="8" height="8" fill="currentColor"/><path d="M46 12l10-4v4l-7 3zM46 26l10 4v-4l-7-3z" fill="currentColor"/><circle cx="52" cy="19" r="3" fill="#fff"/></svg>`,
 };
 const INFO = {
@@ -16,9 +19,12 @@ const INFO = {
   'Remington 870': { category: 'weapons', type: 'Shotgun', text: 'Pump-action 12 gauge: 8 pellets per shot, 6 shells in the tube plus one in the chamber. It pumps itself after each shot. R loads one shell at a time; fire to stop loading.' },
   Grenade: { category: 'weapons', type: 'Explosive', text: 'Green ball grenade. Left click pulls the pin and throws it, right click lobs it underhand. It goes off 3 seconds after it leaves your hand and leaves black scorch marks. Shoot one to set it off early.' },
   M1911: { category: 'weapons', type: 'Pistol', text: 'Semi-automatic .45 pistol with 7 rounds plus one in the chamber. Left click fires, right click aims, R reloads.' },
+  Machete: { category: 'weapons', type: 'Melee', text: 'A 40 cm blade. Left click slashes (forehand, then backhand): long cuts that bleed hard and get deeper on the same spot, until they chop through a limb or the neck. Wrist, ankle and hamstring cuts sever tendons. Right click stabs deep into the organs.' },
+  Medkit: { category: 'medical', type: 'Medical', text: 'Look at a body part and hold left click to treat it: bandages on its wounds, a tourniquet above a stump, a splint on a broken bone, a dressing on a bad burn. Right click gives morphine (twice slows the breathing), R hangs a 750 ml blood bag.' },
+  Defibrillator: { category: 'medical', type: 'Medical', text: 'Hold left click to charge, let go with the paddles on the chest. It can restart a heart that has stopped if the heart and enough blood are left: give a blood bag first after heavy bleeding. Shocking a heart that is still beating can stop it.' },
   Grab: { category: 'tools', type: 'Tool', text: 'Picks up ragdolls and loose body parts from a distance. Right click grabs or drops, left click throws. Swing them into things to break bones.' },
 };
-const CATEGORIES = [['all', 'All'], ['weapons', 'Weapons'], ['tools', 'Tools']];
+const CATEGORIES = [['all', 'All'], ['weapons', 'Weapons'], ['medical', 'Medical'], ['tools', 'Tools']];
 
 /**
  * Inventory of tools ("toolbox"): hotbar at the bottom, Tab opens the full toolbox (a square
@@ -155,7 +161,7 @@ export class Toolbox {
 
   renderControls() {
     const t = this.active;
-    const rows = [...t.controls.filter(([k]) => k), [`1–${this.tools.length} or Q`, 'Switch item'], ['Tab', 'Open toolbox'], ['Z', 'Slow down time'], ['V', 'Speed up time'], ['X', 'X-ray (again: 3D / Flat, again: close)'], ['H', 'Hide this list']];
+    const rows = [...t.controls.filter(([k]) => k), [`1–${this.tools.length} or Q`, 'Switch item'], ['Tab', 'Open toolbox'], ['B', 'Spawn menu'], ['Z', 'Slow down time'], ['V', 'Speed up time'], ['X', 'X-ray (again: 3D / Flat, again: close)'], ['H', 'Hide this list']];
     const key = t.name + JSON.stringify(rows);
     if (key === this.controlsKey) return;
     this.controlsKey = key;

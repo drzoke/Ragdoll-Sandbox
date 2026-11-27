@@ -9,25 +9,41 @@ export class RagdollManager {
     this.list = [];
     this.counter = 0;
     this.meshCache = null;
+    // What the ragdolls know about the player (set every frame by the game):
+    // { pos, armed (gun or blade out), melee (blade or fists out), aimedAt (ragdoll under the crosshair) }
+    this.player = null;
   }
 
-  spawn(position = CONFIG.ragdoll.spawn, yaw = Math.PI * 0) {
-    const r = new Ragdoll({ scene: this.scene, physics: this.physics, position, yaw, name: `Subject ${String(++this.counter).padStart(2, '0')}` });
+  spawn(position = CONFIG.ragdoll.spawn, yaw = Math.PI * 0, { armor = null, name = null } = {}) {
+    const r = new Ragdoll({ scene: this.scene, physics: this.physics, position, yaw, armor, name: name || `Subject ${String(++this.counter).padStart(2, '0')}` });
+    r.env = this;
     r.xray = new XRayRig(r);
     this.list.push(r);
     this.meshCache = null;
     return r;
   }
 
-  clear() {
-    for (const r of this.list) r.dispose();
-    this.list = [];
+  clear(keep = null) {
+    for (const r of this.list) if (r !== keep) r.dispose();
+    this.list = keep && this.list.includes(keep) ? [keep] : [];
     this.meshCache = null;
+  }
+
+  remove(r) {
+    if (!this.list.includes(r)) return;
+    r.dispose();
+    this.list = this.list.filter((x) => x !== r);
+    this.meshCache = null;
+  }
+
+  /** A gunshot, explosion or scream at pos: every ragdoll in earshot gets scared (except `from`). */
+  alert(pos, radius, amount, kind, from = null) {
+    for (const r of this.list) if (r !== from) r.brain.hear(pos, radius, amount, kind);
   }
 
   /** Remove every ragdoll and spawn a fresh one at the spawn point, facing the player start. */
   respawn() {
-    this.clear();
+    this.clear(this.keep);
     return this.spawn(CONFIG.ragdoll.spawn, 0);
   }
 

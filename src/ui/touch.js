@@ -9,7 +9,8 @@ import { settings } from '../settings.js';
  *    while it is held, so you can shoot and track a target with one thumb.
  *  - Buttons change with the item: Fire / Aim / Reload / Inspect for guns, Jab / Hook for fists,
  *    Throw / Lob for the grenade, Grab / Throw / Closer / Farther for the grab tool.
- *  - Top bar: pause, toolbox, slow time, speed up time, x-ray (off → 3D → flat).
+ *  - Top bar: pause, toolbox, spawn menu, slow time, speed up time, x-ray (off → 3D → flat).
+ *  - Machete: Slash / Stab. Medkit: Treat (hold) / Morphine / Blood. Defibrillator: Shock (hold, let go).
  *
  * Everything is fed into the normal Input object (virtual keys, mouse buttons, mouse deltas and an
  * analogue stick axis), so the game logic doesn't know whether a keyboard or a finger is used.
@@ -34,6 +35,13 @@ const ICONS = {
   toolbox: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1.5" fill="currentColor"/><rect x="13" y="3" width="8" height="8" rx="1.5" fill="currentColor"/><rect x="3" y="13" width="8" height="8" rx="1.5" fill="currentColor"/><rect x="13" y="13" width="8" height="8" rx="1.5" fill="currentColor" opacity=".5"/></svg>',
   slow: '<svg viewBox="0 0 24 24"><path d="M11 6l-7 6 7 6zM20 6l-7 6 7 6z" fill="currentColor"/></svg>',
   fast: '<svg viewBox="0 0 24 24"><path d="M4 6l7 6-7 6zM13 6l7 6-7 6z" fill="currentColor"/></svg>',
+  spawn: '<svg viewBox="0 0 24 24"><circle cx="10" cy="7" r="3.5" fill="currentColor"/><path d="M3.5 20c0-4 3-6.5 6.5-6.5s6.5 2.5 6.5 6.5z" fill="currentColor"/><path d="M19 8v6M16 11h6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  slash: '<svg viewBox="0 0 24 24"><path d="M4 20L18 4l2 2L7 21z" fill="currentColor"/><path d="M3 21l3-1-2-2z" fill="currentColor" opacity=".6"/></svg>',
+  stab: '<svg viewBox="0 0 24 24"><path d="M2 12h13l6-3v6l-6-3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M2 9v6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
+  medkit: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2.5" fill="currentColor"/><path d="M9 6V4h6v2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 9.5v7M8.5 13h7" stroke="#000" stroke-opacity=".55" stroke-width="2.4" stroke-linecap="round"/></svg>',
+  syringe: '<svg viewBox="0 0 24 24"><path d="M15 3l6 6M18 6l-9 9-4 1 1-4 9-9M3 21l3-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  blood: '<svg viewBox="0 0 24 24"><path d="M12 3c3 4.5 6 7.5 6 11a6 6 0 01-12 0c0-3.5 3-6.5 6-11z" fill="currentColor"/></svg>',
+  bolt: '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6z" fill="currentColor"/></svg>',
   xray: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.6" fill="currentColor"/><path d="M12 8v8M7 10h10M8 13h8M12 16l-3 5M12 16l3 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
 };
 
@@ -75,6 +83,9 @@ function toolButtons(tool) {
     case 'M1911':
     case 'Remington 870': return { fire: ['Fire', 'fire'], alt: ['Aim', 'aim', 'aim'], reload: ['Reload', 'reload'], inspect: ['Inspect', 'inspect'] };
     case 'Grenade': return { fire: ['Throw', 'throw'], alt: ['Lob', 'lob'] };
+    case 'Machete': return { fire: ['Slash', 'slash'], alt: ['Stab', 'stab'] };
+    case 'Medkit': return { fire: ['Treat', 'medkit'], alt: ['Morphine', 'syringe'], reload: ['Blood', 'blood'] };
+    case 'Defibrillator': return { fire: ['Shock', 'bolt'] };
     case 'Grab': return tool.held
       ? { fire: ['Throw', 'throw'], alt: ['Drop', 'grab'], reload: ['Closer', 'closer', 'hold'], inspect: ['Farther', 'farther', 'hold'] }
       : { fire: ['Push', 'throw'], alt: ['Grab', 'grab'] };
@@ -122,7 +133,7 @@ export class TouchControls {
       <div class="tc-area">
         <div class="tc-stick"><div class="tc-ring"></div><div class="tc-knob"></div><span>Sprint</span></div>
         ${Object.entries(BUTTONS).map(([id, b]) => `<div class="tc-btn tc-${b.kind}${b.primary ? ' primary' : ''}" data-id="${id}"><i></i><b></b></div>`).join('')}
-        <div class="tc-top left"><div class="tc-mini" data-act="pause" title="Pause">${ICONS.pause}</div><div class="tc-mini" data-act="toolbox" title="Toolbox">${ICONS.toolbox}</div></div>
+        <div class="tc-top left"><div class="tc-mini" data-act="pause" title="Pause">${ICONS.pause}</div><div class="tc-mini" data-act="toolbox" title="Toolbox">${ICONS.toolbox}</div><div class="tc-mini" data-act="spawn" title="Spawn menu">${ICONS.spawn}</div></div>
         <div class="tc-top right"><div class="tc-mini" data-act="slow" title="Slow down time">${ICONS.slow}</div><div class="tc-mini" data-act="fast" title="Speed up time">${ICONS.fast}</div><div class="tc-mini wide" data-act="xray" title="X-ray">${ICONS.xray}<em>X-ray</em></div></div>
       </div>
       <div class="tc-edit hidden"><span>Drag the buttons to move them</span><button data-edit="reset">Reset</button><button data-edit="done" class="on">Done</button></div>`;
@@ -344,7 +355,8 @@ export class TouchControls {
     const inp = this.input;
     el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 150);
     if (act === 'pause') this.o.onPause?.();
-    else if (act === 'toolbox') this.o.toolbox.toggle();
+    else if (act === 'toolbox') (this.o.onToolbox ? this.o.onToolbox() : this.o.toolbox.toggle());
+    else if (act === 'spawn') this.o.onSpawn?.();
     else if (act === 'slow') inp.pressed.add('KeyZ');
     else if (act === 'fast') inp.pressed.add('KeyV');
     else if (act === 'xray') this.o.onXray?.();

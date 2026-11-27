@@ -62,6 +62,8 @@ export class Ballistics {
    */
   fire(origin, dir, visualFrom, opts = {}) {
     const { energy = 1, impulse = W.impulse, size = 1, speed = this.speed, pellet = false, fragment = false, shot = null, range = W.range, life = 1.5, glowSize = 0.075 } = opts;
+    // a gunshot scares every ragdoll in earshot (once per shotgun shot)
+    if (!fragment && !this.silent && !(shot && shot.alerted)) { if (shot) shot.alerted = true; this.ragdolls.alert(origin, 32, 0.13, 'shot'); }
     const tracer = new THREE.Mesh(tracerGeo, tracerMat);
     tracer.frustumCulled = false;
     const slug = new THREE.Mesh(slugGeo, slugMat);
@@ -160,10 +162,57 @@ export class Ballistics {
     }
   }
 
+  /**
+   * Bullet into a helmet or vest. Intact armour stops pistol rounds, pellets and shrapnel (the body
+   * behind still takes a hard blow); each stop wears it down, and worn-out armour lets rounds
+   * through with less energy. Returns the point to continue from, or null when stopped.
+   */
+  armorHit(b, hit, dir) {
+    const ud = hit.object.userData;
+    const r = ud.ragdoll, a = r.armor?.[ud.armor];
+    const part = r.parts[ud.part];
+    if (!a || !part || part.removed) return null;
+    if ((b.pellet || b.fragment) && !b.slowed) {
+      b.slowed = true;
+      b.energy *= b.pellet ? clamp(1.15 - b.traveled / 30, 0.3, 1.15) : clamp(1.1 - b.traveled / 22, 0.35, 1.1);
+    }
+    const helmet = ud.armor === 'helmet';
+    const wear = (b.pellet ? 6 : b.fragment ? 7 : 26) * b.energy * (helmet ? 1.25 : 1);
+    const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : dir.clone().negate();
+    // a helmet can still be punched through by a full-power round now and then (angle, weak spot)
+    const pierce = a.broken || (helmet && !b.pellet && !b.fragment && b.energy > 0.8 && Math.random() < 0.12);
+    a.hp = Math.max(0, a.hp - wear);
+    if (a.hp <= 0 && !a.broken) { a.broken = true; r.health.log(`${helmet ? 'Helmet' : 'Vest'} broken: rounds go through now`, 'warn'); }
+    this.lastTarget = r;
+    if (pierce) {
+      b.energy *= 0.7;
+      b.skip.add(hit.object);
+      this.sound('clink');
+      this.gore.armorHit(r, ud.part, hit.point, n, 0.022);
+      return hit.point.clone().addScaledVector(dir, 0.002);
+    }
+    // stopped: the impact still knocks the part and bruises what is under it
+    const k = clamp(b.energy * (b.pellet ? 0.22 : b.fragment ? 0.2 : 0.75), 0, 1);
+    r.health.blunt(ud.part, k, { helmet });
+    if (!b.pellet && !b.fragment) r.health.log(`${helmet ? 'Helmet' : 'Vest'} stopped a round`, 'info');
+    r.hitImpulse(ud.part, hit.point, dir, b.impulse * b.energy * 0.85);
+    this.gore.armorHit(r, ud.part, hit.point, n, b.pellet || b.fragment ? 0.018 : 0.03);
+    if (k > 0.3) this.gore.addBruise(r, ud.part, hit.point, k * 0.6);
+    this.sound(helmet ? 'clink' : 'thud');
+    if (b.size >= 0.9 || b.pellet) this.hud.hitMarker(false);
+    if (b.pellet && b.shot) {
+      const n2 = (b.shot.hits.get(r) || 0) + 1;
+      b.shot.hits.set(r, n2);
+      if (n2 === 5 && r.brain.state === 'stand') r.brain.fall();
+    }
+    return null;
+  }
+
   /** Apply a hit. Returns the exit point if the bullet keeps going, otherwise null. */
   processHit(b, hit, dir) {
     const obj = hit.object;
     const ud = obj.userData;
+    if (ud.armor) return this.armorHit(b, hit, dir);
     if (ud.ragdoll) {
       const r = ud.ragdoll;
       const partName = ud.part;

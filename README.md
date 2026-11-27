@@ -26,16 +26,17 @@ python3 -m http.server 8000      # or: npx serve .
 | Shift | Sprint |
 | Space | Jump |
 | C (hold) | Crouch (Ctrl also works in fullscreen on Chrome/Edge) |
-| 1 – 5 or Q | Switch item (Fists, M1911, Remington 870, Grenade, Grab) |
+| 1 – 8 or Q | Switch item (Fists, M1911, Remington 870, Grenade, Grab, Machete, Medkit, Defibrillator) |
 | Mouse wheel | Switch item (with Grab: move what you're holding closer or farther) |
 | Tab | Open the toolbox |
+| B | Spawn menu (ragdolls, armour, temperament) |
 | Z | Slow time down (down to 0.01×) |
 | V | Speed time up (up to 3×) |
 | E | Press the button you're looking at |
 | X | X-ray / vitals panel: open, press again for the other view (Dynamic 3D / Flat), again to close (Shift + X also switches) |
 | H | Hide the tool controls list on the left |
 | F3 | Debug overlay |
-| Esc | Pause (menu has Settings) |
+| Esc | Pause menu (Resume, Settings, Controls, What's new, Main menu) |
 
 You see your own blocky, Roblox-style hands holding every item. They follow the item through every animation: the support hand fetches a fresh magazine and racks the slide on the M1911, works the pump and loads shells one by one on the shotgun, and pulls the grenade pin.
 
@@ -53,9 +54,19 @@ You see your own blocky, Roblox-style hands holding every item. They follow the 
 
 **Grab:** right click grabs or drops a body part (or a gib), left click throws what you hold or pushes things in front of you away, and the wheel or R / F pulls it closer or pushes it away. Whatever you hold gets a white outline. The held point trails your aim, and the farther away it is the more it lags. Slamming a ragdoll into the floor or walls breaks bones. A held ragdoll curls up into a fetal position.
 
+**Machete:** left click slashes (alternating forehand and backhand), right click stabs. A slash leaves a long, deep gash that bleeds hard; slashing the same spot cuts deeper until it chops through the arm, leg or neck. Cuts across the wrist, the back of the ankle or the back of the thigh sever tendons, so that hand or leg stops working. A stab goes deep into the organs. Armour stops the blade with a clang. Blood builds up on the blade.
+
+**Medkit:** hold left click on a body part for about a second to treat it: bandages on wounds, a tourniquet above a stump, a splint on a broken bone, a dressing on a burn (you see bands, splints and soaked-through dressings on the body). Right click gives morphine (much less pain, but too much slows breathing), R hangs a blood bag (+750 ml). The status under the item name shows what the part you look at needs.
+
+**Defibrillator:** hold left click to charge, let go with the paddles on the chest to shock. A stopped heart can restart if the heart is still there and there is enough blood (give a blood bag first after heavy bleeding); each extra shock raises the chance. Shocking a beating heart can stop it. The shock arcs, flashes and makes the whole body jerk.
+
+**Spawn menu (B):** spawn 1, 2, 3, 5 or 8 ragdolls (up to 12 at once) where you look, in front of you or at the spawn point, with a helmet and/or a vest, and pick a temperament (Brave, Normal, Timid). It can also remove every ragdoll and clean up blood. Armour stops pistol rounds, shotgun pellets and shrapnel until it wears out (dents and sparks), but the body behind it still takes the blow: a helmet hit dazes, a vest hit bruises and can crack a rib. Vests and helmets also soften blasts.
+
+**Menus:** the game opens on a title screen with a slow cinematic camera around a dead, badly hurt ragdoll slumped against a wall, with Play, Settings, Controls and What's new. Esc opens the pause menu, which adds Resume and Main menu.
+
 Switching items plays a draw animation: the tool comes up from below, rises a little past its resting spot, then settles.
 
-**Toolbox (Tab):** a square window listing every item in a scrolling grid, with categories on the right (All, Weapons, Tools; Fists, M1911, Remington 870 and Grenade are weapons, Grab is a tool). Click an item, or press its number, to equip it. Item previews follow the graphics preset: a picture on Low, a spinning 3D model on Medium, and a spinning model with its own effects (the pistol cycles and flashes, the grab tool pulses) on High and Very High, plus a glossy reflection on Very High.
+**Toolbox (Tab):** a square window listing every item in a scrolling grid, with categories on the right (All, Weapons, Tools, Medical; Fists, M1911, Remington 870, Grenade and Machete are weapons, Grab is a tool, Medkit and Defibrillator are medical). Click an item, or press its number, to equip it. Item previews follow the graphics preset: a picture on Low, a spinning 3D model on Medium, and a spinning model with its own effects (the pistol cycles and flashes, the grab tool pulses) on High and Very High, plus a glossy reflection on Very High.
 
 There are two buttons next to the spawn point: **RESPAWN** (new ragdoll) and **CLEAN UP** (removes blood, scorch marks, gibs, casings, shells and live grenades). Shooting a button also presses it.
 
@@ -99,7 +110,7 @@ Settings are saved in the browser (localStorage).
 ## What's in it
 
 - **Ragdolls**: 16 rigid bodies (gray segments) joined by cone-twist joints (black balls). Knees and elbows act as hinges. "Muscles" are velocity servos that pull each segment towards a target pose. While walking, the hips are held up and the feet step to target positions.
-- **Behaviour** (`ragdoll/brain.js`): idle and short wanders around home → limping (one leg hurt) → falls when support is lost → gets back up if it can, otherwise **crawls** (both legs out) or **writhes** on the ground in pain → unconscious → dead. It also hunches and clutches wounds when hurt, and shivers when in shock.
+- **Behaviour** (`ragdoll/brain.js`): ragdolls notice you. Aim at one and it puts its hands up (and trembles if you keep aiming); a nearby gunshot or blast makes them flinch, crouch and cover their heads; enough fear makes them run away from you, and backing away from a drawn machete. Screams scare the ones nearby. On the ground they shield their face when aimed at, press a hand on their worst wound (which slows the bleeding), and crawl away from you if they can. Fear fades over time but pain and heavy bleeding keep them scared. Otherwise: idle and short wanders around home → limping (one leg hurt) → falls when support is lost → gets back up if it can, otherwise **crawls** (both legs out) or **writhes** on the ground in pain → unconscious → dead. It also hunches and clutches wounds when hurt, and shivers when in shock.
 - **Damage** (`ragdoll/health.js` + `ragdoll/anatomy.js`): each hit is ray-traced through the body part in local space against organs (ellipsoids), arteries and bones (capsules), and rib cage/skull/pelvis shells. Bullets can pass through limbs into the next part. Outcomes include fractures, a shattered bone, severed arteries, destroyed organs, spinal injury (paralysis), a torso torn open (exposed organs) and limb loss.
 - **Physiology**: blood volume, bleeding with clotting, arterial pressure, heart rate, SpO₂, breathing, pain (adrenaline masks it), hypovolemic shock classes, consciousness, cardiac arrest and brain death. Nothing dies instantly: even a brain hit or decapitation takes seconds.
 - **Exploding parts**: keep shooting a destroyed body part and it bursts. Heads and limbs vanish in a spray of blood, bone and flesh chunks (limbs below it fall off), and torso parts are gutted in place.
@@ -115,6 +126,9 @@ Settings are saved in the browser (localStorage).
 - **M1911** (`weapon/`): procedural model (extruded slide/frame profiles, checkered wood grips, hammer, sights, mag). Recoil uses camera springs plus partial permanent muzzle climb, and the viewmodel kicks and flips around the grip. The slide cycles, the hammer drops and re-cocks, the slide locks back on empty, casings eject, and there's a muzzle flash, a side flame and a light. Reload (tactical and empty) and inspect are keyframed clips in `weapon/anim.js`.
 - **X-ray panel** (`ui/xray.js`, `ui/hud.js`): Dynamic mode uses a second renderer to draw the targeted ragdoll's bones, organs, arteries and wounds on their own render layer, colour-coded by damage. Flat mode draws the same anatomy and damage as a still, front-on diagram on a 2D canvas (fractures get a crack mark, severed parts are dashed). The panel also shows vitals bars, an ECG trace, damaged bones and organs, and an event log.
 - **Player** (`player/controller.js`): kinematic controller with acceleration and friction, step-up, coyote time, jump buffering, crouch with head clearance, head bob, strafe tilt, landing dip and sprint FOV. A kinematic physics body follows you, so you shove ragdolls.
+- **Medical** (`weapon/medkit.js`, `weapon/defib.js`, `Health.treat`, `giveMorphine`, `giveBlood`, `defibrillate`): treatments change the physiology (bleed rates, pain, breathing, blood volume, heart rhythm) and are drawn on the body (`Gore.bandage`, `tourniquet`, `splint`, `paddleMarks`).
+- **Armour** (`Ragdoll.addArmor`, `Ballistics.armorHit`): helmet and vest meshes with their own hit points; they dent, spark, wear out and then let rounds through. A helmet can be knocked off.
+- **Title scene** (`ui/title.js`): builds the menu corpse with the real damage systems (shots, cuts, a severed forearm, burns) and pre-rolls the physics so it settles before you see it.
 - **Map** (`world/map.js`): 4 m prototype-grid concrete floor, gray sky and fog, a few test blocks, and invisible walls at ±45 m.
 
 ## Layout
@@ -127,14 +141,14 @@ src/config.js            every tunable number lives here
 src/core/                input, physics wrapper (fixed 120 Hz step), procedural audio, utils
 src/world/               map, physical buttons
 src/player/              first-person controller + camera effects
-src/weapon/              items (fists, M1911, Remington 870, grenade, grab tool), their models, hands, animation clips, ballistics, explosives, casings, toolbox
+src/weapon/              items (fists, M1911, Remington 870, grenade, grab tool, machete, medkit, defibrillator), their models, hands, animation clips, ballistics, explosives, casings, toolbox
 src/settings.js          saved player settings (graphics, gore, HUD)
 src/graphics.js          Low / Medium / High / Very High presets and post-processing
 src/materials.js         material detail (grime, wear, normal maps) per preset
 src/ui/preview.js        spinning item previews for the toolbox
 src/ragdoll/             skeleton layout, anatomy data, health/physiology, brain/AI, ragdoll body, manager
 src/gore/                particles, decals/pools, gore orchestration (stumps, organs, gibs, bleeding)
-src/ui/                  HUD, X-ray, touch controls (touch.js)
+src/ui/                  HUD, X-ray, touch controls (touch.js), spawn menu, title scene
 src/core/device.js       phone / tablet detection
 src/core/bench.js        GPU / CPU check and recommended graphics preset
 manifest.webmanifest, icons/   home screen app (full screen, sideways)

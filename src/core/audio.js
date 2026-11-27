@@ -72,6 +72,29 @@ export class Audio {
     f.frequency.setTargetAtTime(500 + 600 * pitch, t, 0.05);
   }
 
+  /** Defibrillator charging whine: rises in pitch over dur seconds. Returns a stop() function. */
+  charge(dur = 1.1) {
+    if (!this.ctx) return () => {};
+    const ctx = this.ctx, t = ctx.currentTime;
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(500, t); o.frequency.exponentialRampToValueAtTime(3400, t + dur);
+    const o2 = ctx.createOscillator(); o2.type = 'triangle';
+    o2.frequency.setValueAtTime(1000, t); o2.frequency.exponentialRampToValueAtTime(6800, t + dur);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.07, t + dur);
+    o.connect(g); o2.connect(g); g.connect(this.master);
+    o.start(t); o2.start(t);
+    // charged: a steady ready beep until it is used
+    let stopped = false;
+    const stop = () => {
+      if (stopped) return; stopped = true;
+      const n = ctx.currentTime;
+      g.gain.cancelScheduledValues(n); g.gain.setValueAtTime(g.gain.value, n); g.gain.linearRampToValueAtTime(0.0001, n + 0.05);
+      o.stop(n + 0.06); o2.stop(n + 0.06);
+    };
+    return stop;
+  }
+
   /** Grenade explosion; quieter and duller with distance (d in metres). */
   boom(d = 5) {
     if (!this.ctx) return;
@@ -128,6 +151,20 @@ export class Audio {
       case 'shellIn': this._noise(t, 0.07, { type: 'bandpass', freq: 1100, q: 3, gain: 0.6, decay: 0.06 }); this._tone(t + 0.03, 420, 0.06, { gain: 0.1, type: 'square', endFreq: 380 }); break;
       case 'hull': { const f = 900 + Math.random() * 300; this._tone(t, f, 0.08, { gain: 0.06, type: 'triangle', endFreq: f * 0.8 }); this._noise(t, 0.05, { type: 'bandpass', freq: 1200, q: 2, gain: 0.15, decay: 0.04 }); break; }
       // fists
+      case 'swing': this._noise(t, 0.22, { type: 'bandpass', freq: 1300 + Math.random() * 500, q: 1.6, gain: 0.5, attack: 0.06, decay: 0.2 }); break;
+      case 'slice': this._noise(t, 0.16, { type: 'bandpass', freq: 2200, q: 1.2, gain: 0.65, decay: 0.13 }); this._noise(t, 0.12, { freq: 600, gain: 0.6, decay: 0.1 }); this._tone(t, 110, 0.08, { gain: 0.25, endFreq: 60 }); break;
+      case 'stab': this._noise(t, 0.14, { freq: 450, gain: 0.95, decay: 0.12 }); this._tone(t, 85, 0.12, { gain: 0.45, endFreq: 45 }); this._noise(t + 0.05, 0.12, { type: 'bandpass', freq: 1600, q: 2, gain: 0.35, decay: 0.1 }); break;
+      case 'clang': { const f = 1800 + Math.random() * 600; this._tone(t, f, 0.35, { gain: 0.12, type: 'triangle', endFreq: f * 0.97 }); this._tone(t, f * 2.7, 0.22, { gain: 0.05, endFreq: f * 2.6 }); this._noise(t, 0.06, { type: 'highpass', freq: 3500, gain: 0.45, decay: 0.05 }); break; }
+      case 'zip': this._noise(t, 0.28, { type: 'bandpass', freq: 3600, q: 3, gain: 0.3, attack: 0.02, decay: 0.26 }); break;
+      case 'tape': this._noise(t, 0.4, { type: 'bandpass', freq: 2600, q: 1.5, gain: 0.32, attack: 0.03, decay: 0.38 }); this._noise(t + 0.25, 0.25, { type: 'bandpass', freq: 3200, q: 2, gain: 0.25, decay: 0.22 }); break;
+      case 'inject': this._noise(t, 0.04, { type: 'bandpass', freq: 3000, q: 4, gain: 0.5, decay: 0.03 }); this._noise(t + 0.04, 0.45, { type: 'highpass', freq: 5000, gain: 0.12, attack: 0.05, decay: 0.42 }); break;
+      case 'zap':
+        this._noise(t, 0.22, { type: 'highpass', freq: 1800, gain: 1.0, decay: 0.2, toReverb: true });
+        this._tone(t, 120, 0.25, { gain: 0.5, type: 'sawtooth', endFreq: 60 });
+        this._tone(t, 60, 0.3, { gain: 0.6, type: 'square', endFreq: 40 });
+        break;
+      case 'beep': this._tone(t, 1250, 0.12, { gain: 0.08, type: 'square', endFreq: 1240 }); break;
+      case 'beepGood': this._tone(t, 880, 0.1, { gain: 0.08, type: 'square', endFreq: 880 }); this._tone(t + 0.13, 1320, 0.16, { gain: 0.08, type: 'square', endFreq: 1320 }); break;
       case 'whoosh': this._noise(t, 0.16, { type: 'bandpass', freq: 700 + Math.random() * 300, q: 1.2, gain: 0.35, attack: 0.05, decay: 0.15 }); break;
       case 'punch': this._noise(t, 0.1, { freq: 900, gain: 0.9, decay: 0.08 }); this._tone(t, 120, 0.09, { gain: 0.55, endFreq: 55 }); this._noise(t, 0.03, { type: 'highpass', freq: 3000, gain: 0.25, decay: 0.02 }); break;
       case 'punchHard': this._noise(t, 0.14, { freq: 700, gain: 1.0, decay: 0.12, toReverb: true }); this._tone(t, 100, 0.14, { gain: 0.7, endFreq: 42 }); this._noise(t, 0.04, { type: 'highpass', freq: 2600, gain: 0.35, decay: 0.03 }); break;

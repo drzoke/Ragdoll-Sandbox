@@ -136,6 +136,7 @@ export class Explosives {
     this.effects(c);
     this.scorch(c);
     this.blast(c);
+    this.ragdolls.alert(c, 45, 0.7, 'blast');
     // shrapnel: the casing breaks into hundreds of fragments. Fire a spread of random ones, plus
     // the share of the cloud that would land on each nearby body part (more the closer it is).
     if (this.ballistics) {
@@ -329,17 +330,19 @@ export class Explosives {
         if (d < 0.6) k = Math.max(k, 1 - d * 0.15);
         if (k < 0.01) continue;
         any = true;
+        // armour soaks up part of the blast (and keeps the fireball off the skin)
+        const covered = (r.armor?.vest && !r.armor.vest.broken && (name === 'chest' || name === 'abdomen')) || (r.armor?.helmet && !r.armor.helmet.dropped && name === 'head');
         // knockback: a velocity kick away from the blast (light limbs and the heavy torso both fly)
         const dir = _d.clone().addScaledVector(UP, 0.35).normalize();
         const dv = Math.min(24, 30 * k);
         b.velocity.x += dir.x * dv; b.velocity.y += dir.y * dv; b.velocity.z += dir.z * dv;
         b.angularVelocity.x += rand(-1, 1) * 18 * k; b.angularVelocity.y += rand(-1, 1) * 18 * k; b.angularVelocity.z += rand(-1, 1) * 18 * k;
-        const res = r.health.blast(name, k, { dismember });
+        const res = r.health.blast(name, covered ? k * 0.7 : k, { dismember });
         const face = _v.clone().addScaledVector(_d, -0.08);
         this.gore.addBruise(r, name, face, Math.min(1, k * 1.6));
         if (k > 0.22) this.gore.addBruise(r, name, face, k, { soot: true });
         // heat from the fireball: burns on the side facing it, and the part smoulders for a bit
-        const heat = blocked ? 0 : Math.pow(clamp(1 - d / BURN_RADIUS), 1.2);
+        const heat = blocked ? 0 : Math.pow(clamp(1 - d / BURN_RADIUS), 1.2) * (covered ? 0.35 : 1);
         if (heat > 0.03) {
           r.health.burn(name, heat);
           if (heat > 0.12) this.gore.addBruise(r, name, face.clone().add(new THREE.Vector3(rand(-0.03, 0.03), rand(-0.03, 0.03), rand(-0.03, 0.03))), Math.min(1, heat * 1.3), { burn: true });

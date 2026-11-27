@@ -18,6 +18,12 @@ const DEFAULTS = {
   touchAim: 'toggle',      // 'toggle' | 'hold' (aim button)
   touchAutoSprint: true,   // push the stick all the way forward to sprint
   touchOpacity: 0.55,      // button opacity
+  // spawn menu (remembered choices)
+  spawnCount: 1,
+  spawnHelmet: false,
+  spawnVest: false,
+  spawnWhere: 'look',      // 'look' | 'front' | 'spawn'
+  spawnTemper: 'normal',   // 'brave' | 'normal' | 'timid'
 };
 
 // Hues (multiplied by a brightness): particle = shader colour, pool/decal/meat = linear material colours.

@@ -47,6 +47,15 @@ export class HUD {
     h.classList.add('show'); if (organ) h.classList.add('organ');
   }
 
+  /** Progress ring around the crosshair (medkit treatment), 0 = hidden. */
+  setProgress(p) {
+    const el = this.progEl || (this.progEl = document.getElementById('useprog'));
+    if (!el) return;
+    const on = p > 0.001;
+    if (on !== this.progOn) { this.progOn = on; el.classList.toggle('show', on); }
+    if (on) el.style.setProperty('--p', p.toFixed(3));
+  }
+
   toast(text) { this.el.toast.textContent = text; this.el.toast.classList.add('show'); this.toastTimer = 2; }
 
   setPrompt(text) {
