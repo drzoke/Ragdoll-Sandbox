@@ -68,6 +68,7 @@ export class Vehicles {
       prompt: () => (v.driver ? '' : `Drive the ${k.name.toLowerCase()}`),
       press: () => this.tryEnter(v),
     };
+    for (const m of v.hitMeshes) m.userData.interact = v.use;      // what the look-at prompt finds
     this.map.interactables.push(v.use);
     this.list.push(v);
     this.meshCache = null;

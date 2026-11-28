@@ -20,31 +20,31 @@ import { rand, clamp } from '../core/util.js';
 
 // ---------------------------------------------------------------- the merchant's goods
 export const SHOP = [
-  { id: 'a_pistol', cat: 'ammo', name: '.45 rounds', desc: '32 rounds for the M1911 and the SMG.', cost: 40, ammo: ['pistol', 32] },
-  { id: 'a_shells', cat: 'ammo', name: '12 gauge shells', desc: '16 shells for both shotguns.', cost: 50, ammo: ['shells', 16] },
-  { id: 'a_rifle', cat: 'ammo', name: '5.56 rounds', desc: '60 rounds for the assault rifle.', cost: 80, ammo: ['rifle', 60] },
-  { id: 'a_sniper', cat: 'ammo', name: '7.62 rounds', desc: '10 rounds for the M24.', cost: 70, ammo: ['sniper', 10] },
-  { id: 'a_ball', cat: 'ammo', name: 'Musket balls', desc: '8 paper cartridges for the flintlock.', cost: 30, ammo: ['ball', 8] },
-  { id: 'w_shotgun', cat: 'weapons', name: 'Remington 870', desc: 'Pump shotgun. Comes with 12 shells.', cost: 250, tool: 'Remington 870', ammo: ['shells', 12] },
-  { id: 'w_smg', cat: 'weapons', name: 'Submachine Gun', desc: 'Very fast full auto on .45 rounds. Comes with 64.', cost: 350, tool: 'Submachine Gun', ammo: ['pistol', 64] },
-  { id: 'w_sniper', cat: 'weapons', name: 'M24 Sniper', desc: 'Goes through a whole line of them. Comes with 15 rounds.', cost: 450, tool: 'M24 Sniper', ammo: ['sniper', 15] },
-  { id: 'w_rifle', cat: 'weapons', name: 'Assault Rifle', desc: 'Full auto 5.56 with a red dot. Comes with 90 rounds.', cost: 600, tool: 'Assault Rifle', ammo: ['rifle', 90] },
-  { id: 'w_autoshotgun', cat: 'weapons', name: 'Combat Shotgun', desc: 'Semi-automatic, 8-shell box magazine. Comes with 24 shells.', cost: 750, tool: 'Combat Shotgun', ammo: ['shells', 24] },
-  { id: 'w_musket', cat: 'weapons', name: 'Flintlock Musket', desc: 'Slow, loud and huge. Comes with 10 balls.', cost: 100, tool: 'Flintlock Musket', ammo: ['ball', 10] },
-  { id: 'w_machete', cat: 'weapons', name: 'Machete', desc: 'No ammo needed. Takes heads off.', cost: 150, tool: 'Machete' },
-  { id: 'h_bandage', cat: 'heal', name: 'Bandages', desc: 'Patch yourself up: 35 health back now.', cost: 60, heal: 35 },
-  { id: 'h_kit', cat: 'heal', name: 'First aid kit', desc: 'Back to full health.', cost: 150, heal: 100 },
-  { id: 'h_armor', cat: 'heal', name: 'Body armour', desc: '50 armour (up to 100). It takes most of each hit until it is used up.', cost: 200, armor: 50 },
-  { id: 'g_grenade', cat: 'gear', name: 'Grenades ×2', desc: 'Two frag grenades.', cost: 120, tool: 'Grenade', ammo: ['grenade', 2], stack: true },
-  { id: 'g_mine', cat: 'gear', name: 'Proximity mines ×2', desc: 'Put one down; it goes off when a zombie steps near.', cost: 150, tool: 'Proximity Mine', ammo: ['mine', 2], stack: true },
-  { id: 'g_sentry', cat: 'gear', name: 'Sentry gun', desc: 'Set it up and it shoots every zombie it can see (180 rounds).', cost: 500, tool: 'Sentry Gun', ammo: ['turret', 1], stack: true },
+  { id: 'a_pistol', cat: 'ammo', name: '.45 rounds', desc: '24 rounds for the M1911 and the SMG.', cost: 50, ammo: ['pistol', 24] },
+  { id: 'a_shells', cat: 'ammo', name: '12 gauge shells', desc: '8 shells for both shotguns.', cost: 70, ammo: ['shells', 8] },
+  { id: 'a_rifle', cat: 'ammo', name: '5.56 rounds', desc: '40 rounds for the assault rifle.', cost: 110, ammo: ['rifle', 40] },
+  { id: 'a_sniper', cat: 'ammo', name: '7.62 rounds', desc: '8 rounds for the M24.', cost: 90, ammo: ['sniper', 8] },
+  { id: 'a_ball', cat: 'ammo', name: 'Musket balls', desc: '6 paper cartridges for the flintlock.', cost: 40, ammo: ['ball', 6] },
+  { id: 'w_shotgun', cat: 'weapons', name: 'Remington 870', desc: 'Pump shotgun. Comes with 8 shells.', cost: 500, tool: 'Remington 870', ammo: ['shells', 8] },
+  { id: 'w_smg', cat: 'weapons', name: 'Submachine Gun', desc: 'Very fast full auto on .45 rounds. Comes with 48.', cost: 900, tool: 'Submachine Gun', ammo: ['pistol', 48] },
+  { id: 'w_sniper', cat: 'weapons', name: 'M24 Sniper', desc: 'Goes through a whole line of them. Comes with 10 rounds.', cost: 1000, tool: 'M24 Sniper', ammo: ['sniper', 10] },
+  { id: 'w_rifle', cat: 'weapons', name: 'Assault Rifle', desc: 'Full auto 5.56 with a red dot. Comes with 60 rounds.', cost: 1400, tool: 'Assault Rifle', ammo: ['rifle', 60] },
+  { id: 'w_autoshotgun', cat: 'weapons', name: 'Combat Shotgun', desc: 'Semi-automatic, 8-shell box magazine. Comes with 16 shells.', cost: 2000, tool: 'Combat Shotgun', ammo: ['shells', 16] },
+  { id: 'w_musket', cat: 'weapons', name: 'Flintlock Musket', desc: 'Slow, loud and huge. Comes with 6 balls.', cost: 250, tool: 'Flintlock Musket', ammo: ['ball', 6] },
+  { id: 'w_machete', cat: 'weapons', name: 'Machete', desc: 'No ammo needed. Takes heads off.', cost: 300, tool: 'Machete' },
+  { id: 'h_bandage', cat: 'heal', name: 'Bandages', desc: 'Patch yourself up: 35 health back now.', cost: 100, heal: 35 },
+  { id: 'h_kit', cat: 'heal', name: 'First aid kit', desc: 'Back to full health.', cost: 300, heal: 100 },
+  { id: 'h_armor', cat: 'heal', name: 'Body armour', desc: '50 armour (up to 100). It takes most of each hit until it is used up.', cost: 400, armor: 50 },
+  { id: 'g_grenade', cat: 'gear', name: 'Grenades ×2', desc: 'Two frag grenades.', cost: 250, tool: 'Grenade', ammo: ['grenade', 2], stack: true },
+  { id: 'g_mine', cat: 'gear', name: 'Proximity mines ×2', desc: 'Put one down; it goes off when a zombie steps near.', cost: 300, tool: 'Proximity Mine', ammo: ['mine', 2], stack: true },
+  { id: 'g_sentry', cat: 'gear', name: 'Sentry gun', desc: 'Set it up and it shoots every zombie it can see (180 rounds).', cost: 1200, tool: 'Sentry Gun', ammo: ['turret', 1], stack: true },
 ];
 const SHOP_BY_ID = Object.fromEntries(SHOP.map((s) => [s.id, s]));
 const CATS = [['ammo', 'Ammo'], ['weapons', 'Weapons'], ['heal', 'Healing'], ['gear', 'Gear']];
 const START_TOOLS = ['Fists', 'M1911'];
 const START_AMMO = { pistol: 28 };
 const AMMO_OF = { 'M1911': 'pistol', 'Submachine Gun': 'pistol', 'Remington 870': 'shells', 'Combat Shotgun': 'shells', 'Assault Rifle': 'rifle', 'M24 Sniper': 'sniper', 'Flintlock Musket': 'ball' };
-const CRATE_AMMO = { pistol: 24, shells: 10, rifle: 45, sniper: 6, ball: 5 };
+const CRATE_AMMO = { pistol: 16, shells: 5, rifle: 30, sniper: 4, ball: 3 };
 
 // points: a zombie is worth at most 50 (two hits and a headshot kill)
 const HIT_PTS = 5, HIT_PTS_MAX = 10, KILL_HEAD = 40, KILL_BODY = 20;
@@ -186,6 +186,8 @@ export class UndeadMode {
     G.scene.add(this.merchant.root, this.cart.root);
     this.mState = 'away'; this.mT = 0;
     this.boss ??= new BossFight(this);
+    // shotguns: weaker pellets that lose power sooner, and it takes more of them to blow a head apart
+    Object.assign(G.ballistics, { pelletRange: 16, pelletMul: 0.8, pointBlankN: 6, pointBlankRange: 3 });
     this.resetLoadout();
     this.hookZombieHits();
   }
@@ -199,6 +201,7 @@ export class UndeadMode {
     this.closeShop();
     document.body.classList.remove('vs');
     for (const k of ['hud', 'pts', 'banner', 'over']) this.ui[k].classList.add('hidden');
+    Object.assign(G.ballistics, { pelletRange: 30, pelletMul: 1, pointBlankN: 4, pointBlankRange: 4.5 });
     G.vitals.regen = 7; G.vitals.lockRespawn = ''; G.vitals.hideDeathScreen = false; G.vitals.armor = 0;
     AMMO.reset(false);
     G.toolbox.setAllowed(null);
@@ -345,7 +348,7 @@ export class UndeadMode {
     }
     spot ||= { x: clamp(c.x + 12, bd.minX + 6, bd.maxX - 6), z: c.z };
     const n = this.players().length, k = w / 3;
-    const max = Math.round(850 * (1 + 0.6 * (n - 1)) * (1 + 0.5 * (k - 1)));
+    const max = Math.round(2400 * (1 + 0.75 * (n - 1)) * (1 + 0.6 * (k - 1)));
     this.bossInfo = { x: +spot.x.toFixed(2), z: +spot.z.toFixed(2), yaw: +Math.atan2(-(c.x - spot.x), -(c.z - spot.z)).toFixed(3), hp: max, max, wave: w };
     this.setPhase('boss');
     this.dirty = true;
@@ -421,20 +424,21 @@ export class UndeadMode {
       pos = new THREE.Vector3(x, 0, z);
     }
     if (!pos) return false;
-    const runner = !minion && w >= 3 && Math.random() < Math.min(0.4, 0.07 * (w - 2));
-    const helmet = w >= 4 && Math.random() < Math.min(0.4, 0.06 * (w - 3));
-    const vest = w >= 4 && Math.random() < Math.min(0.5, 0.08 * (w - 3));
+    // they get worse every wave: more runners, more helmets and vests, faster, harder hitting, tougher
+    const runner = w >= 2 && Math.random() < Math.min(0.55, 0.1 * (w - 1)) * (minion ? 0.6 : 1);
+    const helmet = w >= 3 && Math.random() < Math.min(0.55, 0.09 * (w - 2));
+    const vest = w >= 3 && Math.random() < Math.min(0.65, 0.11 * (w - 2));
     const yaw = Math.atan2(-pos.x, -pos.z);
     const r = G.ragdolls.spawn([pos.x, 0, pos.z], yaw, { zombie: true, armor: { helmet, vest } });
     const br = r.brain;
     br.sight = 400;
-    br.chaseMul = runner ? rand(2.5, 2.9) : rand(1.35, 1.65) + Math.min(0.35, 0.03 * w);
-    br.dmgMul = Math.min(2, 1 + 0.06 * (w - 1));
-    // headshots are the way to put them down; the body takes a lot more punishment
-    r.health.bodyDeath = 260;
+    br.chaseMul = runner ? rand(2.6, 3.0) + Math.min(0.4, 0.04 * w) : rand(1.5, 1.8) + Math.min(0.7, 0.06 * w);
+    br.dmgMul = Math.min(2.6, 1.15 + 0.11 * (w - 1));
+    br.cdMul = Math.max(0.55, 1 - 0.04 * (w - 1));          // and attack more often
+    // headshots are the way to put them down; the body takes a lot more punishment, more each wave
+    r.health.bodyDeath = Math.min(560, 260 + 30 * (w - 1));
     r.health.bodyResist = 0.5;
     r.vs = { born: this.time, runner, hitPts: 0, minion };
-    if (minion) br.chaseMul = rand(1.6, 1.9);
     if (runner) r.name = r.name.replace('Zombie', 'Runner');
     this.wrapHealth(r);
     this.zs.add(r);
@@ -614,7 +618,7 @@ export class UndeadMode {
   /** A friend's game: the host's VS state (and now and then the whole thing again). */
   onState(s) {
     const G = this.G;
-    if (!this.active) this.enter();
+    if (!this.active) { this.enter(); this.onFriendEnter?.(); }
     this.fromHost = true;
     if (s.gid !== this.seenGid) { this.seenGid = s.gid; this.resetLoadout(); }
     this.wave = s.w; this.timer = s.tm; this.left = s.l;
@@ -634,6 +638,7 @@ export class UndeadMode {
     if (e.s) this.onState(e.s);
     else if (e.b) this.boss?.onNet(e.b);
     else if (e.fx === 'rise' && this.active) this.riseFx(e.p || []);
+    else if (e.fx === 'slam' && this.active) this.boss?.slamFx(new THREE.Vector3(e.p[0], 0, e.p[1]));
   }
 
   /** The host's message to us alone. */
@@ -697,7 +702,7 @@ export class UndeadMode {
     const types = [...new Set([...this.owned].map((t) => AMMO_OF[t]).filter(Boolean))];
     const got = [];
     const r = Math.random();
-    if (r < 0.12) {
+    if (r < 0.06) {
       const guns = ['w_smg', 'w_rifle', 'w_autoshotgun', 'w_shotgun', 'w_sniper'].map((i) => SHOP_BY_ID[i]).filter((i) => !this.owned.has(i.tool));
       if (guns.length) { const g = guns[Math.floor(Math.random() * guns.length)]; this.give(g); got.push(g.name); }
     } else if (r < 0.3) { V.armor = Math.min(100, V.armor + 40); got.push('armour +40'); }
@@ -957,7 +962,7 @@ export class UndeadMode {
   /** The map was loaded again (by the host's game): the crates and gadgets went with it. */
   onMapLoaded(id) {
     if (!this.active) return;
-    if (id !== 'cemetery') { if (this.host) this.stop(); return; }
+    if (id !== 'cemetery') { if (this.host) this.stop(); else this.onFriendLeave?.(); return; }
     for (const v of this.views.values()) this.dropView(v);
     this.views.clear();
     this.mInteract = null;

@@ -45,6 +45,7 @@ import { Saves } from './ui/saves.js';
 import { AutoGun } from './weapon/autogun.js';
 import { AUTO_MATERIALS } from './weapon/modelAuto.js';
 import { Gadgets, PlaceTool, GADGET_MATERIALS } from './mode/gadgets.js';
+import { LoadingScreen } from './ui/loading.js';
 import { Inventory } from './ui/inventory.js';
 import { UndeadMode } from './mode/undead.js';
 import { PROP_MATERIALS } from './mode/props.js';
@@ -292,10 +293,14 @@ undead = new UndeadMode({
   scene, camera, map, ragdolls, player, vitals, audio, hud, net, toolbox, tools, pistol, explosives, ballistics, gadgets, physics, settings, gore, input,
   loadMap: (id) => loadMap(id),
   setOverlay: (open) => onToolboxChange(open),
-  exitToTitle: () => showTitle(),
+  exitToTitle: () => loading.run({ sub: 'Back to the sandbox' }, () => showTitle(), ['Burying the dead', 'Preparing the shaders', 'Almost there']),
   titleMode: () => titleMode,
 });
 gadgets.onRemove = () => { undead.dirty = true; };
+// ---- the loading screen for VS Undead (in and out): no frozen picture while the Dead Field builds ----
+const loading = new LoadingScreen({ renderer, scene, camera, tools });
+undead.onFriendEnter = () => loading.after({ sub: 'Entering the Dead Field' });
+undead.onFriendLeave = () => loading.after({ sub: 'Back to the sandbox' });
 // ---- the inventory (I): your figure with its armour, ammo, points and items ----
 const inventory = new Inventory({ toolbox, tools, vitals, net, settings, audio, setOverlay: (open) => onToolboxChange(open), get undead() { return undead; } });
 explosives.onBlast = (c, owner) => { if (undead.active) undead.boss?.onBlast(c, owner); };
@@ -312,9 +317,9 @@ document.getElementById('vs-play').addEventListener('click', () => {
   if (net.guest) { audio.play('deny'); hud.toast('Only the host can start VS Undead in this room'); return; }
   audio.play('click');
   vehicles.exit(true);
-  undead.start();
   closePanel();
-  document.getElementById('play').click();
+  document.getElementById('play').click();       // the mouse lock has to be asked for inside the click
+  loading.run({ sub: 'Entering the Dead Field' }, () => undead.start(), ['Digging up the Dead Field', 'Waking the dead', 'Lighting the lanterns']);
 });
 
 // ------------------------------------------------------------------ menu / pointer lock
@@ -375,12 +380,16 @@ document.getElementById('map-list').addEventListener('click', (e) => {
   if (!b) return;
   audio.unlock();
   if (net.guest) { audio.play('deny'); hud.toast('Only the host can change the map in this room'); return; }
-  if (undead.active) leaveUndead();
   audio.play('click');
-  if (b.dataset.map !== map.def?.id) { loadMap(b.dataset.map); hud.toast(`Loaded ${MAP_BY_ID[b.dataset.map].name}`); }
-  renderMaps();
+  const go = () => {
+    if (undead.active) leaveUndead();
+    if (b.dataset.map !== map.def?.id) { loadMap(b.dataset.map); hud.toast(`Loaded ${MAP_BY_ID[b.dataset.map].name}`); }
+    renderMaps();
+  };
   closePanel();
   document.getElementById('play').click();
+  if (undead.active) loading.run({ sub: `Off to ${MAP_BY_ID[b.dataset.map].name}` }, go, ['Burying the dead', 'Preparing the shaders', 'Almost there']);
+  else go();
 });
 let panelName = null;
 function openPanel(name) {
@@ -402,7 +411,11 @@ function closePanel() {
 }
 for (const b of menu.querySelectorAll('.m-btn[data-panel]')) b.addEventListener('click', () => { audio.unlock(); audio.play('click'); openPanel(b.dataset.panel); });
 document.getElementById('m-panel-close').addEventListener('click', () => closePanel());
-document.getElementById('to-title').addEventListener('click', () => { audio.play('click'); showTitle(); });
+document.getElementById('to-title').addEventListener('click', () => {
+  audio.play('click');
+  if (undead.active && !net.guest) loading.run({ sub: 'Back to the sandbox' }, () => showTitle(), ['Burying the dead', 'Preparing the shaders', 'Almost there']);
+  else showTitle();
+});
 setMenuMode('title');
 
 // ---- saves: scenes kept in this browser (menu, Saves) ----

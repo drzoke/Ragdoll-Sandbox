@@ -146,7 +146,7 @@ export class ZombieBrain extends Brain {
       const t = this.attackT;
       lunge = t < 0.3 ? t / 0.3 : Math.max(0, 1 - (t - 0.3) / 0.35);
       if (!this.bitDone && t >= 0.3) { this.bitDone = true; this.strike(); }
-      if (t > 0.65) { this.attackT = -1; this.attackCd = rand(1.0, 1.5); }
+      if (t > 0.65) { this.attackT = -1; this.attackCd = rand(1.0, 1.5) * (this.cdMul || 1); }
       if (this.prey) {   // face the prey while lunging
         const want = Math.atan2(this.preyPos.x - pp.x, this.preyPos.z - pp.z);
         this.yaw += clamp(wrapAngle(want - this.yaw), -3 * dt, 3 * dt);

@@ -270,6 +270,22 @@ export function brutePose(anim, t, { walkPh = 0, speed = 0, side = 1 } = {}) {
     const k = ss(clamp(t / 0.4)) * (1 - ss(clamp((t - 1.8) / 0.4)));
     const shake = Math.sin(t * 40) * 0.03 * k;
     Object.assign(p, mix(p, { lean: -0.2, aR: 0.6, aL: 0.6, rR: 1.2, rL: 1.2, eR: 1.45, eL: 1.45, head: 0.55 + shake, jaw: 0.8 }, k));
+  } else if (anim === 'slam') {
+    // both fists up over its head (0 .. 0.7), down into the ground (.. 0.9), and back up (.. 1.7)
+    const up = ss(clamp(t / 0.7)), down = ss(clamp((t - 0.7) / 0.18)), back = ss(clamp((t - 1.05) / 0.6));
+    const k = up * (1 - back);
+    const raise = { lean: -0.25, aR: 2.9, aL: 2.9, rR: 0.15, rL: 0.15, eR: 0.35, eL: 0.35, head: 0.4, jaw: 0.6, y: HIP_Y + 0.05 };
+    const smash = { lean: 0.85, aR: 1.0, aL: 1.0, rR: 0.1, rL: 0.1, eR: 0.15, eL: 0.15, head: -0.1, jaw: 0.7, y: HIP_Y - 0.35, tR: 0.5, kR: 0.9, tL: 0.5, kL: 0.9 };
+    Object.assign(p, mix(p, raise, k * (1 - down)));
+    if (down > 0) Object.assign(p, mix(p, smash, down * (1 - back)));
+  } else if (anim === 'charge') {
+    // a crouch and a bellow (0 .. 0.7), then a head-down, arms-back sprint
+    const w2 = ss(clamp(t / 0.5)), run = ss(clamp((t - 0.6) / 0.25));
+    Object.assign(p, mix(p, { lean: 0.55, aR: -0.2, aL: -0.2, rR: 0.5, rL: 0.5, eR: 1.0, eL: 1.0, jaw: 0.8, head: 0.35, y: HIP_Y - 0.2, tR: 0.4, kR: 0.8, tL: 0.4, kL: 0.8 }, w2 * (1 - run)));
+    if (run > 0) {
+      const s2 = Math.sin(walkPh), c2 = Math.cos(walkPh);
+      Object.assign(p, mix(p, { lean: 0.75, head: 0.55, jaw: 0.5, aR: -0.5 - s2 * 0.5, aL: -0.5 + s2 * 0.5, rR: 0.35, rL: 0.35, eR: 1.1, eL: 1.1, tR: s2 * 0.9, tL: -s2 * 0.9, kR: Math.max(0, -c2) * 1.3 + 0.2, kL: Math.max(0, c2) * 1.3 + 0.2, y: HIP_Y - 0.1 - Math.abs(c2) * 0.1 }, run));
+    }
   } else if (anim === 'die') {
     // knees give, it sags forward onto its hands, then down onto its face (3 s)
     const a = ss(clamp(t / 0.9)), b = ss(clamp((t - 0.9) / 0.9));
