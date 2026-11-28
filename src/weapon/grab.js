@@ -7,7 +7,7 @@ import { clamp, damp, lerp, Spring, viewmodelToWorld, drawOffset } from '../core
 import { PARTS } from '../ragdoll/skeleton.js';
 
 const W = CONFIG.weapon;
-const G = {
+export const G = {
   range: 15,          // max grab distance (m)
   minDist: 1.1,
   maxDist: 15,
@@ -18,6 +18,22 @@ const G = {
   puntRange: 9,
 };
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q = new THREE.Quaternion();
+
+/** All bodies still jointed to the given ragdoll part. */
+export function connectedSet(r, partName) {
+  const set = new Set([partName]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const def of PARTS) {
+      const p = r.parts[def.name];
+      if (!def.parent || !p.constraint || p.removed || r.parts[def.parent].removed) continue;
+      const a = set.has(def.name), b = set.has(def.parent);
+      if (a !== b) { set.add(def.name); set.add(def.parent); grew = true; }
+    }
+  }
+  return [...set].map((n) => r.parts[n].body);
+}
 
 // ------------------------------------------------------------------ energy beam
 // A camera-facing ribbon along a quadratic Bézier: from the emitter, bending towards where the
@@ -329,21 +345,10 @@ export class GrabTool {
     return null;
   }
 
-  /** All bodies still jointed to the given ragdoll part. */
-  connectedSet(r, partName) {
-    const set = new Set([partName]);
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (const def of PARTS) {
-        const p = r.parts[def.name];
-        if (!def.parent || !p.constraint || p.removed || r.parts[def.parent].removed) continue;
-        const a = set.has(def.name), b = set.has(def.parent);
-        if (a !== b) { set.add(def.name); set.add(def.parent); grew = true; }
-      }
-    }
-    return [...set].map((n) => r.parts[n].body);
-  }
+  connectedSet(r, partName) { return connectedSet(r, partName); }
+
+  /** Multiplayer, as a friend: `remote` tells the host's game, which holds and throws for real. */
+  act(name, a) { this.remote?.(this, name, a); }
 
   grab(t) {
     const b = t.body;
@@ -362,13 +367,15 @@ export class GrabTool {
     if (t.kind === 'ragdoll' && t.ragdoll.health.parts[t.part].attached) t.ragdoll.grabbed = true;
     for (const body of this.held.set) body.wakeUp?.();
     this.addOutlines(this.held);
+    this.act('grab', t.kind === 'ragdoll' ? { ragdoll: t.ragdoll, part: t.part, point: t.point.clone(), distance: t.distance } : { gib: t.gib, point: t.point.clone(), distance: t.distance });
     this.audio.play('grab');
     this.kick.kick(-4);
   }
 
-  release() {
+  release(quiet = false) {
     const h = this.held;
     if (!h) return;
+    if (!quiet) this.act('drop', {});
     this.physics.world.removeConstraint(h.joint);
     this.removeOutlines();
     if (h.kind === 'ragdoll') h.ragdoll.grabbed = false;
@@ -381,7 +388,8 @@ export class GrabTool {
     const h = this.held;
     if (!h) return;
     const { dir } = this.aim();
-    this.release();
+    this.release(true);
+    this.act('throw', { dir: dir.clone() });
     for (const b of h.set) {
       b.velocity.x = b.velocity.x * 0.4 + dir.x * G.throwSpeed;
       b.velocity.y = b.velocity.y * 0.4 + dir.y * G.throwSpeed + 1.5;
@@ -404,6 +412,7 @@ export class GrabTool {
       this.kick.kick(5);
       return;
     }
+    this.act('punt', t.kind === 'ragdoll' ? { ragdoll: t.ragdoll, part: t.part, point: t.point.clone(), distance: t.distance, dir: dir.clone() } : { gib: t.gib, point: t.point.clone(), distance: t.distance, dir: dir.clone() });
     const bodies = t.kind === 'ragdoll' ? this.connectedSet(t.ragdoll, t.part) : [t.body];
     const falloff = 1 - 0.5 * (t.distance / G.puntRange);
     for (const b of bodies) {
@@ -470,9 +479,14 @@ export class GrabTool {
       this.anchorTarget.lerp(want, damp(lagRate, dt));
       // never let the anchor sink into the floor
       this.anchorTarget.y = Math.max(0.3, this.anchorTarget.y);
-      // auto drop if the body got stuck far from the beam
-      const hp = this.heldPoint(_v2);
-      if (hp.distanceTo(this.anchor.position) > 4.5) this.drop();
+      // auto drop if the body got stuck far from the beam (multiplayer: the host's game decides)
+      if (this.remote) {
+        this.sendT = (this.sendT || 0) - dt;
+        if (this.sendT <= 0) { this.sendT = 0.05; this.act('aim', { target: this.anchorTarget.clone() }); }
+      } else {
+        const hp = this.heldPoint(_v2);
+        if (hp.distanceTo(this.anchor.position) > 4.5) this.drop();
+      }
     }
 
     this.open += ((this.held ? 1 : 0) - this.open) * damp(12, dt);

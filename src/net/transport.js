@@ -123,6 +123,9 @@ export class Link {
     this.onMessage?.(m);
   }
 
+  /** Bytes waiting to go out on the reliable channel. */
+  get backlog() { return this.conn.dataChannel?.bufferedAmount || 0; }
+
   /** Reliable, in order. */
   send(obj) {
     if (!this.open || this.closed) return;

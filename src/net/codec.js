@@ -176,6 +176,48 @@ export function applyHealth(h, s) {
   if (s.e) h.events = s.e.map(([t, text, severity]) => ({ t, text, severity }));
 }
 
+// ------------------------------------------------------------------ health, as small pieces
+// Sent several times a second, so only the pieces that changed go out: each vital, each body part /
+// bone / organ / vessel, each wound and the event log are a piece of their own. A wound's bleeding
+// rate shrinks a little every frame as it clots, so it is sent in ~10% steps (enough for the drips
+// and stains a friend sees), not every tiny change. The clock ('time') runs on its own there.
+const LN_STEP = Math.log(1.1);
+const stepRate = (r) => (r < 0.02 ? 0 : +Math.exp(Math.round(Math.log(r) / LN_STEP) * LN_STEP).toPrecision(3));
+const FLAT_SKIP = new Set(['time']);
+/** A Health as a Map of piece name -> plain data ('v.blood', 'p.chest', 'w.3', 'e'...). */
+export function healthFlat(h) {
+  const s = healthSections(h);
+  const m = new Map();
+  for (const k of Object.keys(s.v)) if (!FLAT_SKIP.has(k)) m.set('v.' + k, s.v[k]);
+  for (const sec of ['p', 'b', 'o', 'vs']) for (const id of Object.keys(s[sec])) m.set(sec + '.' + id, s[sec][id]);
+  for (let i = 0; i < s.w.length; i++) { const d = s.w[i]; if (typeof d.rate === 'number') d.rate = stepRate(d.rate); m.set('w.' + i, d); }
+  m.set('e', s.e);
+  return m;
+}
+const SECTION_NAME = { p: 'parts', b: 'bones', o: 'organs', vs: 'vessels' };
+/** Apply changed pieces [[name, data or null], ...] to a Health (friend's side). null = back to unhurt. */
+export function applyHealthFlat(h, list) {
+  let pressing;
+  for (const [key, d] of list) {
+    const dot = key.indexOf('.');
+    const sec = dot < 0 ? key : key.slice(0, dot), id = dot < 0 ? '' : key.slice(dot + 1);
+    if (sec === 'v') { if (id === 'pressing') pressing = d; else h[id] = d; }
+    else if (sec === 'w') woundAt(h, Number(id), d);
+    else if (sec === 'e') h.events = d.map(([t, text, severity]) => ({ t, text, severity }));
+    else if (SECTION_NAME[sec]) {
+      const name = SECTION_NAME[sec], e = h[name][id], b = PRISTINE[name][id];
+      if (!e) continue;
+      for (const f of Object.keys(e)) {
+        const x = e[f];
+        if (typeof x !== 'number' && typeof x !== 'boolean' && typeof x !== 'string') continue;
+        e[f] = d && f in d ? d[f] : b ? b[f] : x;
+      }
+      if (d) for (const f of Object.keys(d)) if (!(f in e)) e[f] = d[f];
+    }
+  }
+  if (pressing !== undefined) h.pressing = pressing >= 0 ? woundAt(h, pressing) : null;
+}
+
 // ------------------------------------------------------------------ binary
 export class Writer {
   constructor(size = 4096) { this.buf = new ArrayBuffer(size); this.dv = new DataView(this.buf); this.o = 0; }

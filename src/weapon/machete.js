@@ -136,61 +136,78 @@ export class Machete {
     if (!hit) return;
     const ud = hit.object.userData;
     const power = stab ? 0.95 : 0.82 + Math.random() * 0.18;
+    if (ud.ragdoll && (!ud.ragdoll.parts[ud.part] || ud.ragdoll.parts[ud.part].removed)) return;
+    const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : dir.clone().negate();
+    const what = ud.ragdoll ? { ragdoll: ud.ragdoll, part: ud.part, armor: ud.armor || null } : ud.gib ? { gib: ud.gib } : ud.grenade ? { grenade: ud.grenade } : ud.button ? { button: ud.button } : null;
+    const res = what ? this.act('cut', { ...what, point: hit.point.clone(), dir: dir.clone(), along: along.clone(), normal: n, power, kind: this.kind }) : null;
     if (ud.armor) {
       // blade on a helmet or plate: it bounces off with a clang
-      const r = ud.ragdoll, a = r.armor[ud.armor];
-      if (a) a.hp = Math.max(0, a.hp - 4);
-      r.health.blunt(ud.part, 0.3, { helmet: ud.armor === 'helmet' });
-      const b = r.parts[ud.part].body;
-      b.applyImpulse(new CANNON.Vec3(dir.x * 6, dir.y * 6, dir.z * 6), new CANNON.Vec3(hit.point.x - b.position.x, hit.point.y - b.position.y, hit.point.z - b.position.z));
-      r.brain.onPunch(ud.part, dir, false);
-      const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : dir.clone().negate();
-      this.gore.armorHit(r, ud.part, hit.point, n, 0.02);
       this.audio.play('clang');
-      this.onTarget?.(r);
+      this.onTarget?.(ud.ragdoll);
       this.recoilKick = 1;
       return;
     }
     if (ud.ragdoll) {
-      const r = ud.ragdoll, part = r.parts[ud.part];
-      if (!part || part.removed) return;
+      this.audio.play(stab ? 'stab' : 'slice');
+      if (res?.bones.length) this.audio.play('bone');
+      this.hud.hitMarker(!!res && (res.organs.length > 0 || res.vessels.length > 0));
+      this.onTarget?.(ud.ragdoll);
+      this.blood = Math.min(0.95, this.blood + (stab ? 0.35 : 0.25));
+      this.player.shake = Math.min(1, (this.player.shake || 0) + 0.18);
+      this.recoilKick = 0.6;
+    } else if (ud.gib) this.audio.play('slice');
+    else if (ud.grenade) this.audio.play('clink');
+    else if (ud.button) this.audio.play('clang');
+    else {
+      // steel on concrete
+      const wn = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : new THREE.Vector3(0, 1, 0);
+      this.audio.play('clang');
+      this.gore.sparks(hit.point, wn, 10);
+      this.gore.dust(hit.point, wn, 5);
+      this.recoilKick = 1.2;
+    }
+  }
+
+  /** What a hit does to the world. Multiplayer, as a friend: `remote` sends it to the host's game, which runs it. */
+  act(name, a) { return this.remote ? this.remote(this, name, a) : this.run(name, a); }
+
+  run(name, a) {
+    if (name !== 'cut') return null;
+    const { dir, along, power } = a, stab = a.kind === 'stab';
+    if (a.ragdoll && a.armor) {
+      const r = a.ragdoll, ar = r.armor[a.armor];
+      if (ar) ar.hp = Math.max(0, ar.hp - 4);
+      r.health.blunt(a.part, 0.3, { helmet: a.armor === 'helmet' });
+      const b = r.parts[a.part].body;
+      b.applyImpulse(new CANNON.Vec3(dir.x * 6, dir.y * 6, dir.z * 6), new CANNON.Vec3(a.point.x - b.position.x, a.point.y - b.position.y, a.point.z - b.position.z));
+      r.brain.onPunch(a.part, dir, false);
+      this.gore.armorHit(r, a.part, a.point, a.normal, 0.02);
+      return null;
+    }
+    if (a.ragdoll) {
+      const r = a.ragdoll, part = r.parts[a.part];
+      if (!part || part.removed) return null;
       const g = part.group;
       const inv = g.quaternion.clone().invert();
-      const localEntry = hit.point.clone().sub(g.position).applyQuaternion(inv);
+      const localEntry = a.point.clone().sub(g.position).applyQuaternion(inv);
       const localDir = dir.clone().applyQuaternion(inv);
-      const res = r.health.cut(ud.part, localEntry, localDir, power, this.kind, { dismember: settings.get('dismemberment') });
+      const res = r.health.cut(a.part, localEntry, localDir, power, a.kind, { dismember: settings.get('dismemberment') });
       const push = stab ? dir.clone() : along.clone().multiplyScalar(0.75).addScaledVector(dir, 0.5).normalize();
-      r.hitImpulse(ud.part, hit.point, push, stab ? 7 : 5.5);
-      this.gore.bladeWound(r, res, hit.point, dir, along);
-      if (res.opened) this.gore.openPart(r, ud.part, res.wound);
-      if (res.dismember && r.sever(ud.part).length) {
-        this.gore.onSever(r, ud.part);
+      r.hitImpulse(a.part, a.point, push, stab ? 7 : 5.5);
+      this.gore.bladeWound(r, res, a.point, dir, along);
+      if (res.opened) this.gore.openPart(r, a.part, res.wound);
+      if (res.dismember && r.sever(a.part).length) {
+        this.gore.onSever(r, a.part);
         part.body.applyImpulse(new CANNON.Vec3(along.x * 3, along.y * 3 + 1.5, along.z * 3));
       }
       // a cut Achilles tendon or hamstring drops it
       if (res.tendon && /shin|thigh/.test(res.tendon) && r.brain.state === 'stand') r.brain.fall();
-      this.audio.play(stab ? 'stab' : 'slice');
-      if (res.bones.length) this.audio.play('bone');
-      this.hud.hitMarker(res.organs.length > 0 || res.vessels.length > 0);
-      this.onTarget?.(r);
-      this.blood = Math.min(0.95, this.blood + (stab ? 0.35 : 0.25));
-      this.player.shake = Math.min(1, (this.player.shake || 0) + 0.18);
-      this.recoilKick = 0.6;
-    } else if (ud.gib) {
-      ud.gib.body.applyImpulse(new CANNON.Vec3(dir.x * 1.5, dir.y * 1.5 + 0.5, dir.z * 1.5));
-      this.audio.play('slice');
-    } else if (ud.grenade) {
-      ud.grenade.body.applyImpulse(new CANNON.Vec3(dir.x * 1.4, 0.6, dir.z * 1.4));
-      this.audio.play('clink');
-    } else if (ud.button) { ud.button.press(); this.audio.play('clang'); }
-    else {
-      // steel on concrete
-      const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : new THREE.Vector3(0, 1, 0);
-      this.audio.play('clang');
-      this.gore.sparks(hit.point, n, 10);
-      this.gore.dust(hit.point, n, 5);
-      this.recoilKick = 1.2;
+      return res;
     }
+    if (a.gib) a.gib.body.applyImpulse(new CANNON.Vec3(dir.x * 1.5, dir.y * 1.5 + 0.5, dir.z * 1.5));
+    else if (a.grenade) a.grenade.body.applyImpulse(new CANNON.Vec3(dir.x * 1.4, 0.6, dir.z * 1.4));
+    else if (a.button) a.button.press();
+    return null;
   }
 
   animate(dt) {

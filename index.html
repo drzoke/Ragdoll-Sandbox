@@ -87,7 +87,7 @@
 <!-- Alpha: one step per full update (feature batch). Patch: small fixes shipped on that version
      (back to 0 when the Alpha number goes up). -->
 <div id="mp-hud" class="hidden"></div>
-<div id="version">Alpha 0.9<small>Patch 5</small></div>
+<div id="version">Alpha 0.9<small>Patch 6</small></div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
@@ -159,7 +159,7 @@
         <button class="mp-btn danger" id="mp-leave">Leave the room</button>
       </div>
       <p id="mp-status" class="mp-status hidden"></p>
-      <p class="note">Friends who join can use the pistol, shotgun, sniper rifle and musket, spawn ragdolls and press the buttons. The other items, the elevator and zombies going after friends come in a later update. Up to 6 players.</p>
+      <p class="note">Friends who join can use every item, spawn ragdolls and press the buttons, and zombies go after everyone. The elevator only moves for whoever rides it for now. Up to 6 players.</p>
     </section>
     <section class="tab hidden" id="tab-settings">
       <h3>Graphics</h3>
@@ -257,6 +257,7 @@
           <li><span class="patch">Patch 3</span> <b>Far and off-screen bodies cost less to draw.</b> Ragdolls in the distance use simpler shapes (about a fifth of the triangles; you can't tell at that distance, and the switch moves further out when you zoom in), and bodies behind you or off to the side aren't drawn at all.</li>
           <li><span class="patch">Patch 4</span> <b>Physics on its own processor core</b> (Settings, on by default). The physics now runs on a separate core while the game draws on another, instead of the two taking turns in every frame. In a test with 40 ragdolls the game went from 19 to 43 FPS, and the physics kept stepping 90 times a second instead of dropping to 60. Everything plays the same; what you see of the physics is one frame later, which you can't notice. If your browser can't run it, the physics stays on the main core like before.</li>
           <li><span class="patch">Patch 5</span> <b>Multiplayer</b> (Multiplayer in the menu). One player hosts a room and gets a short code; friends type the code to join and play in the same world. You see each other walk, crouch, jump and aim, each in your own colour with your name over your head, holding the item you have out. The ragdolls, their wounds, blood, missing limbs and X-ray, gibs, grenades going off, broken windows and map changes are the same on every screen. A friend's shots hit, wound and dismember just like the host's, and the hit marker shows for whoever fired. Joining a game in progress rebuilds everything that already happened. For now friends can use the pistol, shotgun, sniper rifle and musket, spawn ragdolls and press the buttons; the other items, the elevator and zombies going after friends come next. Up to 6 players.</li>
+          <li><span class="patch">Patch 6</span> <b>Multiplayer: every item, zombies for everyone, faster updates.</b> Friends can now use every item: fists, grenades, the grab tool (hold, carry and throw bodies), the machete, the medkit and the defibrillator. Zombies chase and attack whoever is closest, friends included. Kills, wounds and bleeding reach your friends much sooner: the host used to resend every wound several times a second, which could back up a home connection for seconds; it now sends about 7 times less, and a ragdoll dying or falling is sent straight away.</li>
         </ul>
         <h3>Alpha 0.8</h3>
         <ul>

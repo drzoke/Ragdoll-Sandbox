@@ -97,6 +97,7 @@ const net = new Net({
   getMap: () => map, loadMap: (id) => loadMap(id), cleanUp: (silent) => cleanUp(silent), removeAll: () => removeAllRagdolls(),
   timeScale: () => world.timeScale,
   onJoined: () => { timeIndex = TIME_STEPS.indexOf(1); },
+  hurtMe: (dmg, opts) => { if (playing && !titleMode) vitals.hurt(dmg, opts); },
   onLeft: () => { shownTimeScale = world.timeScale; hud.setTimeScale(world.timeScale); },
 });
 
@@ -168,8 +169,10 @@ const grenade = new GrenadeTool({
     throwRay.set(eye, to.clone().normalize()); throwRay.far = to.length() + 0.08;
     const hit = throwRay.intersectObjects(map.solidMeshes, false)[0];
     if (hit) pos.copy(hit.point).addScaledVector(to.normalize(), -0.1);
+    const spoonPos = pos.clone().add(new THREE.Vector3(0, 0.05, 0)), spoonVel = vel.clone().multiplyScalar(0.35).addScaledVector(right, 1.8).add(new THREE.Vector3(0, 2.2, 0));
+    if (net.guest) { net.requestThrow(pos, vel, spin, spoonPos, spoonVel); return; }   // the host's game throws it
     explosives.throwGrenade(pos, vel, spin);
-    explosives.spawnSpoon(pos.clone().add(new THREE.Vector3(0, 0.05, 0)), vel.clone().multiplyScalar(0.35).addScaledVector(right, 1.8).add(new THREE.Vector3(0, 2.2, 0)));
+    explosives.spawnSpoon(spoonPos, spoonVel);
   },
 });
 // Materials whose detail follows the graphics preset
@@ -230,7 +233,10 @@ const vitals = new PlayerVitals({
 });
 player.onLand = (speed, height) => { if (height > 4.5 && !player.script && playing && !titleMode) vitals.hurt((height - 4.5) * 7.5, { kind: 'fall' }); };
 player.hurt = (dmg, opts) => { if (playing && !titleMode) vitals.hurt(dmg, opts); };
-ragdolls.hurtPlayer = (dmg, opts) => { if (playing && !titleMode) vitals.hurt(dmg, opts); };
+ragdolls.hurtPlayer = (dmg, opts) => {
+  if (opts?.who?.remote) { net.hurtFriend(opts.who.id, dmg, opts); return; }    // multiplayer: a zombie got a friend
+  if (playing && !titleMode) vitals.hurt(dmg, opts);
+};
 camera.far = startMap.far || 600; camera.updateProjectionMatrix();
 
 // ------------------------------------------------------------------ menu / pointer lock
@@ -603,8 +609,11 @@ let fps = 60;
 let lastFocused = null;
 let lookedRagdoll = null;
 // what the ragdolls know about you: where you are, whether a weapon is out and what it points at
-const playerInfo = { pos: new THREE.Vector3(), armed: false, melee: false, aimedAt: null };
+const playerInfo = { isPlayer: true, pos: new THREE.Vector3(), armed: false, melee: false, aimedAt: null };
 function updatePlayerInfo() {
+  // hosting: zombies go after the friends too (and you, while you play)
+  playerInfo.name = net.active ? net.me.name : null;
+  ragdolls.players = net.host ? [...(titleMode || !playing ? [] : [playerInfo]), ...net.friendInfos()] : null;
   if (titleMode || !playing) { ragdolls.player = null; return; }
   const t = toolbox.active, out = t.raise > 0.6;
   playerInfo.pos.copy(player.pos);

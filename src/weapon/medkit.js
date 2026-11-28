@@ -126,41 +126,61 @@ export class Medkit {
   }
 
   finishTreat(t) {
-    const r = t.ragdoll, h = r.health;
-    const before = h.wounds.filter((w) => w.part === t.part && w.rate >= 0.04 && !w.bandaged && !w.tourniquet);
-    const burnBefore = h.parts[t.part].dressed;
-    const res = h.treat(t.part);
-    if (!res.any) { this.audio.play('deny'); return; }
-    const done = before.filter((w) => w.bandaged || w.tourniquet);
-    if (res.dressed && !burnBefore) done.push({ part: t.part, pos: new THREE.Vector3(0, 0, 0), normal: new THREE.Vector3(0, 0, 1), rate: 0 });
-    this.gore.bandage(r, t.part, done);
-    if (res.splinted) this.gore.splint(r, t.part);
+    const res = this.act('treat', { ragdoll: t.ragdoll, part: t.part, label: t.label });
+    if (this.remote) { this.audio.play('zip'); return; }       // the host's game answers with what was done
+    if (!res) { this.audio.play('deny'); return; }
     this.audio.play('zip');
-    const bits = [];
-    if (res.tourniquet) bits.push('tourniquet on');
-    if (res.bandaged) bits.push(`${res.bandaged} wound${res.bandaged > 1 ? 's' : ''} bandaged`);
-    if (res.splinted) bits.push('splinted');
-    if (res.dressed) bits.push('burn dressed');
-    const s = bits.join(', ');
-    this.say(`${t.label}: ${s}`);
+    this.say(res.say);
+  }
+
+  /** What using it does. Multiplayer, as a friend: `remote` sends it to the host's game, which runs it. */
+  act(name, a) { return this.remote ? this.remote(this, name, a) : this.run(name, a); }
+
+  run(name, a) {
+    const r = a.ragdoll, h = r?.health;
+    if (!r || r.removed) return null;
+    if (name === 'treat') {
+      const before = h.wounds.filter((w) => w.part === a.part && w.rate >= 0.04 && !w.bandaged && !w.tourniquet);
+      const burnBefore = h.parts[a.part].dressed;
+      const res = h.treat(a.part);
+      if (!res.any) return null;
+      const done = before.filter((w) => w.bandaged || w.tourniquet);
+      if (res.dressed && !burnBefore) done.push({ part: a.part, pos: new THREE.Vector3(0, 0, 0), normal: new THREE.Vector3(0, 0, 1), rate: 0 });
+      this.gore.bandage(r, a.part, done);
+      if (res.splinted) this.gore.splint(r, a.part);
+      const bits = [];
+      if (res.tourniquet) bits.push('tourniquet on');
+      if (res.bandaged) bits.push(`${res.bandaged} wound${res.bandaged > 1 ? 's' : ''} bandaged`);
+      if (res.splinted) bits.push('splinted');
+      if (res.dressed) bits.push('burn dressed');
+      return { say: `${a.label}: ${bits.join(', ')}` };
+    }
+    if (name === 'inject') {
+      if (!h.alive) return { say: `${r.name} is dead` };
+      h.giveMorphine();
+      return { say: h.morphine > 1.6 ? 'Morphine: that is too much, its breathing slows' : 'Morphine given: the pain fades' };
+    }
+    if (name === 'blood') {
+      if (!h.alive) return { say: `${r.name} is dead` };
+      h.giveBlood(750);
+      return { say: 'Blood bag running in (+750 ml)' };
+    }
+    return null;
   }
 
   onEvent(e) {
     const t = this.useOn;
     if (e === 'tape') this.audio.play('tape');
     if (!t || t.ragdoll.removed) return;
-    const h = t.ragdoll.health;
     if (e === 'inject') {
       this.audio.play('inject');
-      if (!h.alive) { this.say(`${t.ragdoll.name} is dead`); return; }
-      h.giveMorphine();
-      this.say(h.morphine > 1.6 ? 'Morphine: that is too much, its breathing slows' : 'Morphine given: the pain fades');
+      const res = this.act('inject', { ragdoll: t.ragdoll });
+      if (res) this.say(res.say);
     }
     if (e === 'blood') {
-      if (!h.alive) { this.say(`${t.ragdoll.name} is dead`); return; }
-      h.giveBlood(750);
-      this.audio.play('zip');
-      this.say('Blood bag running in (+750 ml)');
+      const res = this.act('blood', { ragdoll: t.ragdoll });
+      if (res) this.say(res.say);
+      if (res && t.ragdoll.health.alive) this.audio.play('zip');
     }
   }
 

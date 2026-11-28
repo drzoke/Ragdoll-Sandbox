@@ -153,9 +153,8 @@ export class Defibrillator {
       this.say('Shocked the air: put the paddles on a chest');
       return;
     }
-    const r = t.ragdoll, h = r.health;
+    const r = t.ragdoll;
     this.onTarget?.(r);
-    const res = h.defibrillate(t.part === 'chest' ? 'chest' : t.part);
     // arcs and a blue flash where the paddles touch
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.mainCamera.quaternion);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.mainCamera.quaternion);
@@ -167,7 +166,22 @@ export class Defibrillator {
     this.flashT = 0.14;
     this.gore.sparks(pA, t.dir.clone().negate(), 5);
     this.gore.sparks(pB, t.dir.clone().negate(), 5);
-    if (t.part === 'chest') this.gore.paddleMarks(r);
+    const res = this.act('shock', { ragdoll: r, part: t.part });
+    if (!res) return;      // multiplayer, as a friend: the host's game answers with how it went
+    this.say(res.text);
+    if (res.result === 'restarted') setTimeout(() => this.audio.play('beepGood'), 450);
+    this.hud.toast?.(`${r.name}: ${res.text}`);
+  }
+
+  /** What a shock does. Multiplayer, as a friend: `remote` sends it to the host's game, which runs it. */
+  act(name, a) { return this.remote ? this.remote(this, name, a) : this.run(name, a); }
+
+  run(name, a) {
+    const r = a.ragdoll;
+    if (name !== 'shock' || !r || r.removed) return null;
+    const h = r.health;
+    const res = h.defibrillate(a.part === 'chest' ? 'chest' : a.part);
+    if (a.part === 'chest') this.gore.paddleMarks(r);
     // every muscle contracts at once: the body jerks
     for (const [name, p] of Object.entries(r.parts)) {
       if (p.removed || !h.parts[name].attached) continue;
@@ -179,9 +193,7 @@ export class Defibrillator {
     }
     if (r.brain.state === 'stand') r.brain.fall();
     r.brain.fear = Math.min(1, r.brain.fear + 0.5);
-    this.say(res.text);
-    if (res.result === 'restarted') setTimeout(() => this.audio.play('beepGood'), 450);
-    this.hud.toast?.(`${r.name}: ${res.text}`);
+    return { ...res, say: res.text, toast: `${r.name}: ${res.text}` };
   }
 
   animate(dt) {

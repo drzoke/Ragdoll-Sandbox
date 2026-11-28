@@ -19,7 +19,7 @@ export class ZombieBrain extends Brain {
   constructor(ragdoll, home, yaw) {
     super(ragdoll, home, yaw);
     this.zombie = true;
-    this.prey = null;              // 'player' or a Ragdoll
+    this.prey = null;              // a player (see RagdollManager.players) or a Ragdoll
     this.preyPos = new THREE.Vector3();
     this.goal = new THREE.Vector3();
     this.seekT = 0;
@@ -56,10 +56,11 @@ export class ZombieBrain extends Brain {
   findPrey() {
     const env = this.env, pp = this.r.bodyPos('pelvis', _v);
     let best = null, bestD = SIGHT;
-    const P = env?.player;
-    if (P && P.alive !== false) {
+    // you, and in multiplayer every other player too
+    for (const P of env?.players || (env?.player ? [env.player] : [])) {
+      if (P.alive === false) continue;
       const d = Math.hypot(P.pos.x - pp.x, P.pos.z - pp.z);
-      if (Math.abs(P.pos.y - this.gy) < FLOOR && d < bestD * 1.25) { best = 'player'; bestD = d / 1.25; }
+      if (Math.abs(P.pos.y - this.gy) < FLOOR && d < bestD * 1.25) { best = P; bestD = d / 1.25; }
     }
     for (const o of env?.list || []) {
       if (o === this.r || o.zombie || o.hidden || o.removed || !o.health.alive) continue;
@@ -74,10 +75,9 @@ export class ZombieBrain extends Brain {
   updatePreyPos() {
     const p = this.prey;
     if (!p) return false;
-    if (p === 'player') {
-      const P = this.env?.player;
-      if (!P || P.alive === false) return false;
-      this.preyPos.copy(P.pos);
+    if (p.isPlayer) {
+      if (p.alive === false || p.gone) return false;
+      this.preyPos.copy(p.pos);
       return true;
     }
     if (p.removed || !p.health.alive || p.zombie) return false;
@@ -155,7 +155,7 @@ export class ZombieBrain extends Brain {
 
     // zombie posture: arms reaching forward, head lolling, a hunched lurch
     const t = this.time, w = this.walkAmt;
-    const low = this.prey && this.prey !== 'player' && this.preyPos.y - this.gy < 0.5 && dist < 2;   // prey on the ground: bend down to it
+    const low = this.prey && !this.prey.isPlayer && this.preyPos.y - this.gy < 0.5 && dist < 2;   // prey on the ground: bend down to it
     for (const s of ['L', 'R']) {
       const ph = s === 'L' ? 0 : 1.7;
       pose[`shoulder${s}`] = [1.3 + 0.12 * Math.sin(t * 2.1 + ph) + lunge * 0.35 + (low ? 0.35 : 0), (s === 'L' ? 1 : -1) * 0.04 + 0.08];
@@ -170,7 +170,7 @@ export class ZombieBrain extends Brain {
     S.upperArmL = Math.max(S.upperArmL, 0.75 * this.h.armCap('L'));
     S.upperArmR = Math.max(S.upperArmR, 0.75 * this.h.armCap('R'));
     if (this.attackT >= 0) this.activity = 'Attacking';
-    else this.activity = chasing ? (this.prey === 'player' ? 'Chasing you' : `Chasing ${this.prey.name}`) : this.noise ? 'Heading for a noise' : 'Shambling';
+    else this.activity = chasing ? (this.prey.isPlayer && !this.prey.name ? 'Chasing you' : `Chasing ${this.prey.name}`) : this.noise ? 'Heading for a noise' : 'Shambling';
   }
 
   /** Claw / bite whatever it is attacking, if it is still in reach. */
@@ -180,8 +180,8 @@ export class ZombieBrain extends Brain {
     const pp = r.bodyPos('pelvis', new THREE.Vector3());
     const dist = Math.hypot(this.preyPos.x - pp.x, this.preyPos.z - pp.z);
     if (dist > REACH + 0.25) { env?.gore?.audio?.play('whoosh', 0.6); return; }
-    if (this.prey === 'player') {
-      env?.hurtPlayer?.(rand(8, 13), { kind: 'zombie', from: pp.clone() });
+    if (this.prey.isPlayer) {
+      env?.hurtPlayer?.(rand(8, 13), { kind: 'zombie', from: pp.clone(), who: this.prey });
       return;
     }
     this.bite(this.prey);
@@ -238,6 +238,6 @@ export class ZombieBrain extends Brain {
       if (d < 0.9 && this.attackCd <= 0) { this.attackCd = rand(1, 1.6); this.strike(); }
     } else if (this.noise) this.lastHitDir.set(this.noise.pos.x - this.r.bodyPos('chest', _v2).x, 0, this.noise.pos.z - _v2.z).normalize();
     super.updateCrawl(dt, pose, args);
-    this.activity = this.prey ? 'Crawling after ' + (this.prey === 'player' ? 'you' : this.prey.name) : 'Crawling';
+    this.activity = this.prey ? 'Crawling after ' + (this.prey.isPlayer && !this.prey.name ? 'you' : this.prey.name) : 'Crawling';
   }
 }

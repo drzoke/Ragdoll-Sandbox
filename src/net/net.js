@@ -17,12 +17,13 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { openRoom, joinRoom, cleanCode, errorText } from './transport.js';
-import { encode, decode, registerMaterials, healthSections, applyHealth, woundAt, woundData, Writer, Reader } from './codec.js';
+import { encode, decode, registerMaterials, healthSections, applyHealth, healthFlat, applyHealthFlat, woundAt, woundData, Writer, Reader } from './codec.js';
 import { Avatar, PLAYER_COLORS } from './avatar.js';
 import { PARTS, PART_BY_NAME } from '../ragdoll/skeleton.js';
 import { GROUP } from '../core/physics.js';
 import { MAT as GORE_MAT } from '../gore/gore.js';
 import { CONFIG } from '../config.js';
+import { G as GRAB, connectedSet } from '../weapon/grab.js';
 
 const NET_VERSION = 1;
 const SNAP_HZ = 20;          // host -> friends: positions
@@ -30,7 +31,6 @@ const STATE_HZ = 30;         // friend -> host: own movement
 const HEALTH_HZ = 5;         // host -> friends: health
 const DELAY = 110;           // ms friends see the world behind the host (smooths between updates)
 const MAX_PLAYERS = 6;
-const GUEST_TOOLS = new Set(['M1911', 'Remington 870', 'M24 Sniper', 'Flintlock Musket']);
 const GUN_SOUND = { 'M1911': 'shot', 'Remington 870': 'shotgun', 'M24 Sniper': 'sniper', 'Flintlock Musket': 'musket' };
 // what the host's game does that friends see, replayed on their copy (see Gore)
 const GORE_CALLS = ['spray', 'dust', 'bulletImpactWorld', 'bloodyImpactWorld', 'pelletSpatter', 'addBruise', 'bulletWound', 'bladeWound',
@@ -43,6 +43,12 @@ registerMaterials(GORE_MAT);
 
 const _v = new THREE.Vector3(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 const isRagdoll = (o) => o && typeof o === 'object' && o.parts && o.health && o.root;
+
+/** Only what Gore reads of a hit result (Health returns a lot more). */
+const slimHit = (res) => res && {
+  partName: res.partName, wound: res.wound, exitWound: res.exitWound || null, exit: !!res.exit, kind: res.kind, throat: !!res.throat,
+  organs: (res.organs || []).map((o) => ({ id: o.id, hp: o.hp })), bones: (res.bones || []).map(() => 1),
+};
 
 /** Remote clock: the best (smallest delay) offset seen, drifting slowly when the delay changes. */
 class Clock {
@@ -69,6 +75,117 @@ function bracket(buf, t) {
   return [buf[0], buf[0], 0];
 }
 const push = (buf, rec, max = 12) => { if (buf.length && rec.t <= buf[buf.length - 1].t) return; buf.push(rec); if (buf.length > max) buf.shift(); };
+
+/**
+ * Host: a friend's grab beam. The friend's game shows the beam; this one holds the body for real
+ * (the same anchor and pull as GrabTool, at the point the friend aims at).
+ */
+class RemoteGrab {
+  constructor(net, p) {
+    this.net = net; this.p = p;
+    this.physics = net.g.physics;
+    this.anchor = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, collisionFilterGroup: 0, collisionFilterMask: 0 });
+    this.anchor.collisionResponse = false;
+    this.physics.world.addBody(this.anchor);
+    this.target = new THREE.Vector3();
+    this.held = null;
+    this.unsub = this.physics.addProgram(this);
+  }
+
+  act(name, a) {
+    if (name === 'grab') this.grab(a);
+    else if (name === 'drop') this.release();
+    else if (name === 'aim' && a.target) { this.target.copy(a.target); this.target.y = Math.max(0.3, this.target.y); }
+    else if (name === 'throw') this.throw(a.dir);
+    else if (name === 'punt') this.punt(a);
+  }
+
+  bodyOf(a) {
+    if (a.ragdoll) { const part = a.ragdoll.parts[a.part]; return part && !part.removed ? part.body : null; }
+    return a.gib?.body || null;
+  }
+
+  grab(a) {
+    this.release();
+    const b = this.bodyOf(a);
+    if (!b) { this.p.link.send({ t: 'grabEnd' }); return; }
+    _q1.set(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w).invert();
+    const local = _v.set(a.point.x - b.position.x, a.point.y - b.position.y, a.point.z - b.position.z).applyQuaternion(_q1);
+    this.anchor.position.set(a.point.x, a.point.y, a.point.z);
+    this.anchor.velocity.set(0, 0, 0);
+    this.target.copy(a.point);
+    const joint = new CANNON.PointToPointConstraint(this.anchor, new CANNON.Vec3(0, 0, 0), b, new CANNON.Vec3(local.x, local.y, local.z), GRAB.maxForce);
+    joint.collideConnected = true; joint.skipCollide = true;
+    this.physics.world.addConstraint(joint);
+    this.held = { ragdoll: a.ragdoll || null, part: a.part, gib: a.gib || null, body: b, local: local.clone(), joint, set: a.ragdoll ? connectedSet(a.ragdoll, a.part) : [b] };
+    if (a.ragdoll) { a.ragdoll.wake?.(); if (a.ragdoll.health.parts[a.part].attached) a.ragdoll.grabbed = true; }
+    for (const body of this.held.set) body.wakeUp?.();
+  }
+
+  release() {
+    const h = this.held;
+    if (!h) return;
+    this.physics.world.removeConstraint(h.joint);
+    if (h.ragdoll) h.ragdoll.grabbed = false;
+    this.held = null;
+  }
+
+  throw(dir) {
+    const h = this.held;
+    if (!h || !dir) return;
+    this.release();
+    for (const b of h.set) {
+      b.velocity.x = b.velocity.x * 0.4 + dir.x * GRAB.throwSpeed;
+      b.velocity.y = b.velocity.y * 0.4 + dir.y * GRAB.throwSpeed + 1.5;
+      b.velocity.z = b.velocity.z * 0.4 + dir.z * GRAB.throwSpeed;
+    }
+    h.body.angularVelocity.x += (Math.random() - 0.5) * 8;
+    h.body.angularVelocity.z += (Math.random() - 0.5) * 8;
+  }
+
+  punt(a) {
+    const b = this.bodyOf(a);
+    if (!b || !a.dir) return;
+    const bodies = a.ragdoll ? connectedSet(a.ragdoll, a.part) : [b];
+    const falloff = 1 - 0.5 * ((a.distance || 0) / GRAB.puntRange);
+    for (const x of bodies) {
+      const k = (x === b ? 1.6 : 1) * GRAB.puntSpeed * falloff;
+      x.velocity.x += a.dir.x * k; x.velocity.y += a.dir.y * k + 1.2; x.velocity.z += a.dir.z * k;
+      x.wakeUp?.();
+    }
+    if (a.ragdoll) {
+      a.ragdoll.wake?.();
+      a.ragdoll.brain.onHit(a.part, a.dir);
+      if (a.ragdoll.brain.state === 'stand') a.ragdoll.brain.fall();
+    }
+  }
+
+  /** Every frame: let go when what's held is gone or got stuck far from the beam. */
+  update() {
+    const h = this.held;
+    if (!h) return;
+    const gone = h.ragdoll ? h.ragdoll.removed || h.ragdoll.parts[h.part].removed : !this.net.g.gore.gibs.includes(h.gib);
+    let far = false;
+    if (!gone) {
+      _q1.set(h.body.quaternion.x, h.body.quaternion.y, h.body.quaternion.z, h.body.quaternion.w);
+      _v.copy(h.local).applyQuaternion(_q1).add(h.body.position);
+      far = _v.distanceTo(this.anchor.position) > 4.5;
+    }
+    if (gone || far) { this.release(); this.p.link.send({ t: 'grabEnd' }); }
+  }
+
+  physicsProgram() {
+    const h = this.held;
+    if (!h) return null;
+    return { kind: 'grab', anchor: this.anchor, target: this.target, set: h.set, held: h.body, holdComp: GRAB.holdComp };
+  }
+
+  dispose() {
+    this.release();
+    this.unsub?.();
+    this.physics.world.removeBody(this.anchor);
+  }
+}
 
 export class Net {
   constructor(game) {
@@ -171,6 +288,8 @@ export class Net {
     this.players.delete(p.id);
     p.avatar?.dispose();
     if (p.pusher) this.g.physics.world.removeBody(p.pusher);
+    p.grab?.dispose();
+    if (p.info) p.info.gone = true;
     if (this.host) {
       this.sendPlayers();
       this.emit({ t: 'toast', s: `${p.name} left` });
@@ -216,6 +335,21 @@ export class Net {
         break;
       }
       case 'removeAll': g.removeAll(); break;
+      case 'throw': {
+        const v = (x) => new THREE.Vector3(...x);
+        g.explosives.throwGrenade(v(r.p), v(r.v), v(r.s));
+        g.explosives.spawnSpoon(v(r.sp), v(r.sv));
+        break;
+      }
+      case 'act': {
+        const tool = g.tools[r.w];
+        const a = tool && this.actArgs(r.a);
+        if (!a) break;
+        if (tool === g.grab) { (p.grab ||= new RemoteGrab(this, p)).act(r.n, a); break; }
+        const res = tool.run?.(r.n, a);
+        if (res?.say) p.link.send({ t: 'say', w: r.w, s: res.say, toast: res.toast || null });
+        break;
+      }
       case 'cleanUp': g.cleanUp(); break;
     }
   }
@@ -262,6 +396,9 @@ export class Net {
     if (m.t === 'reject') { this.joining = false; this.leave(m.why); return; }
     if (m.t === 'players') { this.setPlayers(m.list); return; }
     if (m.t === 'hit') { this.g.hud.hitMarker(!!m.o); return; }
+    if (m.t === 'hurt') { this.g.hurtMe?.(m.d, { kind: m.k, from: m.f ? new THREE.Vector3(...m.f) : null }); return; }
+    if (m.t === 'say') { this.g.tools[m.w]?.say?.(m.s); if (m.toast) this.g.hud.toast(m.toast); return; }
+    if (m.t === 'grabEnd') { this.g.grab.release(true); return; }
     if (m.t === 'bye') { this.leave('The host closed the room.'); }
   }
 
@@ -286,7 +423,8 @@ export class Net {
     const glass = g.getMap().glass;
     if (glass) { const a = glass.audio; glass.audio = null; for (const i of m.glass) { const p = glass.panes[i]; if (p) glass.breakPane(p, null, 0.5); } glass.audio = a; }
     // only the guns for now
-    if (!GUEST_TOOLS.has(g.toolbox.active.name)) { const i = g.tools.findIndex((t) => t.name === 'M1911'); if (i >= 0) { g.toolbox.equip(i); g.toolbox.select(i, true); } }
+    // every item's effect on the world goes to the host's game (see each tool's act())
+    for (const t of g.tools) if (t.act) t.remote = (tool, name, a) => this.toolAct(tool, name, a);
     g.onJoined?.();
     this.setStatus('');
     g.hud.toast(`Joined room ${this.code}`);
@@ -320,7 +458,7 @@ export class Net {
     const peer = this.peer;
     this.hostLink?.close();
     setTimeout(() => { try { peer?.destroy(); } catch { /* */ } }, 300);
-    for (const p of this.players.values()) { p.avatar?.dispose(); if (p.pusher) g.physics.world.removeBody(p.pusher); }
+    for (const p of this.players.values()) { p.avatar?.dispose(); if (p.pusher) g.physics.world.removeBody(p.pusher); p.grab?.dispose(); if (p.info) p.info.gone = true; }
     this.players.clear();
     this.peer = null; this.hostLink = null; this.code = null; this.joining = false;
     this.role = 'off';
@@ -329,6 +467,8 @@ export class Net {
     if (was === 'guest') {
       // back to playing alone: a fresh world of our own
       g.spawnMenu.remoteSpawn = null;
+      g.grab.release(true);
+      for (const t of g.tools) t.remote = null;
       g.ballistics.ghostAll = false;
       g.ballistics.clear();
       g.ragdolls.clear(g.ragdolls.keep);
@@ -424,7 +564,7 @@ export class Net {
         if (!self.players.size) return res;
         if (args.some((a) => isRagdoll(a) && (a.hidden || a.removed))) return res;   // the title screen's body
         for (const a of args) if (isRagdoll(a)) self.announce(a);
-        self.emit({ t: 'g', f: name, a: encode(args) });
+        self.emit({ t: 'g', f: name, a: encode(name === 'bulletWound' || name === 'bladeWound' ? [args[0], slimHit(args[1]), ...args.slice(2)] : args) });
         return res;
       };
     }
@@ -576,7 +716,62 @@ export class Net {
   requestPress(i) { this.reqOut.push({ t: 'press', i }); }
   requestRemoveAll() { this.reqOut.push({ t: 'removeAll' }); }
   requestCleanUp() { this.reqOut.push({ t: 'cleanUp' }); }
-  toolAllowed(tool) { return !this.guest || GUEST_TOOLS.has(tool.name); }
+  toolAllowed() { return true; }
+  requestThrow(pos, vel, spin, spoonPos, spoonVel) {
+    const a = (v) => [v.x, v.y, v.z];
+    this.reqOut.push({ t: 'throw', p: a(pos), v: a(vel), s: a(spin), sp: a(spoonPos), sv: a(spoonVel) });
+  }
+
+  /** Friend: what an item did (a punch, a cut, a bandage, a grab...), for the host's game to do. */
+  toolAct(tool, name, a) {
+    const w = this.g.tools.indexOf(tool);
+    if (w < 0) return undefined;
+    const o = {};
+    for (const [k, v] of Object.entries(a)) {
+      if (v?.isVector3) o[k] = { $v: [v.x, v.y, v.z] };
+      else if (isRagdoll(v)) o[k] = { $r: v.netId };
+      else if (k === 'gib' || k === 'grenade') o[k] = { $b: v.netId };
+      else if (k === 'button') o[k] = { $btn: this.g.buttons.indexOf(v) };
+      else o[k] = v;
+    }
+    this.reqOut.push({ t: 'act', w, n: name, a: o });
+    return undefined;
+  }
+
+  /** Host: turn a friend's item use back into game objects. Null if what it was about is gone. */
+  actArgs(o) {
+    const g = this.g, a = {};
+    for (const [k, v] of Object.entries(o)) {
+      if (v && v.$v) a[k] = new THREE.Vector3(...v.$v);
+      else if (v && v.$r !== undefined) { a[k] = g.ragdolls.list.find((r) => r.netId === v.$r && !r.removed); if (!a[k]) return null; }
+      else if (v && v.$b !== undefined) { a[k] = g.gore.gibs.find((x) => x.netId === v.$b) || g.explosives.live.find((x) => x.netId === v.$b); if (!a[k]) return null; }
+      else if (v && v.$btn !== undefined) { a[k] = g.buttons[v.$btn]; if (!a[k]) return null; }
+      else a[k] = v;
+    }
+    return a;
+  }
+
+  /** Host: zombies (and anything else) hurting a friend. */
+  hurtFriend(id, dmg, opts = {}) {
+    const p = this.players.get(id);
+    const f = opts.from;
+    p?.link?.send({ t: 'hurt', d: Math.round(dmg * 10) / 10, k: opts.kind || '', f: f ? [f.x, f.y, f.z] : null });
+  }
+
+  /** Host: what the zombies know about each friend (where they are, alive or not). */
+  friendInfos() {
+    const out = [];
+    for (const p of this.players.values()) {
+      const s = p.buf[p.buf.length - 1];
+      if (!s) continue;
+      const info = p.info || (p.info = { isPlayer: true, remote: true, id: p.id, pos: new THREE.Vector3(), alive: true });
+      info.name = p.name;
+      info.pos.set(s.x, s.y, s.z);
+      info.alive = !(s.flags & 8);
+      out.push(info);
+    }
+    return out;
+  }
 
   // ================================================================== every frame
   /** Start of the frame (before the physics): smoothed positions, events whose time has come, players. */
@@ -594,6 +789,7 @@ export class Net {
     } else if (this.host) {
       this.updateAvatars(dt, now - DELAY);
       this.updatePushers(now);
+      for (const p of this.players.values()) p.grab?.update();
     }
     // data rates (for the debug view)
     const st = this.stats;
@@ -613,7 +809,13 @@ export class Net {
     if (this.host) {
       // ragdolls that appeared this frame (the title screen's hidden one stays out)
       for (const r of this.g.ragdolls.list) this.announce(r);
-      const hpDue = now - this.lastHp >= 1000 / HEALTH_HZ;
+      // health: a few times a second, and straight away when a ragdoll dies, wakes or falls
+      let urgent = false;
+      for (const r of this.announced) {
+        const h = r.health, sig = `${h.alive}${h.undead}${r.brain?.state}${r.zombie}`;
+        if (r._netSig !== sig) { r._netSig = sig; urgent = true; }
+      }
+      const hpDue = urgent || now - this.lastHp >= 1000 / HEALTH_HZ;
       if (hpDue) this.lastHp = now;
       const common = this.out;
       this.out = [];
@@ -621,7 +823,8 @@ export class Net {
       for (const p of this.players.values()) {
         if (!p.ready) continue;
         let e = common;
-        if (secs) { const hp = this.healthFor(p, secs); if (hp) e = common.concat([hp]); }
+        // a connection that is backed up skips a health update (the next one carries the changes)
+        if (secs && p.link.backlog < 96 * 1024) { const hp = this.healthFor(p, secs); if (hp) e = common.concat([hp]); }
         if (e.length) p.link.send({ t: 'ev', ht: now, e });
       }
       if (now - this.lastSnap >= 1000 / SNAP_HZ - 2) {
@@ -846,28 +1049,29 @@ export class Net {
   }
 
   // ------------------------------------------------------------------ health
-  /** Every announced ragdoll's health as sections (JSON), once per health tick. */
+  /** Every announced ragdoll's health in small pieces (with their JSON), once per health tick. */
   healthNow() {
     const out = [];
     for (const r of this.announced) {
       if (r.hidden || r.removed) continue;
-      const s = healthSections(r.health);
-      s.x = this.brainRecord(r);
-      const str = {};
-      for (const k of Object.keys(s)) str[k] = JSON.stringify(s[k]);
-      out.push({ id: r.netId, s, str });
+      const m = healthFlat(r.health);
+      m.set('x', this.brainRecord(r));
+      const str = new Map();
+      for (const [k, v] of m) str.set(k, JSON.stringify(v));
+      out.push({ id: r.netId, m, str });
     }
     return out;
   }
 
-  /** The sections this friend hasn't got yet. */
+  /** The pieces this friend doesn't have yet (and the ones that went back to unhurt, as null). */
   healthFor(p, secs) {
     const list = [];
-    for (const { id, s, str } of secs) {
+    for (const { id, m, str } of secs) {
       let cache = p.hp.get(id);
-      if (!cache) { cache = {}; p.hp.set(id, cache); }
+      if (!cache) { cache = new Map(); p.hp.set(id, cache); }
       let d = null;
-      for (const k of Object.keys(s)) if (cache[k] !== str[k]) { cache[k] = str[k]; (d ??= {})[k] = s[k]; }
+      for (const [k, js] of str) if (cache.get(k) !== js) { cache.set(k, js); (d ??= []).push([k, m.get(k)]); }
+      if (cache.size > str.size) for (const k of [...cache.keys()]) if (!str.has(k)) { cache.delete(k); (d ??= []).push([k, null]); }
       if (d) list.push([id, d]);
     }
     if (p.hp.size > secs.length + 50) { const live = new Set(secs.map((x) => x.id)); for (const id of p.hp.keys()) if (!live.has(id)) p.hp.delete(id); }
@@ -899,8 +1103,9 @@ export class Net {
         for (const [id, s] of e.r) {
           const r = this.ragById.get(id);
           if (!r) continue;
-          applyHealth(r.health, s);
-          if (s.x) { if (r.brain) { r.brain.state = s.x.s; r.brain.activity = s.x.a; } if (s.x.n) r.name = s.x.n; }
+          applyHealthFlat(r.health, s);
+          const x = s.find((it) => it[0] === 'x')?.[1];
+          if (x) { if (r.brain) { r.brain.state = x.s; r.brain.activity = x.a; } if (x.n) r.name = x.n; }
         }
         break;
       }

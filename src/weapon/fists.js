@@ -99,30 +99,17 @@ export class Fists {
     this.player.addRecoil(-0.004 * power, -side * 0.006 * power);
     if (!hit) return;
     const ud = hit.object.userData;
+    if (ud.ragdoll && (!ud.ragdoll.parts[ud.part] || ud.ragdoll.parts[ud.part].removed)) return;
+    const what = ud.ragdoll ? { ragdoll: ud.ragdoll, part: ud.part } : ud.gib ? { gib: ud.gib } : ud.grenade ? { grenade: ud.grenade } : ud.button ? { button: ud.button } : null;
+    const res = what ? this.act('punch', { ...what, point: hit.point.clone(), dir: _d.clone(), power }) : null;
     if (ud.ragdoll) {
-      const r = ud.ragdoll, part = r.parts[ud.part];
-      if (!part || part.removed) return;
-      const res = r.health.punch(ud.part, power);
-      const imp = (power > 0.8 ? 19 : 9) * (ud.part === 'head' ? 0.75 : 1);
-      const b = part.body;
-      b.applyImpulse(new CANNON.Vec3(_d.x * imp, _d.y * imp + imp * 0.12, _d.z * imp), new CANNON.Vec3(hit.point.x - b.position.x, hit.point.y - b.position.y, hit.point.z - b.position.z));
-      r.flinch[ud.part] = 0.35;
-      const knock = res.knockout || (ud.part === 'head' && power > 0.8 && Math.random() < 0.55) || (power > 0.8 && Math.random() < 0.15);
-      r.brain.onPunch(ud.part, _d, knock);
-      this.gore.addBruise(r, ud.part, hit.point, power * 0.75);
-      if (res.bleed) this.gore.spray(hit.point, _d.clone().negate().add(new THREE.Vector3(0, 0.4, 0)), 8 + power * 10, { speed: 1.4, spread: 0.6, size: 0.012, volume: 0.6 });
-      if (res.fractured) this.audio.play('bone');
+      if (res?.fractured) this.audio.play('bone');
       this.audio.play(power > 0.8 ? 'punchHard' : 'punch');
       this.hud.hitMarker(false);
       this.player.shake = Math.min(1, (this.player.shake || 0) + 0.25 * power);
       this.impactKick = 1;
-    } else if (ud.gib) {
-      ud.gib.body.applyImpulse(new CANNON.Vec3(_d.x * 1.5, _d.y * 1.5 + 0.6, _d.z * 1.5));
-      this.audio.play('punch');
-    } else if (ud.grenade) {
-      ud.grenade.body.applyImpulse(new CANNON.Vec3(_d.x * 1.6 * power, 0.8 * power, _d.z * 1.6 * power));
-      this.audio.play('clink');
-    } else if (ud.button) { ud.button.press(); this.audio.play('punch'); }
+    } else if (ud.gib || ud.button) this.audio.play('punch');
+    else if (ud.grenade) this.audio.play('clink');
     else {
       // knuckles on concrete
       this.audio.play('thud');
@@ -130,6 +117,32 @@ export class Fists {
       this.gore.dust(hit.point, n, 6);
       this.impactKick = 1.3;
     }
+  }
+
+  /** What a hit does to the world. Multiplayer, as a friend: `remote` sends it to the host's game, which runs it. */
+  act(name, a) { return this.remote ? this.remote(this, name, a) : this.run(name, a); }
+
+  run(name, a) {
+    if (name !== 'punch') return null;
+    const d = a.dir, power = a.power;
+    if (a.ragdoll) {
+      const r = a.ragdoll, part = r.parts[a.part];
+      if (!part || part.removed) return null;
+      const res = r.health.punch(a.part, power);
+      const imp = (power > 0.8 ? 19 : 9) * (a.part === 'head' ? 0.75 : 1);
+      const b = part.body;
+      b.applyImpulse(new CANNON.Vec3(d.x * imp, d.y * imp + imp * 0.12, d.z * imp), new CANNON.Vec3(a.point.x - b.position.x, a.point.y - b.position.y, a.point.z - b.position.z));
+      r.flinch[a.part] = 0.35;
+      const knock = res.knockout || (a.part === 'head' && power > 0.8 && Math.random() < 0.55) || (power > 0.8 && Math.random() < 0.15);
+      r.brain.onPunch(a.part, d, knock);
+      this.gore.addBruise(r, a.part, a.point, power * 0.75);
+      if (res.bleed) this.gore.spray(a.point, d.clone().negate().add(new THREE.Vector3(0, 0.4, 0)), 8 + power * 10, { speed: 1.4, spread: 0.6, size: 0.012, volume: 0.6 });
+      return res;
+    }
+    if (a.gib) a.gib.body.applyImpulse(new CANNON.Vec3(d.x * 1.5, d.y * 1.5 + 0.6, d.z * 1.5));
+    else if (a.grenade) a.grenade.body.applyImpulse(new CANNON.Vec3(d.x * 1.6 * power, 0.8 * power, d.z * 1.6 * power));
+    else if (a.button) a.button.press();
+    return null;
   }
 
   animate(dt) {
