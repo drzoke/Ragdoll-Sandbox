@@ -829,11 +829,13 @@ export class Health {
       return;
     }
     // VS Undead: enough damage to the body (bullets, blasts, blades) also puts one down
+    // (bodyDeath: how much torso damage it takes, counting the tissue lost and the punishment
+    // taken after a part's tissue was already gone)
     if (this.alive && this.bodyDeath) {
       const P = this.parts;
-      let t = 0, m = 0;
-      for (const n of ['chest', 'abdomen', 'pelvis']) if (P[n]) { t += P[n].attached ? P[n].tissue : 0; m += P[n].maxTissue; }
-      if (m && t / m < this.bodyDeath) {
+      let dmg = 0;
+      for (const n of ['chest', 'abdomen', 'pelvis']) if (P[n]) dmg += (P[n].attached ? P[n].maxTissue - P[n].tissue : P[n].maxTissue) + (P[n].overkill || 0) * (this.bodyResist || 1);
+      if (dmg >= this.bodyDeath) {
         this.alive = false;
         this.deathCause = 'Torn apart';
         this.consciousness = 0;

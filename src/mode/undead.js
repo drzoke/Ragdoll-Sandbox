@@ -431,7 +431,7 @@ export class UndeadMode {
     br.chaseMul = runner ? rand(2.5, 2.9) : rand(1.35, 1.65) + Math.min(0.35, 0.03 * w);
     br.dmgMul = Math.min(2, 1 + 0.06 * (w - 1));
     // headshots are the way to put them down; the body takes a lot more punishment
-    r.health.bodyDeath = 0.2;
+    r.health.bodyDeath = 260;
     r.health.bodyResist = 0.5;
     r.vs = { born: this.time, runner, hitPts: 0, minion };
     if (minion) br.chaseMul = rand(1.6, 1.9);
