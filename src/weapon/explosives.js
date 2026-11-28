@@ -339,6 +339,7 @@ export class Explosives {
 
   /** Damage, bruises, soot and knockback on every ragdoll part in range; pushes gibs and grenades. */
   blast(c, owner = 0) {
+    this.onBlast?.(c, owner);      // VS Undead: the boss
     const dismember = settings.get('dismemberment');
     for (const r of [...this.ragdolls.list]) {
       const todo = [];

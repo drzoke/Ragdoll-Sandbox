@@ -50,6 +50,8 @@ export class GameMap {
     this.distanceCulled = [];
     this.farScale = 1;           // distance culling: set per graphics preset
     this.interactables = [];
+    this.decor = [];
+    this.lite = false;
     this.areas = [];
     this.tracked = [];
     this.disposables = new Set();
@@ -142,7 +144,14 @@ export class GameMap {
     this.finishBodies();
     this.root.updateMatrixWorld(true);
     this.setTitleMode(this.titleMode);
+    this.setLite(this.lite);
     return this;
+  }
+
+  /** Minimum graphics: hide purely decorative extras (grass tufts, mist sheets) that maps mark with map.decor. */
+  setLite(on) {
+    this.lite = !!on;
+    for (const o of this.decor) o.visible = !this.lite;
   }
 
   unload() {
@@ -163,6 +172,7 @@ export class GameMap {
     this.view = null;
     this.seen = null; this.glass = null; this.elevator = null;
     this.interactables.length = 0;
+    this.decor = [];
     this.areas = [];
     this.floor = null;
     this.onUnload?.();

@@ -99,6 +99,14 @@ export class Fists {
     this.player.addRecoil(-0.004 * power, -side * 0.006 * power);
     if (!hit) return;
     const ud = hit.object.userData;
+    if (ud.brute) {
+      // VS Undead's Big Brute
+      ud.brute.fight?.onMelee(9 * power, ud.zone, hit.point.clone(), _d.clone());
+      this.audio.play(power > 0.8 ? 'punchHard' : 'punch');
+      this.hud.hitMarker(false);
+      this.impactKick = 1.2;
+      return;
+    }
     if (ud.ragdoll && (!ud.ragdoll.parts[ud.part] || ud.ragdoll.parts[ud.part].removed)) return;
     const what = ud.ragdoll ? { ragdoll: ud.ragdoll, part: ud.part } : ud.gib ? { gib: ud.gib } : ud.grenade ? { grenade: ud.grenade } : ud.button ? { button: ud.button } : null;
     const res = what ? this.act('punch', { ...what, point: hit.point.clone(), dir: _d.clone(), power }) : null;

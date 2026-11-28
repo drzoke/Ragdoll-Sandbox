@@ -136,6 +136,15 @@ export class Machete {
     if (!hit) return;
     const ud = hit.object.userData;
     const power = stab ? 0.95 : 0.82 + Math.random() * 0.18;
+    if (ud.brute) {
+      // VS Undead's Big Brute
+      ud.brute.fight?.onMelee(stab ? 42 : 36, ud.zone, hit.point.clone(), dir.clone());
+      this.audio.play(stab ? 'stab' : 'slice');
+      this.hud.hitMarker(ud.zone === 'head');
+      this.blood = Math.min(0.95, this.blood + 0.25);
+      this.recoilKick = 0.8;
+      return;
+    }
     if (ud.ragdoll && (!ud.ragdoll.parts[ud.part] || ud.ragdoll.parts[ud.part].removed)) return;
     const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : dir.clone().negate();
     const what = ud.ragdoll ? { ragdoll: ud.ragdoll, part: ud.part, armor: ud.armor || null } : ud.gib ? { gib: ud.gib } : ud.grenade ? { grenade: ud.grenade } : ud.button ? { button: ud.button } : null;

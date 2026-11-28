@@ -272,7 +272,7 @@ export class GrabTool {
     this.quality = level;
     this.glow.width = level === 'ultra' ? 0.06 : level === 'high' ? 0.05 : 0.035;
     outlineMat.uniforms.bright.value = level === 'ultra' ? 1.5 : level === 'high' ? 1.3 : 1.0;
-    outlineMat.uniforms.thickness.value = level === 'low' || level === 'verylow' ? 0.008 : 0.011;
+    outlineMat.uniforms.thickness.value = level === 'low' || level === 'verylow' || level === 'minimum' ? 0.008 : 0.011;
   }
 
   addOutlines(held) {
@@ -513,7 +513,7 @@ export class GrabTool {
     const q = this.quality;
     outlineMat.uniforms.time.value = this.time;
     this.beam.mesh.visible = vis;
-    this.glow.mesh.visible = vis && q !== 'low' && q !== 'verylow';
+    this.glow.mesh.visible = vis && q !== 'low' && q !== 'verylow' && q !== 'minimum';
     this.halo.mesh.visible = vis && q === 'ultra';
     this.worldLight.intensity = 0;
     this.audio.hum(this.held && this.raise > 0.5 ? 1 : 0, this.held ? 1 + Math.min(1, this.held.body.velocity.length() / 12) * 0.8 : 1);

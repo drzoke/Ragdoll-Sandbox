@@ -3,6 +3,7 @@ import { AMMO } from '../weapon/ammo.js';
 import { WORLD } from '../world/world.js';
 import { PowderSmoke } from '../weapon/musket.js';
 import { buildMerchant, buildCart, buildCrate } from './props.js';
+import { BossFight } from './boss.js';
 import { rand, clamp } from '../core/util.js';
 
 /**
@@ -19,24 +20,24 @@ import { rand, clamp } from '../core/util.js';
 
 // ---------------------------------------------------------------- the merchant's goods
 export const SHOP = [
-  { id: 'a_pistol', cat: 'ammo', name: '.45 rounds', desc: '32 rounds for the M1911 and the SMG.', cost: 120, ammo: ['pistol', 32] },
-  { id: 'a_shells', cat: 'ammo', name: '12 gauge shells', desc: '16 shells for both shotguns.', cost: 160, ammo: ['shells', 16] },
-  { id: 'a_rifle', cat: 'ammo', name: '5.56 rounds', desc: '60 rounds for the assault rifle.', cost: 240, ammo: ['rifle', 60] },
-  { id: 'a_sniper', cat: 'ammo', name: '7.62 rounds', desc: '10 rounds for the M24.', cost: 200, ammo: ['sniper', 10] },
-  { id: 'a_ball', cat: 'ammo', name: 'Musket balls', desc: '8 paper cartridges for the flintlock.', cost: 80, ammo: ['ball', 8] },
-  { id: 'w_shotgun', cat: 'weapons', name: 'Remington 870', desc: 'Pump shotgun. Comes with 12 shells.', cost: 750, tool: 'Remington 870', ammo: ['shells', 12] },
-  { id: 'w_smg', cat: 'weapons', name: 'Submachine Gun', desc: 'Very fast full auto on .45 rounds. Comes with 64.', cost: 1000, tool: 'Submachine Gun', ammo: ['pistol', 64] },
-  { id: 'w_sniper', cat: 'weapons', name: 'M24 Sniper', desc: 'Goes through a whole line of them. Comes with 15 rounds.', cost: 1400, tool: 'M24 Sniper', ammo: ['sniper', 15] },
-  { id: 'w_rifle', cat: 'weapons', name: 'Assault Rifle', desc: 'Full auto 5.56 with a red dot. Comes with 90 rounds.', cost: 1750, tool: 'Assault Rifle', ammo: ['rifle', 90] },
-  { id: 'w_autoshotgun', cat: 'weapons', name: 'Combat Shotgun', desc: 'Semi-automatic, 8-shell box magazine. Comes with 24 shells.', cost: 2200, tool: 'Combat Shotgun', ammo: ['shells', 24] },
-  { id: 'w_musket', cat: 'weapons', name: 'Flintlock Musket', desc: 'Slow, loud and huge. Comes with 10 balls.', cost: 300, tool: 'Flintlock Musket', ammo: ['ball', 10] },
-  { id: 'w_machete', cat: 'weapons', name: 'Machete', desc: 'No ammo needed. Takes heads off.', cost: 450, tool: 'Machete' },
-  { id: 'h_bandage', cat: 'heal', name: 'Bandages', desc: 'Patch yourself up: 35 health back now.', cost: 200, heal: 35 },
-  { id: 'h_kit', cat: 'heal', name: 'First aid kit', desc: 'Back to full health.', cost: 500, heal: 100 },
-  { id: 'h_armor', cat: 'heal', name: 'Body armour', desc: '50 armour (up to 100). It takes most of each hit until it is used up.', cost: 650, armor: 50 },
-  { id: 'g_grenade', cat: 'gear', name: 'Grenades ×2', desc: 'Two frag grenades.', cost: 350, tool: 'Grenade', ammo: ['grenade', 2], stack: true },
-  { id: 'g_mine', cat: 'gear', name: 'Proximity mines ×2', desc: 'Put one down; it goes off when a zombie steps near.', cost: 450, tool: 'Proximity Mine', ammo: ['mine', 2], stack: true },
-  { id: 'g_sentry', cat: 'gear', name: 'Sentry gun', desc: 'Set it up and it shoots every zombie it can see (180 rounds).', cost: 1600, tool: 'Sentry Gun', ammo: ['turret', 1], stack: true },
+  { id: 'a_pistol', cat: 'ammo', name: '.45 rounds', desc: '32 rounds for the M1911 and the SMG.', cost: 40, ammo: ['pistol', 32] },
+  { id: 'a_shells', cat: 'ammo', name: '12 gauge shells', desc: '16 shells for both shotguns.', cost: 50, ammo: ['shells', 16] },
+  { id: 'a_rifle', cat: 'ammo', name: '5.56 rounds', desc: '60 rounds for the assault rifle.', cost: 80, ammo: ['rifle', 60] },
+  { id: 'a_sniper', cat: 'ammo', name: '7.62 rounds', desc: '10 rounds for the M24.', cost: 70, ammo: ['sniper', 10] },
+  { id: 'a_ball', cat: 'ammo', name: 'Musket balls', desc: '8 paper cartridges for the flintlock.', cost: 30, ammo: ['ball', 8] },
+  { id: 'w_shotgun', cat: 'weapons', name: 'Remington 870', desc: 'Pump shotgun. Comes with 12 shells.', cost: 250, tool: 'Remington 870', ammo: ['shells', 12] },
+  { id: 'w_smg', cat: 'weapons', name: 'Submachine Gun', desc: 'Very fast full auto on .45 rounds. Comes with 64.', cost: 350, tool: 'Submachine Gun', ammo: ['pistol', 64] },
+  { id: 'w_sniper', cat: 'weapons', name: 'M24 Sniper', desc: 'Goes through a whole line of them. Comes with 15 rounds.', cost: 450, tool: 'M24 Sniper', ammo: ['sniper', 15] },
+  { id: 'w_rifle', cat: 'weapons', name: 'Assault Rifle', desc: 'Full auto 5.56 with a red dot. Comes with 90 rounds.', cost: 600, tool: 'Assault Rifle', ammo: ['rifle', 90] },
+  { id: 'w_autoshotgun', cat: 'weapons', name: 'Combat Shotgun', desc: 'Semi-automatic, 8-shell box magazine. Comes with 24 shells.', cost: 750, tool: 'Combat Shotgun', ammo: ['shells', 24] },
+  { id: 'w_musket', cat: 'weapons', name: 'Flintlock Musket', desc: 'Slow, loud and huge. Comes with 10 balls.', cost: 100, tool: 'Flintlock Musket', ammo: ['ball', 10] },
+  { id: 'w_machete', cat: 'weapons', name: 'Machete', desc: 'No ammo needed. Takes heads off.', cost: 150, tool: 'Machete' },
+  { id: 'h_bandage', cat: 'heal', name: 'Bandages', desc: 'Patch yourself up: 35 health back now.', cost: 60, heal: 35 },
+  { id: 'h_kit', cat: 'heal', name: 'First aid kit', desc: 'Back to full health.', cost: 150, heal: 100 },
+  { id: 'h_armor', cat: 'heal', name: 'Body armour', desc: '50 armour (up to 100). It takes most of each hit until it is used up.', cost: 200, armor: 50 },
+  { id: 'g_grenade', cat: 'gear', name: 'Grenades ×2', desc: 'Two frag grenades.', cost: 120, tool: 'Grenade', ammo: ['grenade', 2], stack: true },
+  { id: 'g_mine', cat: 'gear', name: 'Proximity mines ×2', desc: 'Put one down; it goes off when a zombie steps near.', cost: 150, tool: 'Proximity Mine', ammo: ['mine', 2], stack: true },
+  { id: 'g_sentry', cat: 'gear', name: 'Sentry gun', desc: 'Set it up and it shoots every zombie it can see (180 rounds).', cost: 500, tool: 'Sentry Gun', ammo: ['turret', 1], stack: true },
 ];
 const SHOP_BY_ID = Object.fromEntries(SHOP.map((s) => [s.id, s]));
 const CATS = [['ammo', 'Ammo'], ['weapons', 'Weapons'], ['heal', 'Healing'], ['gear', 'Gear']];
@@ -45,8 +46,10 @@ const START_AMMO = { pistol: 28 };
 const AMMO_OF = { 'M1911': 'pistol', 'Submachine Gun': 'pistol', 'Remington 870': 'shells', 'Combat Shotgun': 'shells', 'Assault Rifle': 'rifle', 'M24 Sniper': 'sniper', 'Flintlock Musket': 'ball' };
 const CRATE_AMMO = { pistol: 24, shells: 10, rifle: 45, sniper: 6, ball: 5 };
 
+// points: a zombie is worth at most 50 (two hits and a headshot kill)
+const HIT_PTS = 5, HIT_PTS_MAX = 10, KILL_HEAD = 40, KILL_BODY = 20;
 const PREP = 12, BREAK = 45, CRATE_FALL = 3.2, CRATE_LIFE = 110;
-const CAP = { verylow: 7, low: 9, medium: 12, high: 16, ultra: 20 };
+const CAP = { minimum: 6, verylow: 7, low: 9, medium: 12, high: 16, ultra: 20 };
 const HEAD_CAUSES = ['Head off', 'Head destroyed', 'Brain destroyed'];
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -127,9 +130,11 @@ export class UndeadMode {
   renderHud() {
     const u = this.ui;
     u.hud.querySelector('b').textContent = this.wave || 1;
+    u.hud.classList.toggle('boss', this.phase === 'boss');
     let sub = '';
     if (this.phase === 'prep') sub = `Get ready: the dead come in ${Math.ceil(this.timer)} s`;
     else if (this.phase === 'wave') sub = `${this.left} zombie${this.left === 1 ? '' : 's'} left`;
+    else if (this.phase === 'boss') { const n = this.minionCount ?? 0; sub = this.left ? (n ? `${n} minion${n === 1 ? '' : 's'} up` : 'Boss wave') : 'The Big Brute is down'; }
     else if (this.phase === 'break') {
       const n = this.players().length;
       sub = `Merchant leaves in ${Math.ceil(this.timer)} s · <kbd>G</kbd> ready${n > 1 ? ` (${this.ready.size}/${n})` : ''}`;
@@ -156,6 +161,7 @@ export class UndeadMode {
     this.wave = 0; this.timer = PREP; this.left = 0; this.toSpawn = 0;
     this.pts = {}; this.kills = {}; this.ready.clear();
     this.crates = []; this.zs.clear(); this.nextCrate = 25; this.crateId = 1;
+    this.boss?.clear(); this.bossInfo = null; this.bossEndT = -1;
     this.setPhase('prep');
     this.dirty = true;
   }
@@ -168,7 +174,7 @@ export class UndeadMode {
     document.body.classList.add('vs');
     this.ui.hud.classList.remove('hidden'); this.ui.pts.classList.remove('hidden');
     G.vitals.regen = 3;
-    this.flash = new THREE.SpotLight(0xdfe8ff, 0, 32, 0.5, 0.55, 1.3);
+    this.flash = new THREE.SpotLight(0xdfe8ff, 0, 44, 0.7, 0.5, 1.2);
     this.flash.position.set(0, 0, 0);
     this.flashTarget = new THREE.Object3D();
     this.flash.target = this.flashTarget;
@@ -179,6 +185,7 @@ export class UndeadMode {
     this.merchant.root.visible = false; this.cart.root.visible = false;
     G.scene.add(this.merchant.root, this.cart.root);
     this.mState = 'away'; this.mT = 0;
+    this.boss ??= new BossFight(this);
     this.resetLoadout();
     this.hookZombieHits();
   }
@@ -203,6 +210,7 @@ export class UndeadMode {
     this.smoke.clear();
     for (const s of this.smoke.pool) G.scene.remove(s);
     this.removeMerchantInteract();
+    this.boss?.clear();
     this.zs.clear(); this.crates = [];
   }
 
@@ -233,6 +241,7 @@ export class UndeadMode {
     G.vitals.lockRespawn = coop ? 'You\'ll get back up when this wave is cleared.' : '';
     G.vitals.hideDeathScreen = !coop || p === 'over';
     if (p !== 'over') { this.ui.over.classList.add('hidden'); if (this.overOpen) { this.overOpen = false; G.setOverlay(false); } }
+    if (p !== 'boss' && p !== 'break' && p !== 'over') this.boss?.clear();
     if (p === 'prep') {
       this.revive();
       this.banner('VS Undead', 'Hold the field. Headshots put them down for good.', 4);
@@ -242,6 +251,11 @@ export class UndeadMode {
       this.banner(`Wave ${this.wave}`, this.wave === 1 ? 'They\'re coming out of the fog' : '', 3);
       G.audio.play('bell');
       this.closeShop();
+    } else if (p === 'boss') {
+      this.revive(prev === 'over');
+      this.closeShop();
+      G.audio.play('bell');
+      if (this.bossInfo) this.boss.begin(this.bossInfo);
     } else if (p === 'break') {
       this.revive();
       this.banner(`Wave ${this.wave} cleared`, 'The traveling merchant is here: press E on him to trade', 4);
@@ -281,12 +295,14 @@ export class UndeadMode {
   }
 
   // ================================================================ host: the waves
+  /** Zombies in a wave: 2 on the first, 2 more each wave after (half as many again per extra player). */
   waveSize(w) {
     const n = this.players().length;
-    return Math.round((6 + 4.5 * (w - 1) + 2.5 * Math.pow(Math.max(0, w - 1), 1.15)) * (1 + 0.5 * (n - 1)));
+    return Math.round(2 * w * (1 + 0.5 * (n - 1)));
   }
 
   startWave(w) {
+    if (w % 3 === 0) { this.startBoss(w); return; }
     this.wave = w;
     this.toSpawn = this.waveSize(w);
     this.left = this.toSpawn;
@@ -298,11 +314,83 @@ export class UndeadMode {
   }
 
   endWave() {
-    const bonus = 100 + 25 * this.wave;
+    const bonus = 40 + 10 * this.wave;
     for (const id of this.players()) this.addPts(id, bonus, `Wave cleared +${bonus}`);
     this.timer = BREAK; this.left = 0;
     this.ready.clear();
     this.setPhase('break');
+    this.dirty = true;
+  }
+
+  // ---------------------------------------------------------------- every third wave: the Big Brute
+  startBoss(w) {
+    const G = this.G, bd = G.map.bounds;
+    this.wave = w;
+    this.toSpawn = 0; this.left = 1;
+    this.ready.clear();
+    this.nextCrate = rand(20, 30);
+    this.bossEndT = -1;
+    // it comes up a little way off, facing the players
+    const people = this.peoplePos();
+    const c = new THREE.Vector3();
+    for (const p of people) c.add(p);
+    if (people.length) c.multiplyScalar(1 / people.length);
+    let spot = null;
+    for (let i = 0; i < 24 && !spot; i++) {
+      const a = Math.random() * Math.PI * 2, R = rand(11, 15);
+      const x = clamp(c.x + Math.cos(a) * R, bd.minX + 6, bd.maxX - 6), z = clamp(c.z + Math.sin(a) * R, bd.minZ + 6, bd.maxZ - 6);
+      if (people.some((p) => Math.hypot(p.x - x, p.z - z) < 8)) continue;
+      if (this.blocked(x, z, 2.5)) continue;
+      spot = { x, z };
+    }
+    spot ||= { x: clamp(c.x + 12, bd.minX + 6, bd.maxX - 6), z: c.z };
+    const n = this.players().length, k = w / 3;
+    const max = Math.round(850 * (1 + 0.6 * (n - 1)) * (1 + 0.5 * (k - 1)));
+    this.bossInfo = { x: +spot.x.toFixed(2), z: +spot.z.toFixed(2), yaw: +Math.atan2(-(c.x - spot.x), -(c.z - spot.z)).toFixed(3), hp: max, max, wave: w };
+    this.setPhase('boss');
+    this.dirty = true;
+  }
+
+  /** Something solid (a tree, the fence, a crate) within r of (x, z)? The ground doesn't count. */
+  blocked(x, z, r) {
+    return this.G.map.near(x - r, 0.1, z - r, x + r, 2, z + r).some((c) => !c.off && c.max.y > 0.15 && x > c.min.x - r && x < c.max.x + r && z > c.min.z - r && z < c.max.z + r);
+  }
+
+  minionsAlive() { let n = 0; for (const z of this.zs) if (z.vs.minion && z.health.alive && !z.removed) n++; return n; }
+
+  /** Host: the Brute roars and 2 to 4 of the dead claw their way up around it. */
+  summonMinions(boss) {
+    const G = this.G, bd = G.map.bounds;
+    const n = 2 + Math.floor(Math.random() * 3);
+    const people = this.peoplePos(), spots = [];
+    for (let i = 0, tries = 0; i < n && tries < 40; tries++) {
+      const a = Math.random() * Math.PI * 2, R = rand(2.5, 6);
+      const x = clamp(boss.pos.x + Math.cos(a) * R, bd.minX + 2, bd.maxX - 2), z = clamp(boss.pos.z + Math.sin(a) * R, bd.minZ + 2, bd.maxZ - 2);
+      if (people.some((p) => Math.hypot(p.x - x, p.z - z) < 3.5)) continue;
+      if (this.blocked(x, z, 0.6)) continue;
+      if (this.spawnZombie({ at: new THREE.Vector3(x, 0, z), minion: true })) { spots.push([+x.toFixed(2), +z.toFixed(2)]); i++; }
+    }
+    if (!spots.length) return;
+    this.riseFx(spots);
+    if (G.net.host) G.net.emit({ t: 'vs', fx: 'rise', p: spots });
+    for (const id of this.players()) this.sendPop(id, `The Brute raised ${spots.length} of the dead`, 'info');
+  }
+
+  /** Dirt thrown up where a minion comes out of the ground (every game). */
+  riseFx(spots) {
+    for (const [x, z] of spots) this.boss?.burst(new THREE.Vector3(x, 0.05, z), 10, 0.8);
+    this.G.audio.play('groan', 0.8);
+  }
+
+  /** Host: the Brute is down. Its minions drop with it; points for everyone. */
+  bossDown(boss, killer) {
+    for (const z of this.zs) if (z.vs.minion && z.health.alive) { z.vs.noPts = true; z.health.alive = false; z.health.deathCause = 'Its master fell'; z.health.consciousness = 0; }
+    const bonus = 150 + 50 * (this.wave / 3);
+    for (const id of this.players()) this.addPts(id, bonus, `Big Brute down +${bonus}`);
+    this.addPts(killer, 50, 'Killing blow +50');
+    this.kills[killer] = (this.kills[killer] || 0) + 1;
+    this.left = 0;
+    this.bossEndT = 4.5;
     this.dirty = true;
   }
 
@@ -321,10 +409,10 @@ export class UndeadMode {
     return base + this.capAdj;
   }
 
-  spawnZombie() {
+  spawnZombie({ at = null, minion = false } = {}) {
     const G = this.G, b = G.map.bounds, w = this.wave;
     const people = this.peoplePos();
-    let pos = null;
+    let pos = at;
     for (let i = 0; i < 16 && !pos; i++) {
       const a = Math.random() * Math.PI * 2, R = rand(22, 32);
       const x = clamp(Math.cos(a) * R, b.minX + 2, b.maxX - 2), z = clamp(Math.sin(a) * R, b.minZ + 2, b.maxZ - 2);
@@ -333,7 +421,7 @@ export class UndeadMode {
       pos = new THREE.Vector3(x, 0, z);
     }
     if (!pos) return false;
-    const runner = w >= 3 && Math.random() < Math.min(0.4, 0.07 * (w - 2));
+    const runner = !minion && w >= 3 && Math.random() < Math.min(0.4, 0.07 * (w - 2));
     const helmet = w >= 4 && Math.random() < Math.min(0.4, 0.06 * (w - 3));
     const vest = w >= 4 && Math.random() < Math.min(0.5, 0.08 * (w - 3));
     const yaw = Math.atan2(-pos.x, -pos.z);
@@ -342,8 +430,11 @@ export class UndeadMode {
     br.sight = 400;
     br.chaseMul = runner ? rand(2.5, 2.9) : rand(1.35, 1.65) + Math.min(0.35, 0.03 * w);
     br.dmgMul = Math.min(2, 1 + 0.06 * (w - 1));
-    r.health.bodyDeath = 0.3;
-    r.vs = { born: this.time, runner, hitPts: 0 };
+    // headshots are the way to put them down; the body takes a lot more punishment
+    r.health.bodyDeath = 260;
+    r.health.bodyResist = 0.5;
+    r.vs = { born: this.time, runner, hitPts: 0, minion };
+    if (minion) br.chaseMul = rand(1.6, 1.9);
     if (runner) r.name = r.name.replace('Zombie', 'Runner');
     this.wrapHealth(r);
     this.zs.add(r);
@@ -367,17 +458,17 @@ export class UndeadMode {
     const prev = B.onRagdollHit;
     B.onRagdollHit = (r, b, res, partName) => {
       prev?.(r, b, res, partName);
-      if (!this.active || !this.host || !r.vs || !r.health.alive || this.phase !== 'wave') return;
-      if (r.vs.hitPts >= 80) return;
-      r.vs.hitPts += 10;
-      this.addPts(b.owner || this.me(), 10);
+      if (!this.active || !this.host || !r.vs || !r.health.alive || (this.phase !== 'wave' && this.phase !== 'boss')) return;
+      if (r.vs.hitPts >= HIT_PTS_MAX) return;
+      r.vs.hitPts += HIT_PTS;
+      this.addPts(b.owner || this.me(), HIT_PTS);
     };
   }
 
   addPts(id, n, popText = null) {
     this.pts[id] = (this.pts[id] || 0) + n;
     this.dirty = true;
-    if (popText) this.sendPop(id, popText, n >= 100 ? 'big' : '');
+    if (popText) this.sendPop(id, popText, n >= 40 ? 'big' : '');
   }
 
   sendPop(id, text, kind = '') {
@@ -418,6 +509,12 @@ export class UndeadMode {
       if (this.nextCrate <= 0) { this.nextCrate = rand(55, 85); this.dropCrate(); }
       if (this.toSpawn === 0 && ![...this.zs].some((z) => z.health.alive && !z.removed)) this.endWave();
       else if (this.everyoneDown()) { this.setPhase('over'); this.dirty = true; }
+    } else if (this.phase === 'boss') {
+      this.checkZombies(dt);
+      this.nextCrate -= dt;
+      if (this.nextCrate <= 0) { this.nextCrate = rand(30, 45); this.dropCrate(); }
+      if (this.bossEndT >= 0) { this.bossEndT -= dt; if (this.bossEndT < 0) this.endWave(); }
+      else if (this.everyoneDown()) { this.setPhase('over'); this.dirty = true; }
     } else if (this.phase === 'break') {
       this.timer -= dt;
       this.checkZombies(dt);
@@ -454,12 +551,14 @@ export class UndeadMode {
       }
       if (!z.vs.dead) {
         z.vs.dead = this.time;
-        const by = z.lastBy || me;
-        const head = HEAD_CAUSES.includes(z.health.deathCause);
-        const n = head ? 100 : 60;
-        this.kills[by] = (this.kills[by] || 0) + 1;
-        this.addPts(by, n, head ? `Headshot +${n}` : `Kill +${n}`);
-        this.left = Math.max(0, this.left - 1);
+        if (!z.vs.noPts) {
+          const by = z.lastBy || me;
+          const head = HEAD_CAUSES.includes(z.health.deathCause);
+          const n = head ? KILL_HEAD : KILL_BODY;
+          this.kills[by] = (this.kills[by] || 0) + 1;
+          this.addPts(by, n, head ? `Headshot +${n}` : `Kill +${n}`);
+        }
+        if (!z.vs.minion) this.left = Math.max(0, this.left - 1);
         this.dirty = true;
       }
       dead.push(z);
@@ -492,7 +591,7 @@ export class UndeadMode {
     if (!c || !c.landed) return;
     this.crates = this.crates.filter((x) => x !== c);
     this.dirty = true;
-    if (Math.random() < 0.15) { this.addPts(pid, 300, 'Supply crate: +300 points'); return; }
+    if (Math.random() < 0.15) { this.addPts(pid, 100, 'Supply crate: +100 points'); return; }
     if (pid === this.me()) this.loot(); else this.G.net.sendTo(pid, { crate: 1 });
   }
 
@@ -507,6 +606,7 @@ export class UndeadMode {
       pts: this.pts, k: this.kills, rd: [...this.ready],
       cr: this.crates.map((c) => [c.id, +c.x.toFixed(2), +c.z.toFixed(2), +c.y.toFixed(2), c.landed ? 1 : 0, +c.yaw.toFixed(2)]),
       gd: this.G.gadgets.list.map((g) => this.G.gadgets.record(g)),
+      bs: this.phase === 'boss' ? this.bossInfo : null, mn: this.minionsAlive(),
     };
   }
 
@@ -519,6 +619,7 @@ export class UndeadMode {
     if (s.gid !== this.seenGid) { this.seenGid = s.gid; this.resetLoadout(); }
     this.wave = s.w; this.timer = s.tm; this.left = s.l;
     this.pts = s.pts || {}; this.kills = s.k || {}; this.ready = new Set(s.rd || []);
+    this.bossInfo = s.bs || this.bossInfo; this.minionCount = s.mn || 0;
     this.crates = (s.cr || []).map(([id, x, z, y, landed, yaw]) => ({ id, x, z, y, landed: !!landed, yaw }));
     // gadgets: add the ones we don't have, drop the ones that are gone
     const gd = s.gd || [];
@@ -528,12 +629,20 @@ export class UndeadMode {
     if (s.ph !== this.phase) this.setPhase(s.ph);
   }
 
+  /** Every 'vs' event from the host: the state, the boss's moves, effects. */
+  onVs(e) {
+    if (e.s) this.onState(e.s);
+    else if (e.b) this.boss?.onNet(e.b);
+    else if (e.fx === 'rise' && this.active) this.riseFx(e.p || []);
+  }
+
   /** The host's message to us alone. */
   onMine(m) {
     if (m.pop) this.pop(m.pop, m.k || '');
     if (m.give) this.give(SHOP_BY_ID[m.give]);
     if (m.crate) this.loot();
     if (m.deny) { this.G.audio.play('deny'); this.G.hud.toast(m.deny); }
+    if (m.kb) this.boss?.knock(m.kb);
   }
 
   /** Host: what a friend asked for. */
@@ -546,6 +655,7 @@ export class UndeadMode {
       this.pts[p.id] -= it.cost; this.dirty = true;
       this.G.net.sendTo(p.id, { give: it.id });
     } else if (d.open) this.openCrate(p.id, d.open);
+    else if (d.bm) { if (this.boss?.alive) this.boss.damage(clamp(+d.bm.a || 0, 0, 60), d.bm.z === 'head' ? 'head' : 'body', p.id); }
     else if (d.ready) { if (this.phase === 'break') { this.ready.add(p.id); this.dirty = true; } }
     else if (d.place) {
       const v = new THREE.Vector3(...d.place.p);
@@ -652,12 +762,14 @@ export class UndeadMode {
     else if (this.phase === 'prep' || this.phase === 'break') this.timer = Math.max(0, this.timer - dt);
     this.myPts = this.pts[this.me()] || 0;
     if (this.phase === 'break' && G.input.wasPressed('KeyG') && !this.shopOpen) this.sayReady();
+    if (this.host) this.minionCount = this.phase === 'boss' ? this.minionsAlive() : 0;
+    this.boss?.update(dt);
     this.updateMerchant(dt);
     this.updateCrates(dt);
     this.smoke.update(dt);
     // your flashlight (it's dark out here)
     const cam = G.camera;
-    this.flash.intensity = G.vitals.dead || G.titleMode() ? 0 : 26;
+    this.flash.intensity = G.vitals.dead || G.titleMode() ? 0 : 38;
     this.flash.position.copy(cam.position).add(_v.set(0.15, -0.12, 0).applyQuaternion(cam.quaternion));
     this.flashTarget.position.copy(cam.position).add(_v.set(0, 0, -10).applyQuaternion(cam.quaternion));
     if (this.shopOpen && (this.shopT = (this.shopT || 0) + dt) > 0.5) { this.shopT = 0; this.renderShop(); }

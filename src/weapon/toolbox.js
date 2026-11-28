@@ -4,7 +4,7 @@ import { ItemPreview } from '../ui/preview.js';
 const $ = (id) => document.getElementById(id);
 
 // Pictures of the items (used on the hotbar, and in the toolbox on the Low preset).
-const ICONS = {
+export const ICONS = {
   Fists: `<svg viewBox="0 0 64 40"><rect x="10" y="12" width="18" height="18" rx="2" fill="currentColor"/><rect x="2" y="16" width="10" height="10" fill="currentColor" opacity=".75"/><rect x="36" y="10" width="18" height="18" rx="2" fill="currentColor"/><rect x="52" y="14" width="10" height="10" fill="currentColor" opacity=".75"/><path d="M14 17h10M14 21h10M40 15h10M40 19h10" stroke="#000" stroke-opacity=".35" stroke-width="1.5"/></svg>`,
   'Remington 870': `<svg viewBox="0 0 64 40"><path d="M2 15h30v-2h4v2h26v3H36v2h12v3H34l-2 2H22l-3 3-12 6-4-4 9-6v-3H2z" fill="currentColor"/><rect x="38" y="19" width="12" height="5" rx="1" fill="currentColor" opacity=".7"/></svg>`,
   'M24 Sniper': `<svg viewBox="0 0 64 40"><path d="M1 17h24v-2h22v2h16v2.5H47V21h-5l-3 3H27l-3 2-11 5-5-4 7-5H1z" fill="currentColor"/><rect x="24" y="9" width="17" height="5" rx="2" fill="currentColor"/><rect x="21" y="8" width="5" height="7" rx="1.5" fill="currentColor"/><rect x="39" y="8" width="5" height="7" rx="1.5" fill="currentColor"/><rect x="32" y="21" width="5" height="7" fill="currentColor" opacity=".7"/></svg>`,
@@ -154,7 +154,7 @@ export class Toolbox {
   /** Low: pictures. Medium: spinning models. High / Very High: spinning models with effects. */
   setQuality(level) {
     this.quality = level;
-    const flat = level === 'low' || level === 'verylow';
+    const flat = level === 'low' || level === 'verylow' || level === 'minimum';
     this.el.box.classList.toggle('icons', flat);
     if (!flat && this.isOpen && !this.preview) this.preview = new ItemPreview();
     this.preview?.setQuality(level);
@@ -215,7 +215,7 @@ export class Toolbox {
     if (this.isOpen) return;
     this.isOpen = true;
     this.picked = this.pending >= 0 ? this.pending : this.index;
-    if (this.quality !== 'low' && this.quality !== 'verylow' && !this.preview) { this.preview = new ItemPreview(); this.preview.setQuality(this.quality); }
+    if (this.quality !== 'low' && this.quality !== 'verylow' && this.quality !== 'minimum' && !this.preview) { this.preview = new ItemPreview(); this.preview.setQuality(this.quality); }
     this.el.box.classList.remove('hidden');
     this.renderInfo();
     this.onOpenChange?.(true);
@@ -261,7 +261,7 @@ export class Toolbox {
     }
     if (this.isOpen) {
       if (input.wasPressed('Enter')) this.equip(this.picked);
-      if (this.preview && this.quality !== 'low' && this.quality !== 'verylow') {
+      if (this.preview && this.quality !== 'low' && this.quality !== 'verylow' && this.quality !== 'minimum') {
         for (const c of this.cards) if (!c.el.classList.contains('hidden')) this.preview.draw(this.tools[c.i].name, c.ctx, this.time + c.i * 1.3, c.i === this.hover);
       }
     }
@@ -287,7 +287,7 @@ export class Toolbox {
   renderControls() {
     const t = this.active;
     const vs = document.body.classList.contains('vs');
-    const rows = [...t.controls.filter(([k]) => k), [this.bar.length > 1 ? `1–${this.bar.length} or Q` : '1–9 or Q', 'Switch item'], ['Tab', 'Toolbox (equip items)'],
+    const rows = [...t.controls.filter(([k]) => k), [this.bar.length > 1 ? `1–${this.bar.length} or Q` : '1–9 or Q', 'Switch item'], ['Tab', 'Toolbox (equip items)'], ['I', 'Inventory'],
       ...(vs ? [['E', 'Open a supply crate, trade with the merchant'], ['G', 'Ready for the next wave']] : [['B', 'Spawn menu'], ['Z', 'Slow down time'], ['V', 'Speed up time']]),
       ['X', 'X-ray (again: 3D / Flat, again: close)'], ['H', 'Hide this list']];
     const key = t.name + JSON.stringify(rows);

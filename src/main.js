@@ -45,6 +45,7 @@ import { Saves } from './ui/saves.js';
 import { AutoGun } from './weapon/autogun.js';
 import { AUTO_MATERIALS } from './weapon/modelAuto.js';
 import { Gadgets, PlaceTool, GADGET_MATERIALS } from './mode/gadgets.js';
+import { Inventory } from './ui/inventory.js';
 import { UndeadMode } from './mode/undead.js';
 import { PROP_MATERIALS } from './mode/props.js';
 
@@ -109,7 +110,7 @@ const net = new Net({
   onLeft: () => { shownTimeScale = world.timeScale; hud.setTimeScale(world.timeScale); },
   onChat: (m) => chat.add(m.n, m.c, m.s),
   onSystem: (text) => chat.system(text),
-  onVs: (e) => undead.onState(e.s),
+  onVs: (e) => undead.onVs(e),
   onVsMe: (m) => undead.onMine(m),
   onVsRequest: (p, d) => undead.onRequest(p, d),
   canThrow: () => true,
@@ -197,12 +198,13 @@ const grenade = new GrenadeTool({
 // VS Undead: the merchant's guns, the mines and the sentry gun
 const autoOpts = { mainScene: scene, mainCamera: camera, player, audio, environment: scene.environment, onFire: (o, d, muzzle, opts) => ballistics.fire(o, d, muzzle, opts) };
 const rifle = new AutoGun('rifle', autoOpts), smg = new AutoGun('smg', autoOpts), autoShotgun = new AutoGun('autoshotgun', autoOpts);
+let undead = null;     // VS Undead (made further down)
 const gadgets = new Gadgets({ scene, map, ragdolls, audio });
 gadgets.explosives = explosives; gadgets.ballistics = ballistics;
 const placeOpts = { mainCamera: camera, player, audio, environment: scene.environment, map, onPlace: (kind, pos, yaw) => undead.placeGadget(kind, pos, yaw) };
 const mineTool = new PlaceTool('mine', placeOpts), sentryTool = new PlaceTool('sentry', placeOpts);
 for (const t of [rifle, smg, autoShotgun, mineTool, sentryTool, pistol, shotgun, sniper, musket]) t.say = (text) => hud.toast(text);
-ballistics.extraTargets = () => gadgets.meshes();
+ballistics.extraTargets = () => { const g = gadgets.meshes(); return undead?.boss?.alive ? g.concat(undead.boss.model.meshes) : g; };
 // Materials whose detail follows the graphics preset
 trackMaterials(RAGDOLL_GRAY); trackMaterials(RAGDOLL_BLACK, { grime: false }); trackMaterials(ZOMBIE_SKIN, { grime: false }); trackMaterials(ZOMBIE_JOINT, { grime: false });
 trackMaterials(pistol.gun.root); trackMaterials(grab.gadget.root); trackMaterials(shotgun.gun.root); trackMaterials(sniper.gun.root); trackMaterials(sniper.mag); trackMaterials(musket.gun.root); trackMaterials(grenade.model.root);
@@ -236,7 +238,6 @@ trackMaterials(title.prop.root);
 const floorPicker = new FloorPicker({ audio, onOpenChange: (open) => onToolboxChange(open) });
 map.ctx = { player, ragdolls, gore, grab, audio, hud, input, camera, get playing() { return playing && !toolboxOpen; },
   pickFloor: (opts) => { toolbox.close(); spawnMenu.close(); floorPicker.open(opts); } };
-let undead = null;     // VS Undead (made further down)
 function loadMap(id) {
   const def = MAP_BY_ID[id];
   if (!def) return;
@@ -295,6 +296,10 @@ undead = new UndeadMode({
   titleMode: () => titleMode,
 });
 gadgets.onRemove = () => { undead.dirty = true; };
+// ---- the inventory (I): your figure with its armour, ammo, points and items ----
+const inventory = new Inventory({ toolbox, tools, vitals, net, settings, audio, setOverlay: (open) => onToolboxChange(open), get undead() { return undead; } });
+explosives.onBlast = (c, owner) => { if (undead.active) undead.boss?.onBlast(c, owner); };
+gadgets.extraFoes = () => (undead.boss?.alive && undead.boss.anim !== 'emerge' ? [undead.boss.foe] : null);
 gadgets.onBlow = (p) => net.emit({ t: 'boom', id: -1, p: [p.x, p.y, p.z] });
 /** Out of VS Undead, back to a sandbox map. */
 function leaveUndead() {
@@ -598,12 +603,15 @@ function onToolboxChange(open) {
 addEventListener('keydown', (e) => {
   if (!playing || e.repeat || chat.isOpen) return;
   if ((e.code === 'KeyT' || e.code === 'Enter' || e.code === 'NumpadEnter') && net.active && !toolboxOpen) { e.preventDefault(); chat.open(); return; }
+  if (e.code === 'KeyI' && !inventory.isOpen && !toolbox.isOpen && !spawnMenu.isOpen && !undead.shopOpen && !undead.boss?.cine) { e.preventDefault(); inventory.open(); return; }
+  if (inventory.isOpen) return;
   if (e.code === 'Tab') { e.preventDefault(); if (spawnMenu.isOpen) spawnMenu.close(); toolbox.toggle(); }
   if (e.code === 'KeyB') { if (undead.active) { if (!spawnMenu.isOpen) { audio.play('deny'); hud.toast('No spawn menu in VS Undead'); } return; } if (toolbox.isOpen) toolbox.close(); spawnMenu.toggle(); }
 });
 
 // ---- settings ----
 const GFX_NOTES = {
+  minimum: 'Pure performance and nothing else: the lowest resolution, no shadows or reflections, the fewest blood drops and simple ragdoll shapes up close. Use it when every other preset still stutters.',
   verylow: 'For slow computers and older phones: half resolution, no shadows, far fewer blood drops and simpler materials. Looks rougher but runs the fastest.',
   low: 'No shadows, lower resolution and fewer blood drops. Runs on almost anything.',
   medium: 'Sharp sun shadows and full resolution.',
@@ -611,6 +619,7 @@ const GFX_NOTES = {
   ultra: 'Everything in High, plus reflections on the floor, fine surface detail on models and stronger reflections.',
 };
 const GFX_GPU = {
+  minimum: ['Anything that runs WebGL 2', 'Anything that runs WebGL 2'],
   verylow: ['Any graphics chip that runs WebGL 2', 'Intel HD 4000 or better'],
   low: ['Any graphics chip from the last 10 years (Intel HD 4000, Chromebooks)', 'Intel UHD 620 or better'],
   medium: ['Intel UHD 620 / AMD Radeon Vega 8', 'Intel Iris Xe / NVIDIA GTX 1050'],
@@ -812,9 +821,10 @@ function watchFps(_dt, now) {
   if (fpsWatch.t < 6) return;
   const avg = fpsWatch.frames / fpsWatch.t;
   fpsWatch.t = 0; fpsWatch.frames = 0;
-  const lvl = settings.get('graphics'), order = ['verylow', 'low', 'medium', 'high', 'ultra'], i = order.indexOf(lvl);
+  const lvl = settings.get('graphics'), order = ['minimum', 'verylow', 'low', 'medium', 'high', 'ultra'], i = order.indexOf(lvl);
   if (avg >= 40 || i <= 0) return;
-  if (!settings.get('graphicsChosen') && fpsWatch.steps < 2) {
+  // never drops to Minimum by itself: that one is only picked by hand
+  if (!settings.get('graphicsChosen') && fpsWatch.steps < 2 && i > 1) {
     fpsWatch.steps++;
     const next = order[i - 1];
     settings.set('graphics', next);
@@ -920,14 +930,15 @@ function frame() {
   const wdt = dt * ts;
 
   touch.update(dt, { tool: toolbox.active, useVisible: !!lastFocused || !!vehicles.driving, xrayMode: hud.xrayOpen ? settings.get('xrayMode') : 'off' });
-  player.update(dt, input, playing && !toolboxOpen && !touch.portrait && !vitals.dead);
+  const cine = !!undead.boss?.cine;         // VS Undead: the boss's entrance plays like a cutscene
+  player.update(dt, input, playing && !toolboxOpen && !touch.portrait && !vitals.dead && !cine);
   if (titleMode) title.update(dt);         // cinematic camera on the title screen
   player.aiming = false;                   // the gun in your hands sets it again
   // vehicles: the one you drive, cars rolling to a stop, hitting people; then the chase camera
   vehicles.update(dt, input, playing && !toolboxOpen && !touch.portrait && !vitals.dead);
   if (vehicles.driving) vehicles.updateCamera(dt);
   else if (vehicles.collidePlayer()) player.updateCamera(0, 0);
-  toolbox.update(dt, input, playing && !vitals.dead && !vehicles.driving, wdt); // tools aim before the physics step
+  toolbox.update(dt, input, playing && !vitals.dead && !vehicles.driving && !cine, wdt); // tools aim before the physics step
   net.update(dt);                          // multiplayer: other players, and a friend's copy of the host's world
   if (net.guest) ragdolls.updateReplica(wdt);
   else { physics.update(dt, ts); ragdolls.update(wdt); }
@@ -965,7 +976,7 @@ function frame() {
   net.flush();                      // multiplayer: send this frame's updates
   map.cull(camera);
   updateBatches(scene, camera);     // ragdoll parts and the marks on them, drawn instanced
-  if (titleMode || vitals.dead || vehicles.driving) graphics.render(null, null);
+  if (titleMode || vitals.dead || vehicles.driving || undead.boss?.cine) graphics.render(null, null);
   else graphics.render(t.scene, t.camera);
   drawCalls = renderer.info.render.calls; renderer.info.reset();   // the whole frame's (shadows and view model included)
   if (thumbWanted) { const cb = thumbWanted; thumbWanted = null; cb(snapshotThumb()); }

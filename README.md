@@ -4,7 +4,7 @@
 
 ![screenshot](screenshot.png)
 
-A first-person physics sandbox: humanoid ragdolls and zombies, guns from a flintlock musket to a scoped sniper rifle, two maps (a test range and a 20-floor skyscraper), drivable vehicles, saves, multiplayer with chat, and a dynamic damage / gore / physiology model. **VS Undead** is a co-op zombie-wave mode on its own foggy cemetery field, with points, a traveling merchant, supply drops and its own guns, mines and a sentry gun.
+A first-person physics sandbox: humanoid ragdolls and zombies, guns from a flintlock musket to a scoped sniper rifle, two maps (a test range and a 20-floor skyscraper), drivable vehicles, saves, multiplayer with chat, and a dynamic damage / gore / physiology model. **VS Undead** is a co-op zombie-wave mode on its own foggy cemetery field, with points, a traveling merchant, supply drops, a boss every third wave (the Big Brute) and its own guns, mines and a sentry gun.
 Built with **three.js r187** and **cannon-es 0.20**. Both are bundled locally in `lib/`, so it needs no internet.
 
 ## Running it
@@ -30,6 +30,7 @@ python3 -m http.server 8000      # or: npx serve .
 | Mouse wheel | Switch item (with Grab: move what you're holding closer or farther; through the sniper scope: zoom) |
 | Shift (scoped) | Hold your breath to steady the sniper scope |
 | Tab | Open the toolbox (pick an item, then Equip to put it on your bar) |
+| I | Inventory: your character with its armour, health, ammo, points and items |
 | B | Spawn menu (ragdolls, zombies and armour) |
 | Z | Slow time down (down to 0.01×) |
 | V | Speed time up (up to 3×) |
@@ -100,6 +101,7 @@ The game detects phones and tablets (the browser says it's a phone or tablet and
 ## Settings
 
 - **Graphics**
+  - **Minimum**: pure performance: the lowest resolution, no shadows or reflections, the fewest blood drops, simple ragdoll shapes up close, small far-off things hidden sooner and no decorative grass or mist. Never chosen automatically.
   - **Very Low**: for slow computers and older phones: half resolution, no shadows, far fewer blood drops, simpler materials and pictures instead of 3D previews in the toolbox.
   - **Low**: no shadows, lower resolution, fewer blood drops, flatter materials.
   - **Medium**: sharp sun shadows, full resolution.
@@ -131,6 +133,7 @@ Settings are saved in the browser (localStorage).
 
 | Preset | Minimum GPU | Recommended GPU |
 | --- | --- | --- |
+| Minimum | Anything that runs WebGL 2 | Anything that runs WebGL 2 |
 | Very Low | Any graphics chip that runs WebGL 2 | Intel HD 4000 |
 | Low | Any graphics chip from the last 10 years (Intel HD 4000, Chromebooks) | Intel UHD 620 |
 | Medium | Intel UHD 620 / AMD Radeon Vega 8 | Intel Iris Xe / NVIDIA GTX 1050 |
@@ -166,7 +169,9 @@ Settings are saved in the browser (localStorage).
 - **Sniper and musket** (`weapon/modelRifles.js`, `weapon/sniper.js`, `weapon/musket.js`): procedural rifle (bolt, scope, magazine, muzzle brake) and musket (lock with cock, frizzen and pan, ramrod, brass fittings); the scope is a DOM overlay and the musket smoke is a pool of world-space sprites.
 - **Zombies** (`ragdoll/zombie.js`, `Health.updateUndead`, `Ragdoll.makeZombie`, `RagdollManager.reanimate`): a brain that hunts the nearest living person on its floor, an undead health mode, the bite infection and reanimation.
 - **Player health** (`player/vitals.js`): health, regeneration, body armour (VS Undead), the damage vignette, the death screen and respawn.
-- **VS Undead** (`mode/undead.js`): the wave loop (prep, wave, break, game over), host-authoritative points and kill credit (`Ragdoll.lastBy`, set by bullets, blasts and melee), zombie spawning at the fog edge with an alive cap that follows the graphics preset and the physics load, body cleanup, supply crates, the merchant's shop and its co-op sync (`{t:'vs'}` state from the host, `vsRequest` / `sendTo` for buying, crates and gadgets). Zombies in this mode also go down from heavy body damage (`Health.bodyDeath`).
+- **VS Undead** (`mode/undead.js`): the wave loop (prep, wave, break, game over), host-authoritative points and kill credit (`Ragdoll.lastBy`, set by bullets, blasts and melee), zombie spawning at the fog edge with an alive cap that follows the graphics preset and the physics load, body cleanup, supply crates, the merchant's shop and its co-op sync (`{t:'vs'}` state from the host, `vsRequest` / `sendTo` for buying, crates and gadgets). Zombies in this mode also go down from heavy body damage (`Health.bodyDeath`), though their torso shrugs off half of it (`Health.bodyResist`), so headshots are the way. Waves are 2 zombies, plus 2 per wave; every third wave is a boss.
+- **The Big Brute** (`mode/brute.js`: the model, its poses and the dig-out keyframes; `mode/boss.js`: the fight). A hand-animated boss (no physics): cutscene camera, health bar, swipes with knockback, roars that raise 2 to 4 minions, rage below 40%. The host runs it and sends its state ten times a second (`{t:'vs', b:[...]}`); bullets, blades and blasts hit its meshes (`userData.brute`, `zone`), friends' hits go through the host.
+- **Inventory** (`ui/inventory.js`, key I): the multiplayer avatar drawn on its own with armour pieces, plus health, armour, ammo, points and the item slots.
 - **Dead Field** (`world/cemetery.js`): the VS Undead map. Hidden from the Maps list (`hidden: true`).
 - **Merchant, cart and crates** (`mode/props.js`), **mines and the sentry gun** (`mode/gadgets.js`), **automatic guns** (`weapon/autogun.js`, `weapon/modelAuto.js`) and the shared **ammo store** (`weapon/ammo.js`: unlimited in the sandbox, counted in VS Undead).
 - **Vehicles** (`vehicle/vehicles.js`, `vehicle/models.js`): kinematic cars with a simple bicycle model, wall collisions, a chase camera, and running people over through `Health.impact`.
@@ -191,7 +196,7 @@ src/ui/preview.js        spinning item previews for the toolbox
 src/ragdoll/             skeleton layout, anatomy data, health/physiology, brain/AI (Classic, V2, zombie), ragdoll body, manager, batched drawing
 src/gore/                particles, decals/pools, gore orchestration (stumps, organs, gibs, bleeding)
 src/ui/                  HUD, X-ray, touch controls (touch.js), spawn menu, title scene, saves, chat
-src/mode/                VS Undead: waves, merchant, crates, mines and the sentry gun
+src/mode/                VS Undead: waves, merchant, crates, mines, the sentry gun and the Big Brute
 src/vehicle/             drivable vehicles
 src/net/                 multiplayer: connections (transport.js), data formats (codec.js), the other players' figures (avatar.js), host and friend logic (net.js)
 src/core/device.js       phone / tablet detection

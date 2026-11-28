@@ -90,7 +90,7 @@
 <div id="drive" class="hidden"></div>
 <div id="drive-keys"><span><kbd>W</kbd><kbd>S</kbd> drive</span><span><kbd>A</kbd><kbd>D</kbd> steer</span><span><kbd>Space</kbd> handbrake</span><span><kbd>C</kbd> camera</span><span><kbd>Click</kbd> horn</span><span><kbd>E</kbd> get out</span></div>
 <div id="chat" class="hidden quiet"><div id="chat-log"></div><form id="chat-form" autocomplete="off"><input id="chat-in" placeholder="Say something (Enter sends, Esc closes)" spellcheck="false" enterkeyhint="send"><button id="chat-send" type="submit">Send</button></form></div>
-<div id="version">Alpha 1.0</div>
+<div id="version">Alpha 1.1</div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
@@ -125,7 +125,7 @@
   <div class="m-side">
     <div class="m-brand">
       <div class="m-logo"><span>RAGDOLL</span><b>SANDBOX</b></div>
-      <div class="m-ver">Alpha 1.0 · physics and gore sandbox</div>
+      <div class="m-ver">Alpha 1.1 · physics and gore sandbox</div>
       <div class="m-paused">Paused</div>
     </div>
     <nav class="m-nav">
@@ -174,7 +174,7 @@
     </section>
     <section class="tab hidden" id="tab-settings">
       <h3>Graphics</h3>
-      <div class="seg" data-setting="graphics"><button data-v="verylow">Very Low</button><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button><button data-v="ultra">Very High</button></div>
+      <div class="seg" data-setting="graphics"><button data-v="minimum">Minimum</button><button data-v="verylow">Very Low</button><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button><button data-v="ultra">Very High</button></div>
       <p class="note" id="gfx-note"></p>
       <div class="gpu" id="gfx-gpu"></div>
       <div class="gpu rec" id="gfx-rec"></div>
@@ -230,6 +230,7 @@
         <tr><td>R</td><td>Reload</td></tr>
         <tr><td>Shift (scoped)</td><td>Hold your breath to steady the sniper scope</td></tr>
         <tr><td>Tab</td><td>Open toolbox</td></tr>
+        <tr><td>I</td><td>Inventory: your character with its armour, your health, ammo, points and items</td></tr>
         <tr><td>B</td><td>Spawn menu (ragdolls and zombies, armour)</td></tr>
         <tr><td>Z</td><td>Slow down time</td></tr>
         <tr><td>V</td><td>Speed up time</td></tr>
@@ -249,7 +250,16 @@
     <section class="tab hidden" id="tab-news">
       <div class="news">
         <p class="news-intro">Every update since the first draft. A new Alpha number is a big update; patches are smaller fixes on that version.</p>
-        <h3>Alpha 1.0 <span class="cur">current</span></h3>
+        <h3>Alpha 1.1 <span class="cur">current</span></h3>
+        <ul>
+          <li><b>Boss fights in VS Undead.</b> Every third wave (3, 6, 9 and on) is a boss instead of a horde: the Big Brute, a hulking zombie about three metres tall. It gets a cutscene: the ground shakes, a huge hand bursts out of the dirt, slams down, the other follows, and it drags itself out of the ground and roars (Space skips it). Its health bar sits at the top of the screen. It stomps after the nearest player and swipes hard enough to throw you back, and every so often it roars and raises 2 to 4 zombies out of the ground around it. Below 40% health it gets angry: faster, harder hits, more roaring. Headshots hurt it most. When it falls, its minions fall with it, and everyone gets a big points bonus.</li>
+          <li><b>Inventory</b> (I). Your character turning on a stand, wearing the armour you have (a plate carrier, and a helmet once you have 40 or more) and holding what you hold; drag it to turn it. Next to it: your health and armour, every round of ammo you carry and what's loaded, your points, wave and kills in VS Undead, and all your items in slots with your hotbar under them.</li>
+          <li><b>Minimum graphics preset</b> (Settings, Graphics). Pure performance and nothing else: the lowest resolution, no shadows or reflections, the fewest blood drops, simple ragdoll shapes up close and no grass or ground mist on the Dead Field. It's never picked for you; choose it when every other preset still stutters.</li>
+          <li><b>Headshots matter in VS Undead.</b> Zombies shrug off much more damage to the body, so a headshot is the way to put them down; enough body shots still drop one, it just takes a lot. A zombie is worth at most 50 points (a few for hits, the rest for the kill, most for a headshot), and the merchant's prices are lower to match.</li>
+          <li><b>Waves build up slower.</b> The first wave is 2 zombies and each wave after it brings 2 more (with friends there are more).</li>
+          <li><b>A little more light on the Dead Field.</b> The field is slightly brighter and the fog a touch thinner, and your flashlight is brighter, reaches further and lights a wider area.</li>
+        </ul>
+        <h3>Alpha 1.0</h3>
         <ul>
           <li><b>VS Undead</b> (VS Undead on the title screen). A co-op zombie mode on its own map: the Dead Field, an abandoned cemetery field at night, no headstones, just dead grass, bare trees, a broken iron fence and thick fog. The zombies come out of the fog from every side in waves, more each time; from wave 3 some of them run, and from wave 4 some wear helmets and vests. You start with your fists and the M1911 with a few spare magazines, and ammo is limited. Play it alone or host a room first and your friends play it with you. If you go down with friends still standing, you get back up when the wave is cleared; when everyone is down, it's over.</li>
           <li><b>Points and the traveling merchant.</b> Hitting zombies earns points, a kill more and a headshot most, plus a bonus for every wave you clear. After each wave the merchant walks in from the fog pushing his cart. Press E on him to spend your points on ammo, guns, bandages, a first aid kit, body armour, grenades, mines and a sentry gun. Press G when you're ready; the next wave starts when everyone is (or when he leaves).</li>
