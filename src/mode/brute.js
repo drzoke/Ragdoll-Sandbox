@@ -279,8 +279,8 @@ export function brutePose(anim, t, { walkPh = 0, speed = 0, side = 1 } = {}) {
     Object.assign(p, mix(p, raise, k * (1 - down)));
     if (down > 0) Object.assign(p, mix(p, smash, down * (1 - back)));
   } else if (anim === 'charge') {
-    // a crouch and a bellow (0 .. 0.7), then a head-down, arms-back sprint
-    const w2 = ss(clamp(t / 0.5)), run = ss(clamp((t - 0.6) / 0.25));
+    // a crouch and a bellow (0 .. 0.9), then a head-down, arms-back sprint
+    const w2 = ss(clamp(t / 0.5)), run = ss(clamp((t - 0.85) / 0.25));
     Object.assign(p, mix(p, { lean: 0.55, aR: -0.2, aL: -0.2, rR: 0.5, rL: 0.5, eR: 1.0, eL: 1.0, jaw: 0.8, head: 0.35, y: HIP_Y - 0.2, tR: 0.4, kR: 0.8, tL: 0.4, kL: 0.8 }, w2 * (1 - run)));
     if (run > 0) {
       const s2 = Math.sin(walkPh), c2 = Math.cos(walkPh);
