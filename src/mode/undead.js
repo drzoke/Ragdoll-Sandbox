@@ -348,7 +348,7 @@ export class UndeadMode {
     }
     spot ||= { x: clamp(c.x + 12, bd.minX + 6, bd.maxX - 6), z: c.z };
     const n = this.players().length, k = w / 3;
-    const max = Math.round(2400 * (1 + 0.75 * (n - 1)) * (1 + 0.6 * (k - 1)));
+    const max = Math.round(1600 * (1 + 0.6 * (n - 1)) * (1 + 0.5 * (k - 1)));
     this.bossInfo = { x: +spot.x.toFixed(2), z: +spot.z.toFixed(2), yaw: +Math.atan2(-(c.x - spot.x), -(c.z - spot.z)).toFixed(3), hp: max, max, wave: w };
     this.setPhase('boss');
     this.dirty = true;

@@ -16,11 +16,11 @@ import { rand, clamp } from '../core/util.js';
  * that raises 2 to 4 of the dead around it. Below 40% health it is enraged: faster at everything.
  */
 const ANIMS = ['emerge', 'idle', 'walk', 'swipe', 'roar', 'die', 'slam', 'charge'];
-const SPEED = 2.9, TURN = 1.9;
-const SWIPE_RANGE = 3.3, SWIPE_HIT = 3.8, SWIPE_DMG = 38;
-const SLAM_RANGE = 6.5, SLAM_RADIUS = 6, SLAM_DMG = 34;
-const CHARGE_MIN = 9, CHARGE_SPEED = 10.5, CHARGE_DMG = 45, CHARGE_T = 2.4;
-const ROAR_FIRST = 4, DIE_T = 6.5;
+const SPEED = 2.6, TURN = 1.8;
+const SWIPE_RANGE = 3.3, SWIPE_HIT = 3.8, SWIPE_DMG = 30;
+const SLAM_RANGE = 6.5, SLAM_RADIUS = 6, SLAM_DMG = 24;
+const CHARGE_MIN = 9, CHARGE_SPEED = 9, CHARGE_DMG = 30, CHARGE_T = 2.2;
+const ROAR_FIRST = 5, DIE_T = 6.5;
 const RADIUS = 0.95;          // how close you can get (its bulk)
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4();
 const UP = new THREE.Vector3(0, 1, 0);
@@ -85,7 +85,7 @@ export class BossFight {
     m.setGlow(3);
     this.foe.health.alive = true; this.foe.removed = false;
     // host: the fight's own timers
-    this.roarCd = ROAR_FIRST; this.swipeCd = 0; this.slamCd = 3; this.chargeCd = 5; this.seekT = 0; this.target = null;
+    this.roarCd = ROAR_FIRST; this.swipeCd = 0; this.slamCd = 5; this.chargeCd = 8; this.seekT = 0; this.target = null;
     this.hitPts = {}; this.sendT = 0; this.enraged = false;
     this.ui.cine.querySelector('.vs-cine-title span').textContent = `Wave ${wave} boss`;
     this.startCine();
@@ -309,7 +309,7 @@ export class BossFight {
     }
     if (a === 'die') { this.sendT -= dt; if (this.sendT <= 0) this.send(); return; }
     this.enraged = this.hp < this.max * 0.4;
-    const rage = this.enraged ? 1.3 : 1;
+    const rage = this.enraged ? 1.2 : 1;
     this.roarCd -= dt; this.swipeCd -= dt; this.slamCd -= dt; this.chargeCd -= dt; this.seekT -= dt;
     const ppl = this.people();
     if (this.seekT <= 0 || (this.target && !ppl.some((p) => p.id === this.target.id))) {
@@ -333,20 +333,20 @@ export class BossFight {
       if (this.at > 1.3 / rage) { this.setAnim('walk'); this.swipeCd = rand(0.5, 1.2) / rage; }
     } else if (a === 'roar') {
       if (this.at > 0.9 && !this.summoned) { this.summoned = true; this.mode.summonMinions(this); }
-      if (this.at > 2.2) { this.setAnim('walk'); this.roarCd = rand(11, 15) / rage; }
+      if (this.at > 2.2) { this.setAnim('walk'); this.roarCd = rand(13, 18) / rage; }
     } else if (a === 'slam') {
       this.yaw += clamp(diff, -0.6 * dt, 0.6 * dt);
       if (this.at > 0.86 && !this.hitDone) { this.hitDone = true; this.slamHit(); }
-      if (this.at > 1.7 / rage) { this.setAnim('walk'); this.slamCd = rand(6, 9) / rage; }
+      if (this.at > 1.7 / rage) { this.setAnim('walk'); this.slamCd = rand(9, 12) / rage; }
     } else if (a === 'charge') {
       // wind up facing them, then run straight; it only turns a little once it's going
-      if (this.at < 0.6) this.yaw += clamp(diff, -3 * dt, 3 * dt);
+      if (this.at < 0.9) this.yaw += clamp(diff, -3 * dt, 3 * dt);
       else {
         this.yaw += clamp(diff, -0.35 * dt, 0.35 * dt);
         moving = CHARGE_SPEED * (this.enraged ? 1.15 : 1);
         if (!this.hitDone) this.chargeHit();
         const blocked = this.chargeBlocked;
-        if (this.at > 0.6 + CHARGE_T || blocked) { this.setAnim('walk'); this.chargeCd = rand(8, 12) / rage; this.swipeCd = 0.6; if (blocked) { this.G.audio.play('slam', this.near(0.8)); } }
+        if (this.at > 0.9 + CHARGE_T || blocked) { this.setAnim('walk'); this.chargeCd = rand(12, 16) / rage; this.swipeCd = 0.6; if (blocked) { this.G.audio.play('slam', this.near(0.8)); } }
       }
     } else {
       // idle / walk: turn to the nearest player and stomp after them
@@ -398,7 +398,7 @@ export class BossFight {
       if (dist > SWIPE_HIT || dist < 1e-3) continue;
       if (d.normalize().dot(f) < 0.35) continue;
       any = true;
-      const dmg = SWIPE_DMG * (this.enraged ? 1.25 : 1);
+      const dmg = SWIPE_DMG * (this.enraged ? 1.15 : 1);
       const from = this.pos.clone().setY(1.5);
       const kb = [d.x * 9, 4.5, d.z * 9];
       if (p.me) { G.vitals.hurt(dmg, { kind: 'zombie' }); this.knock(kb); }
@@ -418,7 +418,7 @@ export class BossFight {
       if (dist > SLAM_RADIUS || p.pos.y > 1.2) continue;          // jump it and it misses you
       const k = 1 - dist / SLAM_RADIUS;
       d.normalize();
-      const dmg = SLAM_DMG * (0.35 + 0.65 * k) * (this.enraged ? 1.2 : 1);
+      const dmg = SLAM_DMG * (0.35 + 0.65 * k) * (this.enraged ? 1.1 : 1);
       const kb = [d.x * 7 * k, 5 + 3 * k, d.z * 7 * k];
       if (p.me) { G.vitals.hurt(dmg, { kind: 'zombie' }); this.knock(kb); }
       else { G.net.hurtFriend(p.id, dmg, { kind: 'zombie', from: c }); G.net.sendTo(p.id, { kb }); }
@@ -447,7 +447,7 @@ export class BossFight {
       const d = _w.set(p.pos.x - this.pos.x, 0, p.pos.z - this.pos.z);
       if (d.length() > 2.1 || d.normalize().dot(f) < 0.2) continue;
       this.hitIds.add(p.id);
-      const dmg = CHARGE_DMG * (this.enraged ? 1.2 : 1);
+      const dmg = CHARGE_DMG * (this.enraged ? 1.1 : 1);
       const side = new THREE.Vector3(-f.z, 0, f.x).multiplyScalar(Math.sign(d.dot(new THREE.Vector3(-f.z, 0, f.x))) || 1);
       const kb = [f.x * 11 + side.x * 5, 6, f.z * 11 + side.z * 5];
       if (p.me) { G.vitals.hurt(dmg, { kind: 'zombie' }); this.knock(kb); }
@@ -497,7 +497,7 @@ export class BossFight {
   /** Host: it takes a hit. zone 'head' hurts it most. Returns the damage done. */
   damage(amount, zone, owner) {
     if (!this.alive || this.anim === 'emerge') return 0;
-    const dmg = amount * (zone === 'head' ? 2 : 1);
+    const dmg = amount * (zone === 'head' ? 2.3 : 1);
     this.hp = Math.max(0, this.hp - dmg);
     this.model.flinch = Math.min(1, this.model.flinch + dmg / 50);
     // points for hurting it (a little, up to a limit per player)
