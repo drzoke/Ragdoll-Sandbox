@@ -131,13 +131,16 @@ export class TitleScene {
     }
     for (const [x, y] of [[-0.7, 1.35], [0.55, 1.1], [0.9, 1.6], [-0.35, 0.95]]) gore.decals.addHole(new THREE.Vector3(SPOT.x + x, y, WALL_Z + 0.001), wallN);
 
-    // let it settle, the blood land and the pools spread
-    for (let i = 0; i < 200; i++) {
-      this.physics.update(1 / 60, 1);
-      rd.update(1 / 60);
-      bal.update(1 / 60, 1 / 60);
-      gore.update(1 / 60, this.camera, 720);
-    }
+    // let it settle, the blood land and the pools spread (in one go, on this thread even when the
+    // physics normally runs in its worker)
+    this.physics.runLocal(() => {
+      for (let i = 0; i < 200; i++) {
+        this.physics.update(1 / 60, 1);
+        rd.update(1 / 60);
+        bal.update(1 / 60, 1 / 60);
+        gore.update(1 / 60, this.camera, 720);
+      }
+    });
     bal.silent = false;
     bal.lastTarget = lastTarget;
     // the scream / gunfire scared the other ragdolls during the set-up: calm them down again

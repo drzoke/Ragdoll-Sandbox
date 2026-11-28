@@ -1,4 +1,4 @@
-import * as CANNON from 'cannon-es';
+import * as CANNON from '../../lib/cannon-es.js';   // a relative path: the physics worker has no import map
 
 const CELL = 6;              // metres per grid cell for the static bodies
 const MAX_CELLS = 400;       // a static body covering more cells than this is tested against everything

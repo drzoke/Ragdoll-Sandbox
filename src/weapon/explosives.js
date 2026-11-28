@@ -89,6 +89,7 @@ export class Explosives {
       collisionFilterGroup: GROUP.DEBRIS, collisionFilterMask: GROUP.STATIC | GROUP.RAGDOLL | GROUP.DEBRIS,
     });
     body.addShape(new CANNON.Sphere(0.034));
+    body.reportContacts = true;      // update() reads its contacts (world.contacts) to settle it on the floor
     body.position.set(pos.x, pos.y, pos.z);
     body.velocity.set(vel.x, vel.y, vel.z);
     body.angularVelocity.set(spin.x, spin.y, spin.z);

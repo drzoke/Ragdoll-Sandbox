@@ -726,7 +726,7 @@ function frame() {
   hud.update(dt, {
     pistol, tool: toolbox.active, player, target, viewerPos,
     debugText: debugOn ? [
-      `fps ${fps.toFixed(0)}  frame ${cpuMs.toFixed(1)} ms  physics ${physics.loadMs.toFixed(1)} ms at ${Math.round(physics.rateHz)} Hz`,
+      `fps ${fps.toFixed(0)}  frame ${cpuMs.toFixed(1)} ms  physics ${physics.loadMs.toFixed(1)} ms at ${Math.round(physics.rateHz)} Hz${physics.remote ? ' (own core)' : ''}`,
       `pos ${player.pos.x.toFixed(2)} ${player.pos.y.toFixed(2)} ${player.pos.z.toFixed(2)}  speed ${player.speed2D.toFixed(2)}`,
       `particles ${gore.particles.alive.size}  pools ${gore.decals.pools.length}  gibs ${gore.gibs.length}  draw calls ${drawCalls}  ragdoll batches ${batchStats().draws} (${batchStats().instances})`,
       r0 ? `${r0.name}: ${r0.brain.state} / ${r0.brain.activity}  pelvis y ${r0.pelvis.position.y.toFixed(2)}` : '',
@@ -739,6 +739,7 @@ function frame() {
   watchResolution(now);
   const t = toolbox.active;
   vitals.update(dt, { input, playing: playing && !toolboxOpen, show: !titleMode && ragdolls.list.some((r) => r.zombie && !r.hidden) });
+  physics.flush();                  // worker mode: send this frame's changes, it steps while we draw
   map.cull(camera);
   updateBatches(scene, camera);     // ragdoll parts and the marks on them, drawn instanced
   if (titleMode || vitals.dead) graphics.render(null, null);
@@ -752,6 +753,9 @@ function frame() {
 await stage(0.92, 'Compiling shaders');
 try { renderer.compile(scene, camera); for (const t of tools) renderer.compile(t.scene, t.camera); } catch { /* optional */ }
 await stage(1, 'Ready');
+// the physics moves to its own processor core (unless switched off in Settings)
+physics.setWorker(settings.get('physicsWorker') !== false);
+settings.onChange((k, v) => { if (k === 'physicsWorker') physics.setWorker(v !== false); });
 frame();
 setTimeout(() => {
   menu.classList.remove('hidden');

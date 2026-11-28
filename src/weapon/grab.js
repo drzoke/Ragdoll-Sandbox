@@ -246,7 +246,7 @@ export class GrabTool {
     this.kick = new Spring(260, 16);
     this.swayX = 0; this.swayY = 0;
     this.lastYaw = player.yaw; this.lastPitch = player.pitch;
-    this._unsub = physics.onStep((h) => this.step(h));
+    this._unsub = physics.addProgram(this);    // the beam's pull at every physics step (core/programs.js)
   }
 
   resize(aspect) { this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); }
@@ -422,21 +422,11 @@ export class GrabTool {
   flashBeam(end) { this.pulse = 1; this.puntEnd.copy(end); }
 
   // ---------------------------------------------------------------- per physics step
-  step(h) {
+  /** The anchor glides toward its target and the field carries part of the held weight. */
+  physicsProgram() {
     const held = this.held;
-    if (!held) return;
-    // Anchor glides toward its target (kinematic: velocity is integrated by the world).
-    const a = this.anchor;
-    const t = this.anchorTarget;
-    const vx = (t.x - a.position.x) * 22, vy = (t.y - a.position.y) * 22, vz = (t.z - a.position.z) * 22;
-    const sp = Math.hypot(vx, vy, vz), cap = 28;
-    const k = sp > cap ? cap / sp : 1;
-    a.velocity.set(vx * k, vy * k, vz * k);
-    // The field carries part of the held body's weight so joints don't stretch from one hand.
-    for (const b of held.set) b.velocity.y += 9.81 * h * G.holdComp;
-    // light damping of spin on the held part
-    const w = held.body.angularVelocity;
-    w.x *= 0.995; w.y *= 0.995; w.z *= 0.995;
+    if (!held) return null;
+    return { kind: 'grab', anchor: this.anchor, target: this.anchorTarget, set: held.set, held: held.body, holdComp: G.holdComp };
   }
 
   // ---------------------------------------------------------------- frame update

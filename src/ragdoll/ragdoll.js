@@ -54,9 +54,6 @@ export const ARMOR_HP = { helmet: 100, vest: 220 };
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _qa = new THREE.Quaternion();
 const _v = new THREE.Vector3(), _w = new THREE.Vector3();
 const X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
-// Torso + head; the share accounts for the limbs hanging off them.
-const CORE = ['pelvis', 'abdomen', 'chest', 'head'];
-const CORE_SHARE = 1.45;
 const qx = (a, out = new THREE.Quaternion()) => out.setFromAxisAngle(X, a);
 const qz = (a, out = new THREE.Quaternion()) => out.setFromAxisAngle(Z, a);
 
@@ -223,7 +220,7 @@ export class Ragdoll {
     this.zombie = false;
     if (zombie) this.makeZombie(origin, yaw);
     else this.brain = this.behavior === 'v2' ? new BrainV2(this, origin, yaw) : new Brain(this, origin, yaw);
-    this._unsub = physics.onStep((h) => this.applyMuscles(h));
+    this._unsub = physics.addProgram(this);    // the muscles (see physicsProgram and core/programs.js)
     // a settled corpse is put to sleep (see settle()); anything touching one wakes it
     this.asleep = false;
     this.stillTime = 0;
@@ -437,87 +434,35 @@ export class Ragdoll {
     }
   }
 
-  applyMuscles(h) {
-    if (this.removed) return;
-    if (this.asleep) {
-      // a blast, the defibrillator or the grab tool pushed a sleeping body: everything wakes up
-      for (const name in this.parts) {
-        const p = this.parts[name];
-        if (p.removed) continue;
-        const v = p.body.velocity, w = p.body.angularVelocity;
-        if (v.x || v.y || v.z || w.x || w.y || w.z) { this.wake(); break; }
-      }
-      if (this.asleep) return;
-    }
-    const KP = 20, KD = 40;
-    for (const name in this.parts) {
+  /**
+   * What the muscles do at every physics step of the next frame, as plain data (see
+   * core/programs.js: the steps run on the main thread or in the physics worker). Reads the
+   * targets the Brain wrote this frame.
+   */
+  physicsProgram() {
+    if (this.removed) return null;
+    const P = this._program || (this._program = {
+      kind: 'muscles', names: Object.keys(this.parts), b: {}, s: {}, sr: {}, att: {},
+      q: this.targetQ, w: this.targetW, pt: this.pelvisTarget, ptv: this.pelvisTargetVel, ppa: this.pelvisPosAxes,
+      ft: this.footTarget, ctv: this.chestTargetVel,
+    });
+    P.asleep = this.asleep;
+    P.wakeAsked = false;
+    for (const name of P.names) {
       const p = this.parts[name];
-      if (p.removed) continue;
-      // Safety net against solver blow-ups (body pinned against the floor by the grab beam etc.)
-      const av = p.body.angularVelocity, wl = av.x * av.x + av.y * av.y + av.z * av.z;
-      if (wl > 1600) av.scale(40 / Math.sqrt(wl), av);
-      let s = this.strength[name] || 0;
-      if (this.flinch[name] > 0) s *= 1 - clamp(this.flinch[name] / 0.35) * 0.92;
-      if (s <= 0.001) continue;
-      const b = p.body;
-      _q.set(b.quaternion.x, b.quaternion.y, b.quaternion.z, b.quaternion.w);
-      _q2.copy(this.targetQ[name]).multiply(_q.invert());
-      if (_q2.w < 0) { _q2.x *= -1; _q2.y *= -1; _q2.z *= -1; _q2.w *= -1; }
-      const sinHalf = Math.sqrt(_q2.x * _q2.x + _q2.y * _q2.y + _q2.z * _q2.z);
-      const angle = 2 * Math.atan2(sinHalf, _q2.w);
-      if (sinHalf > 1e-6) _v.set(_q2.x / sinHalf, _q2.y / sinHalf, _q2.z / sinHalf).multiplyScalar(angle * KP);
-      else _v.set(0, 0, 0);
-      _v.add(this.targetW[name]);
-      const k = Math.min(1, s * KD * h);
-      const w = b.angularVelocity;
-      w.x += (_v.x - w.x) * k; w.y += (_v.y - w.y) * k; w.z += (_v.z - w.z) * k;
+      P.b[name] = p.removed ? null : p.body;
+      const raw = this.strength[name] || 0;
+      const f = this.flinch[name];
+      P.s[name] = f > 0 ? raw * (1 - clamp(f / 0.35) * 0.92) : raw;
+      P.sr[name] = raw;
+      P.att[name] = this.health.parts[name].attached;
     }
-    // Gravity compensation: while the legs are supporting the body, its weight is carried by
-    // "muscles" so the positional servo only corrects small errors. Fades out as support is lost.
-    const gc = this.gravityComp;
-    if (gc > 0.001) {
-      // Only the core: limbs keep their own weight (compensating them makes swinging arms
-      // overshoot, since nothing pulls them back down).
-      for (const name of CORE) {
-        if (!this.health.parts[name].attached) continue;
-        this.parts[name].body.velocity.y += 9.81 * h * gc * CORE_SHARE;
-      }
-    }
-    // Pelvis positional servo ("legs holding the body up")
-    if (this.pelvisPosStrength > 0.001 && this.parts.pelvis) {
-      const b = this.pelvis, t = this.pelvisTarget, a = this.pelvisPosAxes;
-      const k = Math.min(1, this.pelvisPosStrength * 30 * h);
-      const vx = (t.x - b.position.x) * 9 + this.pelvisTargetVel.x;
-      const vy = (t.y - b.position.y) * 11 + this.pelvisTargetVel.y;
-      const vz = (t.z - b.position.z) * 9 + this.pelvisTargetVel.z;
-      b.velocity.x += (vx - b.velocity.x) * k * a.x;
-      b.velocity.y += (vy - b.velocity.y) * k * a.y;
-      b.velocity.z += (vz - b.velocity.z) * k * a.z;
-    }
-    // Foot placement while walking: stance foot stays planted, swing foot steps forward.
-    if (this.footPosStrength > 0.001) {
-      for (const s of ['L', 'R']) {
-        const name = `foot${s}`;
-        if (!this.health.parts[name].attached) continue;
-        const b = this.parts[name].body, t = this.footTarget[s];
-        const k = Math.min(1, this.footPosStrength * (this.strength[name] || 0) * 40 * h);
-        b.velocity.x += ((t.x - b.position.x) * 12 - b.velocity.x) * k;
-        b.velocity.y += ((t.y - b.position.y) * 12 - b.velocity.y) * k;
-        b.velocity.z += ((t.z - b.position.z) * 12 - b.velocity.z) * k;
-      }
-    }
-    // Crawling: arms drag the upper body along the floor.
-    if (this.chestTarget && this.chestPosStrength > 0.001) {
-      const t = this.chestTarget, cv = this.chestTargetVel;
-      for (const [name, mul] of [['chest', 1], ['abdomen', 0.8], ['pelvis', 0.6], ['upperArmL', 0.4], ['upperArmR', 0.4]]) {
-        if (!this.health.parts[name].attached) continue;
-        const b = this.parts[name].body;
-        const k = Math.min(1, this.chestPosStrength * 90 * h * mul);
-        b.velocity.x += (cv.x - b.velocity.x) * k;
-        b.velocity.z += (cv.z - b.velocity.z) * k;
-        if (name === 'chest') b.velocity.y += ((t.y - b.position.y) * 6 - b.velocity.y) * k * 0.5;
-      }
-    }
+    P.gc = this.gravityComp;
+    P.pps = this.parts.pelvis ? this.pelvisPosStrength : 0;
+    P.fps = this.footPosStrength;
+    P.cps = this.chestPosStrength;
+    P.ct = this.chestTarget;
+    return P;
   }
 
   /** Bullet impulse + flinch reaction. */
