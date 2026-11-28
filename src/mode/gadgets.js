@@ -117,7 +117,12 @@ export class Gadgets {
     this.onBlow?.(p);
   }
 
-  zombies() { return this.ragdolls.list.filter((r) => r.zombie && !r.hidden && !r.removed && r.health.alive); }
+  zombies() {
+    const zs = this.ragdolls.list.filter((r) => r.zombie && !r.hidden && !r.removed && r.health.alive);
+    const more = this.extraFoes?.();     // VS Undead: the boss
+    if (more) for (const f of more) zs.push(f);
+    return zs;
+  }
 
   /** host = this game runs the gadgets (the friends' copies only aim). */
   update(dt, host = true) {

@@ -7,7 +7,7 @@ import { BoxBatch, mergeGeometries } from './build.js';
 // all under a low moon and thick fog. The zombies come out of the fog from every side.
 
 const HALF = 38;              // the field is 76 x 76 m
-const FOG = 0x0d1117;
+const FOG = 0x111621;
 
 let seed = 1;
 const rnd = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
@@ -102,12 +102,12 @@ export const CEMETERY = {
   desc: 'An abandoned cemetery field at night, in thick fog.',
   hidden: true,                 // VS Undead only: not in the Maps list
   sky: FOG,
-  fog: [5, 46],
+  fog: [6, 50],
   far: 160,
   bounds: HALF,
   wallHeight: 20,
-  sun: 0.5, sunColor: 0x8ea4d6, sunDir: [-30, 48, -22],
-  hemi: 0.55, hemiSky: 0x40506e, hemiGround: 0x1c1d17, env: 0.1,
+  sun: 0.62, sunColor: 0x8ea4d6, sunDir: [-30, 48, -22],
+  hemi: 0.7, hemiSky: 0x4a5a78, hemiGround: 0x23241c, env: 0.13,
   playerSpawn: { pos: [0, 0, 6], yaw: 0 },
   ragdollSpawn: { pos: [0, 0, -30], yaw: 0 },
   merchantSpot: { pos: [0, 0, -5], yaw: 0 },
@@ -145,7 +145,7 @@ export const CEMETERY = {
       tufts.setMatrixAt(i, m4.compose(p, q, s));
     }
     tufts.frustumCulled = false;
-    add(tufts);
+    add(tufts); map.decor.push(tufts);
 
     // fresh dirt mounds where the graves are (no stones: whatever marked them is long gone)
     const dirtMat = new THREE.MeshStandardMaterial({ color: 0x3a2e22, roughness: 1 });
@@ -233,7 +233,7 @@ export const CEMETERY = {
       m.position.set(r(-HALF, HALF), r(0.25, 1.1), r(-HALF, HALF));
       m.renderOrder = 3;
       m.userData.v = new THREE.Vector2(r(-0.35, 0.35), r(-0.35, 0.35));
-      add(m); mists.push(m);
+      add(m); mists.push(m); map.decor.push(m);
     }
 
     // the moon, low over the trees

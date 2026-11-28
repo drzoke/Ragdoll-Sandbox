@@ -193,6 +193,11 @@ export class Ballistics {
   ghostHit(b, hit, dir) {
     const ud = hit.object.userData;
     if (ud.glass) { b.skip.add(hit.object); return hit.point.clone().addScaledVector(dir, 0.15); }
+    if (ud.brute) {
+      ud.brute.fight?.onBullet(b, hit, dir, ud.zone, true);
+      if (b.mine) this.sound('flesh');
+      return null;
+    }
     if (ud.ragdoll) {
       if (b.mine) { this.lastTarget = ud.ragdoll; this.sound(ud.armor ? 'clink' : 'flesh'); }
       return null;
@@ -281,6 +286,18 @@ export class Ballistics {
     const obj = hit.object;
     const ud = obj.userData;
     if (ud.armor) return this.armorHit(b, hit, dir);
+    if (ud.brute) {
+      // VS Undead's Big Brute: one big body, no anatomy; the bullet stops in it
+      if ((b.pellet || b.fragment) && !b.slowed) {
+        b.slowed = true;
+        b.energy *= b.pellet ? clamp(1.15 - b.traveled / 30, 0.3, 1.15) : clamp(1.1 - b.traveled / 22, 0.35, 1.1);
+      }
+      ud.brute.fight?.onBullet(b, hit, dir, ud.zone);
+      b.bloody = 1;
+      this.sound('flesh');
+      if (b.size >= 0.9 || b.pellet) this.marker(b, ud.zone === 'head');
+      return null;
+    }
     if (ud.ragdoll) {
       const r = ud.ragdoll;
       const partName = ud.part;

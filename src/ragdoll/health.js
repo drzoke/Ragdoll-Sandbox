@@ -5,6 +5,7 @@ import { CONFIG } from '../config.js';
 import { clamp, rayEllipsoid, segSegDistance } from '../core/util.js';
 
 const PH = CONFIG.physiology;
+const TORSO_PARTS = new Set(['chest', 'abdomen', 'pelvis']);
 
 /** Ray (local space) vs the part's collision volume. Returns {tIn, tOut} or null. */
 export function rayThroughPart(def, o, d) {
@@ -94,6 +95,11 @@ export class Health {
    * @param energy 0..1 remaining bullet energy
    * @returns result describing what happened (used for gore and for continuing the bullet)
    */
+  /** VS Undead: the body (chest, belly, hips) of a zombie shrugs off part of each hit (bodyResist), the head none. */
+  tissueMul(partName) {
+    return this.bodyResist && TORSO_PARTS.has(partName) ? this.bodyResist : 1;
+  }
+
   bulletHit(partName, o, d, energy, { dismember = true } = {}) {
     const def = PART_BY_NAME[partName];
     const part = this.parts[partName];
@@ -150,7 +156,7 @@ export class Health {
     // Tissue
     const tissueDmg = (20 + path * 60) * energy * (0.85 + Math.random() * 0.3);
     if (part.tissue <= 0) part.overkill = (part.overkill || 0) + tissueDmg; // already destroyed tissue
-    part.tissue = Math.max(0, part.tissue - tissueDmg);
+    part.tissue = Math.max(0, part.tissue - tissueDmg * this.tissueMul(partName));
     part.hits++;
     res.bleed += 0.5 + path * 2;
     res.pain = (def.limb === 'torso' ? 26 : def.limb === 'head' ? 32 : 20) * energy;
@@ -247,7 +253,7 @@ export class Health {
     const sev = speed - 5;
     const dmg = sev * sev * 0.9 + sev * 2;
     out.damage = dmg;
-    part.tissue = Math.max(0, part.tissue - dmg * 0.35);
+    part.tissue = Math.max(0, part.tissue - dmg * 0.35 * this.tissueMul(partName));
     if (part.attached) {
       this.rawPain += Math.min(40, dmg * 0.5);
       this.adrenaline = Math.min(1, this.adrenaline + 0.1);
@@ -284,7 +290,7 @@ export class Health {
     const out = { knockout: false, fractured: false, bleed: false };
     const part = this.parts[partName];
     if (!part.attached && partName !== 'head') { part.tissue = Math.max(0, part.tissue - 6 * power); return out; }
-    part.tissue = Math.max(0, part.tissue - 7 * power);
+    part.tissue = Math.max(0, part.tissue - 7 * power * this.tissueMul(partName));
     this.rawPain += 7 + 12 * power;
     this.adrenaline = Math.min(1, this.adrenaline + 0.12);
     this.lastHitTime = this.time; this.lastHitPart = partName;
@@ -322,7 +328,7 @@ export class Health {
     const part = this.parts[partName];
     const anat = ANATOMY[partName];
     const dmg = 95 * k * k + 22 * k;
-    part.tissue = Math.max(0, part.tissue - dmg);
+    part.tissue = Math.max(0, part.tissue - dmg * this.tissueMul(partName));
     if (part.tissue <= 0) part.overkill = (part.overkill || 0) + dmg * 0.5;
     if (part.attached) {
       this.rawPain += 30 * k;
@@ -488,7 +494,7 @@ export class Health {
     // Tissue, pain, bleeding
     const tissueDmg = (kind === 'stab' ? 22 + 30 * power : 14 + 18 * power) * (0.85 + Math.random() * 0.3);
     if (part.tissue <= 0) part.overkill = (part.overkill || 0) + tissueDmg * 0.5;
-    part.tissue = Math.max(0, part.tissue - tissueDmg);
+    part.tissue = Math.max(0, part.tissue - tissueDmg * this.tissueMul(partName));
     part.hits++;
     res.bleed += kind === 'stab' ? 1.6 + depth * 8 : 1.4 + (part.cutDepth || 0) * 22;
     res.pain = (kind === 'stab' ? 28 : 20) * (0.6 + power * 0.6) * (partName === 'head' ? 1.2 : 1);
@@ -528,7 +534,7 @@ export class Health {
   blunt(partName, k, { helmet = false } = {}) {
     const out = { fractured: false };
     const part = this.parts[partName];
-    part.tissue = Math.max(0, part.tissue - 5 * k);
+    part.tissue = Math.max(0, part.tissue - 5 * k * this.tissueMul(partName));
     if (part.attached) { this.rawPain += 6 + 16 * k; this.adrenaline = Math.min(1, this.adrenaline + 0.2); }
     this.lastHitTime = this.time; this.lastHitPart = partName;
     if (helmet) {

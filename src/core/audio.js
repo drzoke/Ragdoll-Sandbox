@@ -275,6 +275,31 @@ export class Audio {
         break;
       }
       case 'snarl': this._tone(t, 140, 0.35, { gain: 0.18, type: 'sawtooth', endFreq: 90 }); this._noise(t, 0.35, { type: 'bandpass', freq: 900, q: 2, gain: 0.3, attack: 0.03, decay: 0.3 }); break;
+      // ---- the Big Brute ----
+      case 'roar': {   // a huge, long, rasping bellow
+        this._tone(t, 62, 2.2, { gain: 0.42, type: 'sawtooth', attack: 0.12, endFreq: 44 });
+        this._tone(t, 93, 2.0, { gain: 0.22, type: 'sawtooth', attack: 0.15, endFreq: 70 });
+        this._tone(t, 31, 2.3, { gain: 0.5, attack: 0.2, endFreq: 26 });
+        this._noise(t, 2.2, { type: 'bandpass', freq: 520, q: 1.4, gain: 0.55, attack: 0.18, decay: 2.0, toReverb: true });
+        this._noise(t + 0.1, 1.9, { type: 'bandpass', freq: 1500, q: 2, gain: 0.22, attack: 0.25, decay: 1.6 });
+        break;
+      }
+      case 'growl': this._tone(t, 58, 0.9, { gain: 0.3, type: 'sawtooth', attack: 0.08, endFreq: 48 }); this._noise(t, 0.9, { type: 'bandpass', freq: 420, q: 2, gain: 0.32, attack: 0.1, decay: 0.8 }); break;
+      case 'rumble':   // the ground shaking
+        this._tone(t, 34, 2.6, { gain: 0.55, attack: 0.6, endFreq: 28 });
+        this._noise(t, 2.8, { freq: 160, gain: 0.7, attack: 0.8, decay: 2.0, toReverb: true });
+        for (let i = 0; i < 8; i++) this._noise(t + 0.4 + Math.random() * 2, 0.08, { type: 'bandpass', freq: 700 + Math.random() * 900, q: 2, gain: 0.12, decay: 0.07 });
+        break;
+      case 'slam':     // a huge fist into the dirt
+        this._tone(t, 52, 0.5, { gain: 0.8, endFreq: 24 });
+        this._noise(t, 0.45, { freq: 420, gain: 0.9, decay: 0.38, toReverb: true });
+        for (let i = 0; i < 5; i++) this._noise(t + 0.1 + Math.random() * 0.5, 0.05, { type: 'bandpass', freq: 900 + Math.random() * 1200, q: 2, gain: 0.12, decay: 0.04 });
+        break;
+      case 'swing': this._noise(t, 0.4, { type: 'bandpass', freq: 380, q: 0.8, gain: 0.5, attack: 0.12, decay: 0.26 }); break;
+      case 'bossDown':
+        this._tone(t, 48, 2.6, { gain: 0.42, type: 'sawtooth', attack: 0.05, endFreq: 22 });
+        this._noise(t, 2.4, { type: 'bandpass', freq: 380, q: 1.5, gain: 0.4, decay: 2.2, toReverb: true });
+        break;
       case 'bite': this._noise(t, 0.12, { freq: 800, gain: 0.8, decay: 0.1 }); this._noise(t + 0.06, 0.18, { freq: 400, gain: 0.6, decay: 0.15 }); this._tone(t, 100, 0.1, { gain: 0.3, endFreq: 50 }); break;
       case 'hurt': this._noise(t, 0.14, { freq: 500, gain: 0.7, decay: 0.12 }); this._tone(t, 160, 0.18, { gain: 0.25, type: 'triangle', endFreq: 90 }); break;
       case 'heartbeat': this._tone(t, 55, 0.12, { gain: 0.5, endFreq: 40 }); this._tone(t + 0.18, 50, 0.12, { gain: 0.35, endFreq: 38 }); break;
