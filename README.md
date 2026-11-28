@@ -4,7 +4,7 @@
 
 ![screenshot](screenshot.png)
 
-A first-person physics sandbox: humanoid ragdolls and zombies, guns from a flintlock musket to a scoped sniper rifle, two maps (a test range and a 20-floor skyscraper), and a dynamic damage / gore / physiology model.
+A first-person physics sandbox: humanoid ragdolls and zombies, guns from a flintlock musket to a scoped sniper rifle, two maps (a test range and a 20-floor skyscraper), drivable vehicles, saves, multiplayer with chat, and a dynamic damage / gore / physiology model. **VS Undead** is a co-op zombie-wave mode on its own foggy cemetery field, with points, a traveling merchant, supply drops and its own guns, mines and a sentry gun.
 Built with **three.js r187** and **cannon-es 0.20**. Both are bundled locally in `lib/`, so it needs no internet.
 
 ## Running it
@@ -33,7 +33,10 @@ python3 -m http.server 8000      # or: npx serve .
 | B | Spawn menu (ragdolls, zombies and armour) |
 | Z | Slow time down (down to 0.01×) |
 | V | Speed time up (up to 3×) |
-| E | Use what you're looking at: buttons, the elevator (call it, pick a floor), the roof ladder |
+| E | Use what you're looking at: buttons, the elevator (call it, pick a floor), the roof ladder, a vehicle, a supply crate, the merchant |
+| T / Enter | Chat (in a multiplayer room) |
+| G | VS Undead: ready for the next wave |
+| W S / A D / Space / C / click | Driving: throttle and reverse / steer / handbrake / camera / horn (E gets out) |
 | X | X-ray / vitals panel: open, press again for the other view (Dynamic 3D / Flat), again to close (Shift + X also switches) |
 | H | Hide the tool controls list on the left |
 | F3 | Debug overlay |
@@ -162,7 +165,13 @@ Settings are saved in the browser (localStorage).
 - **Skyscraper** (`world/tower.js`, `world/towerTextures.js`, `world/elevator.js`, `world/glass.js`, `ui/floorpicker.js`): procedural city block and 21-level tower with canvas-painted textures (asphalt, carpet, ceiling tiles, facades, signs), per-floor culling (only your floor is drawn from inside), breakable glass panes (instanced, with flying shards), an elevator with landing doors, call buttons, floor indicators and a floor picker, and a scripted ladder climb to the roof.
 - **Sniper and musket** (`weapon/modelRifles.js`, `weapon/sniper.js`, `weapon/musket.js`): procedural rifle (bolt, scope, magazine, muzzle brake) and musket (lock with cock, frizzen and pan, ramrod, brass fittings); the scope is a DOM overlay and the musket smoke is a pool of world-space sprites.
 - **Zombies** (`ragdoll/zombie.js`, `Health.updateUndead`, `Ragdoll.makeZombie`, `RagdollManager.reanimate`): a brain that hunts the nearest living person on its floor, an undead health mode, the bite infection and reanimation.
-- **Player health** (`player/vitals.js`): health, regeneration, the damage vignette, the death screen and respawn.
+- **Player health** (`player/vitals.js`): health, regeneration, body armour (VS Undead), the damage vignette, the death screen and respawn.
+- **VS Undead** (`mode/undead.js`): the wave loop (prep, wave, break, game over), host-authoritative points and kill credit (`Ragdoll.lastBy`, set by bullets, blasts and melee), zombie spawning at the fog edge with an alive cap that follows the graphics preset and the physics load, body cleanup, supply crates, the merchant's shop and its co-op sync (`{t:'vs'}` state from the host, `vsRequest` / `sendTo` for buying, crates and gadgets). Zombies in this mode also go down from heavy body damage (`Health.bodyDeath`).
+- **Dead Field** (`world/cemetery.js`): the VS Undead map. Hidden from the Maps list (`hidden: true`).
+- **Merchant, cart and crates** (`mode/props.js`), **mines and the sentry gun** (`mode/gadgets.js`), **automatic guns** (`weapon/autogun.js`, `weapon/modelAuto.js`) and the shared **ammo store** (`weapon/ammo.js`: unlimited in the sandbox, counted in VS Undead).
+- **Vehicles** (`vehicle/vehicles.js`, `vehicle/models.js`): kinematic cars with a simple bicycle model, wall collisions, a chase camera, and running people over through `Health.impact`.
+- **Saves** (`ui/saves.js`): scenes kept in `localStorage` (index plus one entry per save, with a thumbnail).
+- **Chat** (`ui/chat.js`): the multiplayer text chat.
 
 ## Layout
 
@@ -181,7 +190,9 @@ src/materials.js         material detail (grime, wear, normal maps) per preset
 src/ui/preview.js        spinning item previews for the toolbox
 src/ragdoll/             skeleton layout, anatomy data, health/physiology, brain/AI (Classic, V2, zombie), ragdoll body, manager, batched drawing
 src/gore/                particles, decals/pools, gore orchestration (stumps, organs, gibs, bleeding)
-src/ui/                  HUD, X-ray, touch controls (touch.js), spawn menu, title scene
+src/ui/                  HUD, X-ray, touch controls (touch.js), spawn menu, title scene, saves, chat
+src/mode/                VS Undead: waves, merchant, crates, mines and the sentry gun
+src/vehicle/             drivable vehicles
 src/net/                 multiplayer: connections (transport.js), data formats (codec.js), the other players' figures (avatar.js), host and friend logic (net.js)
 src/core/device.js       phone / tablet detection
 src/core/bench.js        GPU / CPU check and recommended graphics preset

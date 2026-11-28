@@ -300,7 +300,7 @@ export class UndeadMode {
   endWave() {
     const bonus = 100 + 25 * this.wave;
     for (const id of this.players()) this.addPts(id, bonus, `Wave cleared +${bonus}`);
-    this.timer = BREAK;
+    this.timer = BREAK; this.left = 0;
     this.ready.clear();
     this.setPhase('break');
     this.dirty = true;
@@ -326,9 +326,9 @@ export class UndeadMode {
     const people = this.peoplePos();
     let pos = null;
     for (let i = 0; i < 16 && !pos; i++) {
-      const a = Math.random() * Math.PI * 2, R = rand(28, 35);
+      const a = Math.random() * Math.PI * 2, R = rand(22, 32);
       const x = clamp(Math.cos(a) * R, b.minX + 2, b.maxX - 2), z = clamp(Math.sin(a) * R, b.minZ + 2, b.maxZ - 2);
-      if (people.some((p) => Math.hypot(p.x - x, p.z - z) < 16)) continue;
+      if (people.some((p) => Math.hypot(p.x - x, p.z - z) < 15)) continue;
       if (G.map.near(x - 0.6, 0.1, z - 0.6, x + 0.6, 1.5, z + 0.6).some((c) => x > c.min.x - 0.5 && x < c.max.x + 0.5 && z > c.min.z - 0.5 && z < c.max.z + 0.5)) continue;
       pos = new THREE.Vector3(x, 0, z);
     }
@@ -340,7 +340,7 @@ export class UndeadMode {
     const r = G.ragdolls.spawn([pos.x, 0, pos.z], yaw, { zombie: true, armor: { helmet, vest } });
     const br = r.brain;
     br.sight = 400;
-    br.chaseMul = runner ? rand(1.9, 2.3) : rand(1.0, 1.3) + Math.min(0.3, 0.025 * w);
+    br.chaseMul = runner ? rand(2.5, 2.9) : rand(1.35, 1.65) + Math.min(0.35, 0.03 * w);
     br.dmgMul = Math.min(2, 1 + 0.06 * (w - 1));
     r.health.bodyDeath = 0.3;
     r.vs = { born: this.time, runner, hitPts: 0 };
@@ -692,14 +692,20 @@ export class UndeadMode {
     // once there he steps out beside the cart and turns to whoever is closest
     const side = _v.set(-dir.z, 0, dir.x);
     const mp = walking ? pos : pos.clone().addScaledVector(dir, 1.2).addScaledVector(side, 1.2);
-    m.root.position.lerp(mp, walking ? 1 : Math.min(1, dt * 1.5));
+    let stepping = false;
+    if (walking) m.root.position.copy(mp);
+    else {
+      const d = _v.copy(mp).sub(m.root.position).setY(0), len = d.length();
+      if (len > 0.03) { stepping = true; m.root.position.addScaledVector(d, Math.min(1, (1.1 * dt) / len)); }
+    }
     const P = G.player.pos;
-    const want = walking ? face(go) : face(_v.set(m.root.position.x - P.x, 0, m.root.position.z - P.z).negate());
+    const want = walking ? face(go) : stepping ? face(_v.copy(mp).sub(m.root.position)) : face(_v.set(P.x - m.root.position.x, 0, P.z - m.root.position.z));
     m.root.rotation.y += Math.atan2(Math.sin(want - m.root.rotation.y), Math.cos(want - m.root.rotation.y)) * Math.min(1, dt * 4);
     const t = this.time;
-    m.body.position.y = walking ? Math.abs(Math.sin(t * 6)) * 0.04 : Math.sin(t * 1.5) * 0.008;
-    m.body.rotation.z = walking ? Math.sin(t * 6) * 0.03 : 0;
-    m.lantern.rotation.z = Math.sin(t * (walking ? 6 : 1.3)) * (walking ? 0.25 : 0.06);
+    const moving = walking || stepping;
+    m.body.position.y = moving ? Math.abs(Math.sin(t * 6)) * 0.04 : Math.sin(t * 1.5) * 0.008;
+    m.body.rotation.z = moving ? Math.sin(t * 6) * 0.03 : 0;
+    m.lantern.rotation.z = Math.sin(t * (moving ? 6 : 1.3)) * (moving ? 0.25 : 0.06);
     for (const w of cart.wheels) w.rotation.x -= (walking ? 1 : 0) * dt * 2.2;
     const glow = this.mState === 'away' ? 0 : 1;
     m.light.intensity = 5 * glow * (0.9 + 0.1 * Math.sin(t * 11));
@@ -755,11 +761,12 @@ export class UndeadMode {
       if (c.landed && !v.landed) this.land(v, c);
       if (v.landed) {
         // the parachute folds down beside it, the flare smokes
-        v.fold = Math.min(1, (v.fold || 0) + dt / 1.8);
-        const ch = v.model.chute;
-        ch.scale.set(1 + v.fold * 0.3, Math.max(0.02, 1 - v.fold), 1 + v.fold * 0.3);
-        ch.position.set(v.fold * 1.6, 0, 0);
-        ch.rotation.z = -v.fold * 0.9;
+        v.fold = Math.min(1, (v.fold || 0) + dt / 1.4);
+        const ch = v.model.chute, f = v.fold * v.fold;
+        // the canopy loses its air and crumples down beside the crate
+        ch.scale.setScalar(Math.max(0.01, 1 - f));
+        ch.position.set(v.fold * 1.2, 0, 0);
+        ch.rotation.z = -v.fold * 1.2;
         if (v.fold >= 1) ch.visible = false;
         v.smokeT = (v.smokeT || 0) - dt;
         if (v.smokeT <= 0) {

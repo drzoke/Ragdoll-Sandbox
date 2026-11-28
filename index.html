@@ -90,7 +90,7 @@
 <div id="drive" class="hidden"></div>
 <div id="drive-keys"><span><kbd>W</kbd><kbd>S</kbd> drive</span><span><kbd>A</kbd><kbd>D</kbd> steer</span><span><kbd>Space</kbd> handbrake</span><span><kbd>C</kbd> camera</span><span><kbd>Click</kbd> horn</span><span><kbd>E</kbd> get out</span></div>
 <div id="chat" class="hidden quiet"><div id="chat-log"></div><form id="chat-form" autocomplete="off"><input id="chat-in" placeholder="Say something (Enter sends, Esc closes)" spellcheck="false" enterkeyhint="send"><button id="chat-send" type="submit">Send</button></form></div>
-<div id="version">Alpha 0.9<small>Patch 7</small></div>
+<div id="version">Alpha 1.0</div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
@@ -125,7 +125,7 @@
   <div class="m-side">
     <div class="m-brand">
       <div class="m-logo"><span>RAGDOLL</span><b>SANDBOX</b></div>
-      <div class="m-ver">Alpha 0.9 · physics and gore sandbox</div>
+      <div class="m-ver">Alpha 1.0 · physics and gore sandbox</div>
       <div class="m-paused">Paused</div>
     </div>
     <nav class="m-nav">
@@ -212,7 +212,8 @@
         <tr><td>Aim</td><td>Aim down sights (tap to toggle). Hook with fists, lob a grenade, grab or drop with Grab.</td></tr>
         <tr><td>Reload / Inspect</td><td>Guns. With Grab they pull what you hold closer or push it farther. Looking through the sniper scope they become Breath (hold to steady) and Zoom.</td></tr>
         <tr><td>Jump / Crouch</td><td>Crouch stays on until you tap it again</td></tr>
-        <tr><td>Press</td><td>Appears when you look at something you can use (buttons, the elevator, the roof ladder)</td></tr>
+        <tr><td>Press</td><td>Appears when you look at something you can use (buttons, the elevator, the roof ladder, a vehicle, a supply crate, the merchant)</td></tr>
+        <tr><td>Room indicator</td><td>Tap it to chat in a multiplayer room</td></tr>
         <tr><td>Bottom bar</td><td>Tap an item to switch to it</td></tr>
         <tr><td>Top left</td><td>Pause, toolbox, spawn menu</td></tr>
         <tr><td>Top right</td><td>Slow down time, speed up time, x-ray (tap again for the flat view, again to close)</td></tr>
@@ -232,7 +233,10 @@
         <tr><td>B</td><td>Spawn menu (ragdolls and zombies, armour)</td></tr>
         <tr><td>Z</td><td>Slow down time</td></tr>
         <tr><td>V</td><td>Speed up time</td></tr>
-        <tr><td>E</td><td>Use: press a button, call or ride the elevator, climb the ladder</td></tr>
+        <tr><td>E</td><td>Use: press a button, call or ride the elevator, climb the ladder, get in or out of a vehicle, open a supply crate, trade with the merchant</td></tr>
+        <tr><td>T / Enter</td><td>Chat (in a multiplayer room)</td></tr>
+        <tr><td>G</td><td>VS Undead: ready for the next wave</td></tr>
+        <tr><td>Driving</td><td>W / S drive and reverse, A / D steer, Space handbrake, C camera, click horn, E get out</td></tr>
         <tr><td>X</td><td>X-ray panel: open, press again for the other view (3D / Flat), again to close</td></tr>
         <tr><td>H</td><td>Hide the tool controls list</td></tr>
         <tr><td>F3</td><td>Debug info</td></tr>
@@ -245,7 +249,19 @@
     <section class="tab hidden" id="tab-news">
       <div class="news">
         <p class="news-intro">Every update since the first draft. A new Alpha number is a big update; patches are smaller fixes on that version.</p>
-        <h3>Alpha 0.9 <span class="cur">current</span></h3>
+        <h3>Alpha 1.0 <span class="cur">current</span></h3>
+        <ul>
+          <li><b>VS Undead</b> (VS Undead on the title screen). A co-op zombie mode on its own map: the Dead Field, an abandoned cemetery field at night, no headstones, just dead grass, bare trees, a broken iron fence and thick fog. The zombies come out of the fog from every side in waves, more each time; from wave 3 some of them run, and from wave 4 some wear helmets and vests. You start with your fists and the M1911 with a few spare magazines, and ammo is limited. Play it alone or host a room first and your friends play it with you. If you go down with friends still standing, you get back up when the wave is cleared; when everyone is down, it's over.</li>
+          <li><b>Points and the traveling merchant.</b> Hitting zombies earns points, a kill more and a headshot most, plus a bonus for every wave you clear. After each wave the merchant walks in from the fog pushing his cart. Press E on him to spend your points on ammo, guns, bandages, a first aid kit, body armour, grenades, mines and a sentry gun. Press G when you're ready; the next wave starts when everyone is (or when he leaves).</li>
+          <li><b>Supply drops.</b> Every minute or so during a wave a crate comes down on a parachute near one of you, with a red flare smoking on top. Press E to open it: ammo for the guns you carry, and sometimes grenades, a mine, armour, bandages, points or a whole new gun.</li>
+          <li><b>New guns for VS Undead.</b> An assault rifle with a red dot (full auto, 30 rounds), a submachine gun (very fast, on the pistol's .45 rounds) and a semi-automatic combat shotgun with an 8-shell box magazine. Each has its own reload and aim, and they're only sold by the merchant or found in crates.</li>
+          <li><b>Proximity mines and the sentry gun.</b> Put a mine down in front of you and it goes off when a zombie steps near (or when you shoot it). Set up the sentry gun and it turns to shoot every zombie it can see, aiming for the head, until its 180 rounds run out. Both are VS Undead only.</li>
+          <li><b>Vehicles</b> (spawn menu, Vehicles). A pickup truck and a dune buggy. Press E at the door to get in: W and S drive and reverse, A and D steer, Space is the handbrake, C switches between the chase camera and the driver's seat, click sounds the horn, E gets you out. Hitting someone at speed throws them and breaks bones. In multiplayer everyone sees the cars and who's driving.</li>
+          <li><b>Chat in multiplayer.</b> Press T or Enter in a room to type a message to everyone (on a phone, tap the room indicator at the top). Players joining and leaving show up there too.</li>
+          <li><b>Saves</b> (Saves in the menu). Save the scene as it is with one click: the map, every ragdoll and zombie with their wounds, missing limbs and armour, the vehicles and where you stood. Saves stay in this browser, so there's nothing to copy. Load one to pick up where you left off; "Last session" saves itself when you close the page.</li>
+          <li><b>Higher jump.</b> You jump a good bit higher, enough to get onto a waist-high block.</li>
+        </ul>
+        <h3>Alpha 0.9</h3>
         <ul>
           <li><b>Skyscraper map.</b> Pick it under Maps in the menu. You start on a city street in front of a 20-floor office tower: walk into the lobby, call the elevator, choose a floor and ride up. Every floor is an open-plan office with desks, a meeting room and a lounge. On floor 20 a ladder goes up through a hatch to the roof, with a helipad and the whole city below. Windows shatter when you shoot them or throw someone through them, and the fall is real.</li>
           <li><b>Sniper rifle.</b> A bolt-action rifle with a 4–12× scope. Right click to look through it, scroll (or F) to zoom, and hold Shift to hold your breath and steady the drift. It works the bolt after every shot, and each round goes through bodies, armour and glass.</li>

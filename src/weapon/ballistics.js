@@ -56,6 +56,43 @@ export class Ballistics {
     ];
   }
 
+  /** What bullets hit besides the ragdolls (built once per update). */
+  staticTargets() {
+    const out = this._static || (this._static = []);
+    out.length = 0;
+    for (const m of this.map.solidMeshes) out.push(m);
+    for (const b of this.buttons) for (const m of b.meshes) out.push(m);
+    for (const gb of this.gore.gibs) out.push(gb.mesh);
+    if (this.explosives) for (const m of this.explosives.meshes()) out.push(m);
+    if (this.vehicles) for (const m of this.vehicles.meshes()) out.push(m);
+    if (this.extraTargets) for (const m of this.extraTargets()) out.push(m);
+    return out;
+  }
+
+  /**
+   * The targets for one bullet this frame: only the ragdolls near its path (a horde of zombies is
+   * hundreds of body part meshes), plus everything else.
+   */
+  targetsFor(b, dt, statics) {
+    const out = this._near || (this._near = []);
+    out.length = 0;
+    const ax = b.pos.x, ay = b.pos.y, az = b.pos.z;
+    const dx = b.vel.x * dt, dy = b.vel.y * dt, dz = b.vel.z * dt;
+    const len2 = dx * dx + dy * dy + dz * dz || 1e-9;
+    for (const r of this.ragdolls.list) {
+      if (r.hidden || r.removed) continue;
+      const p = r.parts.pelvis.body.position;
+      let t = ((p.x - ax) * dx + (p.y - ay) * dy + (p.z - az) * dz) / len2;
+      t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const ex = ax + dx * t - p.x, ey = ay + dy * t - p.y, ez = az + dz * t - p.z;
+      // body parts torn off can be anywhere: those ragdolls are always checked
+      if (ex * ex + ey * ey + ez * ez > 6.25 && !r.health.decapitated && Object.values(r.health.parts).every((hp) => hp.attached)) continue;
+      for (const m of r.meshes()) out.push(m);
+    }
+    for (const m of statics) out.push(m);
+    return out;
+  }
+
   /**
    * Fire a projectile from origin along dir. visualFrom = muzzle position for the tracer start.
    * opts: energy (0..1, penetration and damage), impulse (push on the body part), size (visual
@@ -95,8 +132,10 @@ export class Ballistics {
 
   /** dt = world (time-scaled) seconds, realDt = wall-clock seconds (for streak length). */
   update(dt, realDt) {
+    const statics = this.bullets.length ? this.staticTargets() : null;
     for (const b of this.bullets) {
       if (b.dead) continue;
+      const targets = this.targetsFor(b, dt, statics);
       b.age += dt;
       b.lastDt = dt;
       b.vel.y -= 9.81 * dt;
@@ -106,7 +145,7 @@ export class Ballistics {
         _dir.copy(b.vel).normalize();
         this.raycaster.set(b.pos, _dir);
         this.raycaster.far = remaining;
-        const hit = this.raycaster.intersectObjects(this.targets(), false).find((h) => !b.skip.has(h.object));
+        const hit = this.raycaster.intersectObjects(targets, false).find((h) => !b.skip.has(h.object));
         if (!hit) { b.pos.addScaledVector(_dir, remaining); b.traveled += remaining; break; }
         b.pos.copy(hit.point);
         b.traveled += hit.distance;

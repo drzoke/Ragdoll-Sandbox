@@ -12,9 +12,14 @@ export const damp = (rate, dt) => 1 - Math.exp(-rate * dt);
 export class Spring {
   constructor(stiffness = 120, damping = 14) { this.k = stiffness; this.c = damping; this.x = 0; this.v = 0; this.target = 0; }
   update(dt) {
-    const a = (this.target - this.x) * this.k - this.v * this.c;
-    this.v += a * dt;
-    this.x += this.v * dt;
+    // small steps: one big step at a low frame rate makes a stiff spring blow up
+    for (let left = dt; left > 1e-6;) {
+      const h = Math.min(left, 1 / 120);
+      const a = (this.target - this.x) * this.k - this.v * this.c;
+      this.v += a * h;
+      this.x += this.v * h;
+      left -= h;
+    }
     return this.x;
   }
   kick(v) { this.v += v; }

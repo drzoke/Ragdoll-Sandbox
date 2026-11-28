@@ -23,21 +23,21 @@ export const AUTO_GUNS = {
     name: 'Assault Rifle', short: 'Rifle', build: buildRifle, ammo: 'rifle', ammoName: '5.56 mm', mag: 30, rpm: 690, auto: true,
     energy: 1.3, impulse: 12, speed: 900, range: 160, size: 1.05, glow: 0.075,
     hip: 0.03, ads: 0.0035, recoil: [0.022, 0.009], kick: 1.1, sound: 'rifle', reload: 2.1,
-    hipPos: [0.12, -0.15, -0.36], adsZ: -0.22, sightY: 0.1, grip: [0, 0.03, -0.03], fov: 0.8,
+    hipPos: [0.13, -0.17, -0.46], adsZ: -0.26, sightY: 0.1, grip: [0, 0.03, -0.03], fov: 0.8,
     casing: () => buildSmallCasing(0.045, 0.0046),
   },
   smg: {
     name: 'Submachine Gun', short: 'SMG', build: buildSMG, ammo: 'pistol', ammoName: '.45 ACP', mag: 32, rpm: 900, auto: true,
     energy: 0.92, impulse: 9, speed: 280, range: 110, size: 0.9, glow: 0.07,
     hip: 0.038, ads: 0.009, recoil: [0.014, 0.012], kick: 0.75, sound: 'smg', reload: 1.8,
-    hipPos: [0.12, -0.15, -0.34], adsZ: -0.24, sightY: 0.098, grip: [0, 0.03, -0.03], fov: 0.86,
+    hipPos: [0.13, -0.17, -0.42], adsZ: -0.26, sightY: 0.093, grip: [0, 0.03, -0.03], fov: 0.86,
     casing: () => buildSmallCasing(0.028, 0.0058),
   },
   autoshotgun: {
     name: 'Combat Shotgun', short: 'Combat SG', build: buildCombatShotgun, ammo: 'shells', ammoName: '12 gauge', mag: 8, rpm: 260, auto: false,
     pellets: 8, energy: 0.58, impulse: 3.4, speed: 380, range: 70, size: 0.55, glow: 0.04,
     hip: 0.055, ads: 0.04, recoil: [0.09, 0.025], kick: 2.2, sound: 'autoshotgun', reload: 2.3,
-    hipPos: [0.13, -0.16, -0.38], adsZ: -0.27, sightY: 0.098, grip: [0, 0.03, -0.035], fov: 0.86,
+    hipPos: [0.14, -0.18, -0.48], adsZ: -0.3, sightY: 0.095, grip: [0, 0.03, -0.035], fov: 0.86,
     casing: null,
   },
 };
@@ -134,7 +134,7 @@ export class AutoGun {
   update(dt, input, active, worldDt = dt) {
     const p = this.player, S = this.S;
     active = active && this.raise > 0.9;
-    this.cooldown -= dt; this.fireT += dt;
+    this.cooldown = Math.max(this.cooldown - dt, -dt); this.fireT += dt;
     if (this.fireT > 0.25) this.burst = Math.max(0, this.burst - dt * 12);
     const reloading = this.state.startsWith('reload');
     const wantAds = active && input.mouseDown[2] && !reloading && !p.sprinting;
@@ -144,7 +144,11 @@ export class AutoGun {
     this.sprint += ((p.sprinting && !reloading ? 1 : 0) - this.sprint) * damp(8, dt);
     if (active) {
       const trig = S.auto ? input.mouseDown[0] : input.mousePressed[0];
-      if (trig) this.tryFire(input.mousePressed[0]);
+      if (trig) {
+        this.tryFire(input.mousePressed[0]);
+        // full auto at a low frame rate: the rounds that were due this frame
+        for (let n = 0; S.auto && n < 3 && this.cooldown <= 0 && this.chambered && !this.busy; n++) this.tryFire(false);
+      }
       if (input.wasPressed('KeyR')) this.tryReload();
     }
     this.anim.update(dt);
@@ -161,7 +165,7 @@ export class AutoGun {
     }
     // the round in the chamber goes; the next one comes up from the magazine
     if (this.mag > 0) this.mag--; else this.chambered = false;
-    this.fireT = 0; this.cooldown = 60 / S.rpm;
+    this.fireT = 0; this.cooldown += 60 / S.rpm;
     this.burst++;
     const cam = this.mainCamera;
     const origin = cam.getWorldPosition(new THREE.Vector3());

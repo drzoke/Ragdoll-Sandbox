@@ -77,9 +77,12 @@ export function buildRifle() {
   P.cyl(M.dark, 0, 0.042, -0.56, 0.014, 0.05, Math.PI / 2, 8);       // flash hider
   P.box(M.black, 0, 0.075, -0.39, 0.012, 0.03, 0.012);               // front sight
   // red dot
-  P.box(M.black, 0, 0.1, -0.08, 0.034, 0.036, 0.07);
-  P.box(M.lens, 0, 0.1, -0.117, 0.026, 0.026, 0.004);
-  P.box(M.dot, 0, 0.1, -0.06, 0.003, 0.003, 0.002);
+  // red dot: an open tube (you look through it), the dot on the far lens
+  P.box(M.black, 0, 0.082, -0.08, 0.034, 0.006, 0.07);
+  P.box(M.black, 0, 0.118, -0.08, 0.034, 0.005, 0.07);
+  P.box(M.black, 0.0155, 0.1, -0.08, 0.003, 0.036, 0.07);
+  P.box(M.black, -0.0155, 0.1, -0.08, 0.003, 0.036, 0.07);
+  P.box(M.dot, 0, 0.1, -0.114, 0.0022, 0.0022, 0.001);
   // pistol grip, trigger guard
   P.box(M.black, 0, -0.035, 0.03, 0.03, 0.085, 0.036, -0.32);
   P.box(M.black, 0, -0.012, -0.022, 0.008, 0.006, 0.06);
@@ -105,8 +108,9 @@ export function buildSMG() {
   const root = new THREE.Group(), P = new Parts();
   P.box(M.black, 0, 0.04, -0.06, 0.044, 0.058, 0.24);
   P.box(M.metal, 0, 0.073, -0.08, 0.026, 0.01, 0.16);
-  P.box(M.black, 0, 0.088, -0.02, 0.012, 0.02, 0.014);               // rear sight
-  P.box(M.black, 0, 0.088, -0.17, 0.01, 0.02, 0.012);                // front sight
+  P.box(M.black, 0.009, 0.088, -0.02, 0.006, 0.02, 0.014);           // rear sight: two ears with a notch
+  P.box(M.black, -0.009, 0.088, -0.02, 0.006, 0.02, 0.014);
+  P.box(M.black, 0, 0.086, -0.17, 0.004, 0.016, 0.012);              // front post
   P.cyl(M.dark, 0, 0.04, -0.22, 0.016, 0.1);                         // shroud
   P.cyl(M.metal, 0, 0.04, -0.29, 0.008, 0.06);
   P.box(M.black, 0, 0.0, -0.13, 0.034, 0.036, 0.05);                 // fore grip block
@@ -135,8 +139,9 @@ export function buildCombatShotgun() {
   P.cyl(M.metal, 0, 0.055, -0.52, 0.013, 0.32);
   P.cyl(M.dark, 0, 0.018, -0.42, 0.012, 0.18);                       // gas tube
   P.cyl(M.dark, 0, 0.055, -0.68, 0.017, 0.04, Math.PI / 2, 10);
-  P.box(M.black, 0, 0.098, -0.02, 0.014, 0.024, 0.02);               // ghost ring sight
-  P.box(M.black, 0, 0.078, -0.62, 0.008, 0.024, 0.01);
+  P.box(M.black, 0.011, 0.098, -0.02, 0.006, 0.026, 0.02);           // ghost ring sight (two ears)
+  P.box(M.black, -0.011, 0.098, -0.02, 0.006, 0.026, 0.02);
+  P.box(M.black, 0, 0.082, -0.62, 0.005, 0.03, 0.01);
   P.box(M.od, 0, -0.035, 0.035, 0.032, 0.09, 0.038, -0.3);
   P.box(M.black, 0, -0.012, -0.02, 0.008, 0.006, 0.06);
   P.box(M.od, 0, 0.025, 0.2, 0.048, 0.09, 0.24, 0.06);              // stock

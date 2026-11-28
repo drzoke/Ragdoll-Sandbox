@@ -226,8 +226,8 @@ export class PlaceTool {
     this.pivot = new THREE.Group(); this.scene.add(this.pivot);
     if (kind === 'mine') {
       this.model = buildMine().root;
-      this.model.rotation.set(0.9, 0.2, 0);
-      this.model.scale.setScalar(0.9);
+      this.model.rotation.set(0.75, 0.2, 0);
+      this.model.scale.setScalar(0.6);
     } else {
       // folded up in its carry case
       const root = new THREE.Group();
@@ -284,7 +284,7 @@ export class PlaceTool {
     const dip = this.placeT < 0.5 ? Math.sin((this.placeT / 0.5) * Math.PI) : 0;
     this.model.visible = have || this.placeT < 0.25;
     const big = this.kind !== 'mine';
-    this.pivot.position.set(0.02 + sw.x + sw.bobX + dr.x, (big ? -0.3 : -0.26) + sw.y + sw.bobY + sw.idle + dr.y - dip * 0.15, -0.46 + dr.z + dip * 0.05);
+    this.pivot.position.set(0.04 + sw.x + sw.bobX + dr.x, (big ? -0.2 : -0.14) + sw.y + sw.bobY + sw.idle + dr.y - dip * 0.15, (big ? -0.5 : -0.42) + dr.z + dip * 0.05);
     this.pivot.rotation.set(dr.rx + sw.y + dip * 0.4, sw.x, dr.rz);
     this.pivot.updateMatrixWorld(true);
     const w = big ? 0.19 : 0.13;

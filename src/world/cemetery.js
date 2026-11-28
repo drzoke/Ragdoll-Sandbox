@@ -107,7 +107,7 @@ export const CEMETERY = {
   bounds: HALF,
   wallHeight: 20,
   sun: 0.5, sunColor: 0x8ea4d6, sunDir: [-30, 48, -22],
-  hemi: 0.42, hemiSky: 0x3b4a66, hemiGround: 0x1c1d17, env: 0.1,
+  hemi: 0.55, hemiSky: 0x40506e, hemiGround: 0x1c1d17, env: 0.1,
   playerSpawn: { pos: [0, 0, 6], yaw: 0 },
   ragdollSpawn: { pos: [0, 0, -30], yaw: 0 },
   merchantSpot: { pos: [0, 0, -5], yaw: 0 },

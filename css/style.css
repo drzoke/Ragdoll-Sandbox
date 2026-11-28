@@ -638,7 +638,7 @@ body.touch .m-btn.vs-btn em { display: none; }
 #vs-banner span { display: block; margin-top: 4px; font-size: 17px; font-weight: 600; color: #e8edf2; }
 #vs-banner.go { animation: vsban 3.4s ease-out forwards; }
 @keyframes vsban { 0% { opacity: 0; transform: scale(1.15); } 12% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
-#vs-pops { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; }
+#vs-pops { position: absolute; left: 50%; top: 63%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .vs-pop { font-size: 15px; font-weight: 800; color: #ffd76a; text-shadow: 0 1px 4px rgba(0,0,0,.9); animation: vspop 1.4s ease-out forwards; white-space: nowrap; }
 .vs-pop.big { font-size: 19px; color: #ffef9a; }
 .vs-pop.info { color: #bfe3ff; font-size: 14px; }
