@@ -28,7 +28,36 @@ function loadPeerJS() {
   return loading;
 }
 
-function peerOptions() {
+// How two browsers find a way to each other:
+//  - STUN: each one asks a public server what its address looks like from the internet. Enough for
+//    most home networks, and the game data then goes straight between the two computers.
+//  - TURN: a relay for when a direct path can't be made (phone hotspots, some home routers, school
+//    and office networks that block it). The game data then goes through the relay. Two free public
+//    relays are listed: Metered's Open Relay (ports 80 and 443, plain and over TLS, which gets
+//    through most firewalls; it signs short-lived logins with a published shared secret) and PeerJS's.
+const OPEN_RELAY = 'staticauth.openrelay.metered.ca';
+const OPEN_RELAY_SECRET = 'openrelayprojectsecret';
+async function relayLogin() {
+  // the standard TURN "REST API" login: user = expiry time, password = HMAC-SHA1(secret, user)
+  const username = `${Math.floor(Date.now() / 1000) + 12 * 3600}:ragdoll-sandbox`;
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(OPEN_RELAY_SECRET), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(username)));
+  return { username, credential: btoa(String.fromCharCode(...sig)) };
+}
+async function iceServers() {
+  const list = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+  ];
+  try {
+    const login = await relayLogin();
+    list.push({ urls: [`turn:${OPEN_RELAY}:80`, `turn:${OPEN_RELAY}:80?transport=tcp`, `turn:${OPEN_RELAY}:443`, `turns:${OPEN_RELAY}:443?transport=tcp`], ...login });
+  } catch (e) { console.warn('[net] no relay login', e); }
+  list.push({ urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' });
+  return list;
+}
+
+async function peerOptions() {
   const q = new URLSearchParams(location.search);
   const o = { debug: 0 };
   const srv = q.get('peer');
@@ -36,7 +65,7 @@ function peerOptions() {
     const [host, port] = srv.split(':');
     Object.assign(o, { host, port: Number(port) || 9000, path: '/', secure: false });
   }
-  if (q.get('ice') === 'none') o.config = { iceServers: [] };
+  o.config = { iceServers: q.get('ice') === 'none' ? [] : await iceServers(), sdpSemantics: 'unified-plan' };
   return o;
 }
 
@@ -56,7 +85,8 @@ export function errorText(err) {
     case 'network': case 'server-error': case 'socket-error': case 'socket-closed':
       return "Couldn't reach the matchmaking server. Check your internet connection.";
     case 'browser-incompatible': return "This browser can't do peer-to-peer connections (WebRTC).";
-    case 'webrtc': return 'The connection between you and the host failed (a strict firewall can block it).';
+    case 'webrtc': case 'ice-failed':
+      return "Couldn't find a way between your computer and your friend's (even through the relay). A strict network (school, office, some phone hotspots) can block it: try another network.";
     default: return err?.message || String(err || 'Connection failed');
   }
 }
@@ -172,12 +202,13 @@ export class Link {
  */
 export async function openRoom(onLink, code = null) {
   const Peer = await loadPeerJS();
+  const opts = await peerOptions();
   let lastErr = null;
   for (let attempt = 0; attempt < 4; attempt++) {
     const c = code || randomCode();
     try {
       const peer = await new Promise((resolve, reject) => {
-        const p = new Peer(PREFIX + c, peerOptions());
+        const p = new Peer(PREFIX + c, opts);
         const fail = (e) => { p.destroy(); reject(e); };
         p.once('open', () => { p.off('error', fail); resolve(p); });
         p.once('error', fail);
@@ -198,8 +229,9 @@ export async function openRoom(onLink, code = null) {
 /** Join a room by its code. Resolves with { peer, link } once the connection is open. */
 export async function joinRoom(code) {
   const Peer = await loadPeerJS();
+  const opts = await peerOptions();
   const peer = await new Promise((resolve, reject) => {
-    const p = new Peer(undefined, peerOptions());
+    const p = new Peer(undefined, opts);
     const fail = (e) => { p.destroy(); reject(e); };
     p.once('open', () => { p.off('error', fail); resolve(p); });
     p.once('error', fail);
@@ -207,8 +239,18 @@ export async function joinRoom(code) {
   try {
     const link = await new Promise((resolve, reject) => {
       const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'raw' });
-      const timer = setTimeout(() => reject({ type: 'timeout', message: "The host didn't answer. Check the code and try again." }), 15000);
+      // a relayed connection can take a while to set up
+      const timer = setTimeout(() => reject({ type: 'timeout', message: "The host's computer didn't answer. Check the code; if it's right, one of your networks may be blocking the connection: try another network." }), 30000);
       peer.once('error', (e) => { clearTimeout(timer); reject(e); });
+      // no way through at all: say so straight away instead of waiting for the timeout
+      const watchIce = () => {
+        const pc = conn.peerConnection;
+        if (!pc) { setTimeout(watchIce, 200); return; }
+        pc.addEventListener('iceconnectionstatechange', () => {
+          if (pc.iceConnectionState === 'failed') { clearTimeout(timer); reject({ type: 'ice-failed' }); }
+        });
+      };
+      watchIce();
       const link = new Link(conn);
       link.onOpen = () => { clearTimeout(timer); resolve(link); };
     });

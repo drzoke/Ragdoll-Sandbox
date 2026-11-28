@@ -382,7 +382,7 @@ export class Net {
       this.me.name = name || 'Player';
       link.send({ t: 'hello', v: NET_VERSION, game: this.g.version, name: this.me.name });
       this.setStatus('Connected, loading the world…');
-      setTimeout(() => { if (this.joining) this.leave('The host didn\'t answer.'); }, 12000);
+      setTimeout(() => { if (this.joining) this.leave('The host didn\'t answer.'); }, 30000);
     } catch (e) {
       this.setStatus(errorText(e));
       try { this.peer?.destroy(); } catch { /* */ }
