@@ -42,6 +42,9 @@ export class Ballistics {
     this.lastTarget = null;
     this.bullets = [];
     this.speed = 260;
+    // shotgun pellets: how fast they lose power (m), their strength, and the point-blank rule
+    // (pellets on one part from closer than pointBlankRange); VS Undead makes them weaker
+    this.pelletRange = 30; this.pelletMul = 1; this.pointBlankN = 4; this.pointBlankRange = 4.5;
   }
 
   targets() {
@@ -215,7 +218,7 @@ export class Ballistics {
     const parts = shot.parts || (shot.parts = new Map());
     const n = (parts.get(part) || 0) + 1;
     parts.set(part, n);
-    if (n !== 4 || res.explode) return;
+    if (n !== this.pointBlankN || res.explode) return;
     const h = r.health, hp = h.parts[partName];
     const torso = /chest|abdomen|pelvis/.test(partName);
     h.log(`Point-blank shotgun wound (${hp.label.toLowerCase()})`);
@@ -244,7 +247,7 @@ export class Ballistics {
     if (!a || !part || part.removed) return null;
     if ((b.pellet || b.fragment) && !b.slowed) {
       b.slowed = true;
-      b.energy *= b.pellet ? clamp(1.15 - b.traveled / 30, 0.3, 1.15) : clamp(1.1 - b.traveled / 22, 0.35, 1.1);
+      b.energy *= b.pellet ? clamp(1.15 - b.traveled / this.pelletRange, 0.3, 1.15) * this.pelletMul : clamp(1.1 - b.traveled / 22, 0.35, 1.1);
     }
     const helmet = ud.armor === 'helmet';
     const wear = (b.pellet ? 6 : b.fragment ? 7 : 26) * b.energy * (helmet ? 1.25 : 1);
@@ -290,7 +293,7 @@ export class Ballistics {
       // VS Undead's Big Brute: one big body, no anatomy; the bullet stops in it
       if ((b.pellet || b.fragment) && !b.slowed) {
         b.slowed = true;
-        b.energy *= b.pellet ? clamp(1.15 - b.traveled / 30, 0.3, 1.15) : clamp(1.1 - b.traveled / 22, 0.35, 1.1);
+        b.energy *= b.pellet ? clamp(1.15 - b.traveled / this.pelletRange, 0.3, 1.15) * this.pelletMul : clamp(1.1 - b.traveled / 22, 0.35, 1.1);
       }
       ud.brute.fight?.onBullet(b, hit, dir, ud.zone);
       b.bloody = 1;
@@ -306,7 +309,7 @@ export class Ballistics {
       // shotgun pellets and shrapnel shed speed quickly: full power up close, weak at range
       if ((b.pellet || b.fragment) && !b.slowed) {
         b.slowed = true;
-        b.energy *= b.pellet ? clamp(1.15 - b.traveled / 30, 0.3, 1.15) : clamp(1.1 - b.traveled / 22, 0.35, 1.1);
+        b.energy *= b.pellet ? clamp(1.15 - b.traveled / this.pelletRange, 0.3, 1.15) * this.pelletMul : clamp(1.1 - b.traveled / 22, 0.35, 1.1);
       }
       const energy = b.energy;
       const inv = part.group.quaternion.clone().invert();
@@ -315,7 +318,7 @@ export class Ballistics {
       const res = r.health.bulletHit(partName, localEntry, localDir, energy, { dismember: settings.get('dismemberment') });
       r.lastBy = b.owner || 0;
       this.onRagdollHit?.(r, b, res, partName);
-      if (b.pellet && b.shot && b.traveled < 4.5) this.pointBlank(r, partName, part, b.shot, res);
+      if (b.pellet && b.shot && b.traveled < this.pointBlankRange) this.pointBlank(r, partName, part, b.shot, res);
       r.hitImpulse(partName, hit.point, dir, b.impulse * energy);
       this.gore.bulletWound(r, res, hit.point, dir);
       if (b.pellet) {

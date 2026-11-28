@@ -759,3 +759,18 @@ body.vs-cine #hud > *:not(#vs-boss) { visibility: hidden; }
 .inv-slot > i { position: absolute; left: 4px; top: 2px; font-size: 10px; font-style: normal; font-weight: 800; opacity: .6; }
 .inv-slot > span + b { bottom: 14px; }
 @media (max-width: 760px) { .inv-body { flex-direction: column; } .inv-me { flex: none; align-items: center; } .inv-stats, .inv-ammo { grid-template-columns: repeat(2, 1fr); } }
+/* VS Undead loading screen */
+#vs-load { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 45%, #1b2430 0%, #0a0d12 75%); color: #e8edf2; transition: opacity .45s; overflow: hidden; }
+#vs-load.hidden { display: none; }
+#vs-load.out { opacity: 0; pointer-events: none; }
+.vl-fog { position: absolute; inset: -20%; background: radial-gradient(ellipse at 30% 70%, rgba(140,160,190,.14), transparent 55%), radial-gradient(ellipse at 75% 60%, rgba(120,150,120,.12), transparent 50%); animation: vlfog 9s ease-in-out infinite alternate; }
+@keyframes vlfog { from { transform: translateX(-4%) scale(1); } to { transform: translateX(4%) scale(1.08); } }
+.vl-card { position: relative; width: min(520px, 88vw); text-align: center; }
+.vl-title { font-size: 54px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: #cfe8bf; text-shadow: 0 4px 24px rgba(0,0,0,.8); }
+.vl-title b { color: #9be07a; }
+.vl-sub { margin: 4px 0 26px; font-size: 15px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; opacity: .7; }
+.vl-bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,.5); }
+.vl-bar i { display: block; height: 100%; width: 0; border-radius: 4px; background: linear-gradient(90deg, #5fa646, #b6ef8f); transition: width .35s ease-out; box-shadow: 0 0 12px rgba(150,230,110,.5); }
+.vl-row { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; font-weight: 700; opacity: .7; }
+.vl-tip { margin-top: 30px; font-size: 14px; opacity: .8; font-style: italic; }
+body.touch .vl-title { font-size: 36px; }
