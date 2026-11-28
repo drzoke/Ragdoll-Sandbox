@@ -1,9 +1,11 @@
 import * as THREE from 'three';
 import { settings } from '../settings.js';
 import { WORLD } from '../world/world.js';
+import { VEHICLE_KINDS } from '../vehicle/models.js';
 
 const $ = (id) => document.getElementById(id);
 export const MAX_RAGDOLLS = 12;
+export const MAX_VEHICLES = 6;
 
 const TEMPER = { brave: 0.35, normal: 1, timid: 1.7 };
 
@@ -24,11 +26,18 @@ const HEADS = {
     <circle cx="40" cy="46" r="1.4" fill="#59551e"/><circle cx="60" cy="46" r="1.4" fill="#59551e"/></svg>`,
 };
 
+// vehicles: little side views on their cards
+HEADS.truck = `<svg viewBox="0 0 100 100"><path d="M8 62h10l4-8h20V36h26l12 14h10v12h-4" fill="#8f2a20"/><path d="M8 62v-8h34v8z" fill="#7a241b"/><path d="M50 40h17l9 10H50z" fill="#24323c"/><rect x="6" y="60" width="90" height="6" rx="2" fill="#2a2b2e"/>
+    <circle cx="26" cy="68" r="9" fill="#151515"/><circle cx="26" cy="68" r="4.5" fill="#8a8f95"/><circle cx="78" cy="68" r="9" fill="#151515"/><circle cx="78" cy="68" r="4.5" fill="#8a8f95"/><rect x="90" y="54" width="5" height="4" fill="#fff3c8"/></svg>`;
+HEADS.buggy = `<svg viewBox="0 0 100 100"><path d="M20 60h62l8-10H70L58 38H38l-8 10H16z" fill="none" stroke="#d8641c" stroke-width="4" stroke-linejoin="round"/><path d="M16 60h74v-6H16z" fill="#d8641c"/><rect x="40" y="46" width="14" height="10" fill="#2b2723"/>
+    <circle cx="26" cy="66" r="11" fill="#151515"/><circle cx="26" cy="66" r="5" fill="#8a8f95"/><circle cx="80" cy="66" r="11" fill="#151515"/><circle cx="80" cy="66" r="5" fill="#8a8f95"/></svg>`;
+
 const KINDS = [
   { id: 'ragdoll', name: 'Ragdoll', type: 'Human', cat: 'humans', text: 'The gray test subject. Wanders around, bleeds, breaks and passes out like a real body. Classic behaviour ignores you; V2 (experimental) notices you, puts its hands up, ducks and runs.' },
   { id: 'zombie', name: 'Zombie', type: 'Undead', cat: 'undead', text: 'Shambles after the nearest living person on its floor (you too), arms out, and claws and bites. It feels no pain and doesn\'t bleed out: destroy the brain or take the head off. Anyone it bites gets infected and comes back as a zombie after they die.' },
 ];
-const CATS = [['all', 'All'], ['humans', 'Humans'], ['undead', 'Undead']];
+for (const [id, k] of Object.entries(VEHICLE_KINDS)) KINDS.push({ id, name: k.name, type: 'Vehicle', cat: 'vehicles', vehicle: true, text: `${k.text} Look at it and press E to get in: W/S drive, A/D steer, Space handbrake, C switches the camera, left click honks, E gets out.` });
+const CATS = [['all', 'All'], ['humans', 'Humans'], ['undead', 'Undead'], ['vehicles', 'Vehicles']];
 
 /**
  * Spawn menu (B, or the person button on touch screens), laid out like the toolbox: pick Ragdoll
@@ -44,7 +53,7 @@ export class SpawnMenu {
     this.el = $('spawnmenu');
     this.raycaster = new THREE.Raycaster();
     this.opts = {
-      kind: settings.get('spawnKind') === 'zombie' ? 'zombie' : 'ragdoll',
+      kind: ['zombie', 'truck', 'buggy'].includes(settings.get('spawnKind')) ? settings.get('spawnKind') : 'ragdoll',
       count: settings.get('spawnCount') || 1,
       helmet: !!settings.get('spawnHelmet'),
       vest: !!settings.get('spawnVest'),
@@ -77,6 +86,7 @@ export class SpawnMenu {
       this.render();
     } else if (b.id === 'sm-spawn') { this.spawn(); this.close(); }
     else if (b.id === 'sm-clear') { this.onRemoveAll?.(); this.render(); }
+    else if (b.id === 'sm-clear-v') { this.onRemoveVehicles?.(); setTimeout(() => this.render(), 300); }
     else if (b.id === 'sm-clean') { this.onCleanUp?.(); }
     else if (b.id === 'sm-close') this.close();
   }
@@ -101,13 +111,24 @@ export class SpawnMenu {
     const o = this.opts, k = KINDS.find((x) => x.id === o.kind);
     const alive = this.ragdolls.list.filter((r) => !r.hidden);
     const nz = alive.filter((r) => r.zombie).length, nr = alive.length - nz;
+    const vl = this.vehicles?.list || [];
     for (const c of this.el.querySelectorAll('.spawn-card')) {
-      const id = c.dataset.kind, n = id === 'zombie' ? nz : nr;
+      const id = c.dataset.kind, n = VEHICLE_KINDS[id] ? vl.filter((v) => v.kind === id).length : id === 'zombie' ? nz : nr;
       c.classList.toggle('picked', id === o.kind);
       c.classList.toggle('hidden', this.cat !== 'all' && c.dataset.cat !== this.cat);
       c.querySelector('.key').textContent = n ? `${n} in world` : '';
     }
     for (const c of $('spawn-cats').querySelectorAll('button')) c.classList.toggle('on', c.dataset.cat === this.cat);
+    const seg0 = (opt, list) => `<div class="seg">${list.map(([v, label]) => `<button data-opt="${opt}" data-v="${v}" class="${String(o[opt]) === String(v) ? 'on' : ''}">${label}</button>`).join('')}</div>`;
+    if (k.vehicle) {
+      $('sm-info').innerHTML = `
+      <div class="sm-desc"><b>${k.name}</b><span class="tag">${k.type}</span><p>${k.text}</p></div>
+      <div class="sm-opts2"><div><h3>Where</h3>${seg0('where', [['look', 'Where I look'], ['front', 'In front'], ['spawn', 'Spawn point']])}</div></div>
+      <button id="sm-spawn" class="sm-go">Spawn ${k.name.toLowerCase()}</button>
+      <div class="sm-row"><button id="sm-clear-v">Remove vehicles</button><button id="sm-clean">Clean up blood</button></div>
+      <p class="note" id="sm-count">${vl.length} vehicle${vl.length === 1 ? '' : 's'} in the world (up to ${MAX_VEHICLES}).</p>`;
+      return;
+    }
     const seg = (opt, list) => `<div class="seg">${list.map(([v, label]) => `<button data-opt="${opt}" data-v="${v}" class="${String(o[opt]) === String(v) ? 'on' : ''}">${label}</button>`).join('')}</div>`;
     const human = o.kind === 'ragdoll';
     const many = o.count > 1, noun = human ? (many ? 'ragdolls' : 'ragdoll') : (many ? 'zombies' : 'zombie');
@@ -168,7 +189,30 @@ export class SpawnMenu {
     return p;
   }
 
+  /** A car or buggy where you look, side on, with the driver's door towards you. */
+  spawnVehicle() {
+    const kind = this.opts.kind, k = VEHICLE_KINDS[kind];
+    const list = this.vehicles?.list || [];
+    if (list.length >= MAX_VEHICLES) { this.audio.play('deny'); this.hud.toast(`There are already ${MAX_VEHICLES} vehicles. Remove some first.`); return null; }
+    const eye = this.camera.getWorldPosition(new THREE.Vector3());
+    const flat = this.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
+    const p = this.anchor();
+    // far enough from you, and clear of walls and other cars
+    if (p.clone().setY(0).distanceTo(eye.clone().setY(0)) < k.length * 0.7 + 1.5) p.addScaledVector(flat, k.length * 0.7 + 1.5 - p.clone().setY(0).distanceTo(eye.clone().setY(0)));
+    const clear = (q) => this.free(q.x, q.y, q.z, k.length / 2 + 0.2) && !list.some((v) => v.pos.distanceTo(q) < (v.k.length + k.length) / 2 + 0.4);
+    for (let i = 0; i < 30 && !clear(p); i++) { p.addScaledVector(flat, i % 2 ? -0.6 * i : 0.6 * i); }
+    p.y = WORLD.groundAt(p.x, p.z, p.y + 0.6);
+    const toward = eye.clone().setY(0).sub(p.clone().setY(0)).normalize();
+    const yaw = Math.atan2(-toward.z, toward.x);
+    if (this.remoteSpawnVehicle) this.remoteSpawnVehicle(kind, p, yaw);
+    else this.vehicles?.spawn(kind, p, yaw);
+    this.audio.play('button');
+    this.hud.toast(`Spawned a ${k.name.toLowerCase()}: look at it and press E to drive`);
+    return p;
+  }
+
   spawn() {
+    if (VEHICLE_KINDS[this.opts.kind]) return this.spawnVehicle();
     const o = this.opts, zombie = o.kind === 'zombie';
     const room = MAX_RAGDOLLS - this.ragdolls.list.filter((r) => !r.hidden).length;
     if (room <= 0) { this.audio.play('deny'); this.hud.toast(`There are already ${MAX_RAGDOLLS} bodies. Remove some first.`); return; }

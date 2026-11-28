@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AMMO } from './ammo.js';
 import { CONFIG } from '../config.js';
 import { clamp, damp, Spring, lerp, viewmodelToWorld, drawOffset } from '../core/util.js';
 import { buildRemington870, buildShell } from './model870.js';
@@ -127,7 +128,7 @@ export class Shotgun {
   }
   status() { return null; }
   ammo() {
-    return { mag: this.tube, chamber: this.chamber === 'live' ? '+1' : '+0', reserve: '∞', name: 'Remington 870 · 12 gauge', low: this.tube <= 1 && this.chamber !== 'live' };
+    return { mag: this.tube, chamber: this.chamber === 'live' ? '+1' : '+0', reserve: AMMO.label('shells'), name: 'Remington 870 · 12 gauge', low: this.tube <= 1 && this.chamber !== 'live' };
   }
   crosshair() { return { gap: 15 + Math.max(0, 0.25 - this.fireT) * 60, ads: this.ads > 0.6 }; }
 
@@ -199,6 +200,7 @@ export class Shotgun {
   tryReload() {
     if (this.busy || this.reloading || this.sprint > 0.5) return;
     if (this.tube >= S.tube) { if (this.chamber !== 'live') this.pumpQueued = 0; return; }
+    if (!AMMO.has('shells')) { this.audio.play('dry'); return; }
     this.reloading = true; this.stopReload = false;
     this.anim.play(CL.reloadStart, this._ev);
   }
@@ -215,11 +217,11 @@ export class Shotgun {
         break;
       case 'pumpCheck': this.audio.play('pumpBack'); break;
       case 'pumpCheckFwd': this.audio.play('pumpFwd'); break;
-      case 'shellIn': this.audio.play('shellIn'); this.tube = Math.min(S.tube, this.tube + 1); break;
+      case 'shellIn': this.audio.play('shellIn'); if (this.tube < S.tube && AMMO.take('shells', 1)) this.tube++; break;
       case 'end':
         if (!this.reloading) break;
         if (clip === CL.reloadStart || clip === CL.reloadShell) {
-          if (this.tube < S.tube && !this.stopReload) this.anim.play(CL.reloadShell, this._ev);
+          if (this.tube < S.tube && !this.stopReload && AMMO.has('shells')) this.anim.play(CL.reloadShell, this._ev);
           else this.anim.play(CL.reloadEnd, this._ev);
         } else if (clip === CL.reloadEnd) {
           this.reloading = false;

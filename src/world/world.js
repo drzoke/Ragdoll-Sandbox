@@ -2,6 +2,7 @@
 // Before a map loads, the ground is flat at y = 0.
 export const WORLD = {
   map: null,
+  actor: 0,          // multiplayer, hosting: the friend whose action is being run right now (0 = you)
   /** Height of the walkable floor under (x, z), highest one at or below y. */
   groundAt(x, z, y = 1e9) { return this.map ? this.map.groundAt(x, z, y) : 0; },
   /** Top of whatever is under a falling thing at (x, y, z): floors, desks, props or the ground. */

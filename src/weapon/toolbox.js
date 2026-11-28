@@ -15,6 +15,11 @@ const ICONS = {
   Medkit: `<svg viewBox="0 0 64 40"><rect x="12" y="9" width="40" height="27" rx="5" fill="currentColor"/><path d="M25 9V5h14v4" stroke="currentColor" stroke-width="3" fill="none"/><path d="M32 15v15M24.5 22.5h15" stroke="#000" stroke-opacity=".5" stroke-width="4.5" stroke-linecap="round"/></svg>`,
   Defibrillator: `<svg viewBox="0 0 64 40"><rect x="4" y="10" width="18" height="16" rx="3" fill="currentColor"/><rect x="42" y="10" width="18" height="16" rx="3" fill="currentColor"/><rect x="10" y="26" width="6" height="10" rx="2" fill="currentColor" opacity=".7"/><rect x="48" y="26" width="6" height="10" rx="2" fill="currentColor" opacity=".7"/><path d="M34 6l-7 12h5l-2 10 8-13h-5z" fill="currentColor"/></svg>`,
   Grab: `<svg viewBox="0 0 64 40"><path d="M8 13h30v12H20l-3 11h-8l3-11H8z" fill="currentColor"/><rect x="38" y="15" width="8" height="8" fill="currentColor"/><path d="M46 12l10-4v4l-7 3zM46 26l10 4v-4l-7-3z" fill="currentColor"/><circle cx="52" cy="19" r="3" fill="#fff"/></svg>`,
+  'Assault Rifle': `<svg viewBox="0 0 64 40"><path d="M2 16h8v-2h30v-2h4v2h18v3H44v3h-6l-1 3h-5l-2 9h-6l2-9h-3l-3 2H10l-2 4H2z" fill="currentColor"/><rect x="24" y="9" width="10" height="4" rx="1" fill="currentColor"/><path d="M30 22l4 9 5-1-3-8z" fill="currentColor" opacity=".75"/></svg>`,
+  'Submachine Gun': `<svg viewBox="0 0 64 40"><path d="M8 13h36v2h12v3H44v4H30l-2 3h-5l-2 9h-6l2-9h-3l-2-1H8z" fill="currentColor"/><rect x="29" y="20" width="5" height="14" fill="currentColor" opacity=".75"/><path d="M8 15H2v6h6" stroke="currentColor" stroke-width="2" fill="none"/></svg>`,
+  'Combat Shotgun': `<svg viewBox="0 0 64 40"><path d="M2 15h12v-2h22v-1h4v1h22v3H40v5H34l-2 3h-6l-3 9h-6l2-9h-3l-4 2H8l-3 3H2z" fill="currentColor"/><rect x="31" y="20" width="7" height="8" fill="currentColor" opacity=".75"/></svg>`,
+  'Proximity Mine': `<svg viewBox="0 0 64 40"><ellipse cx="32" cy="26" rx="22" ry="8" fill="currentColor"/><rect x="10" y="18" width="44" height="8" fill="currentColor"/><ellipse cx="32" cy="18" rx="22" ry="7" fill="currentColor" opacity=".75"/><ellipse cx="32" cy="17" rx="9" ry="3" fill="#000" fill-opacity=".35"/><circle cx="48" cy="16" r="2" fill="#5f5"/></svg>`,
+  'Sentry Gun': `<svg viewBox="0 0 64 40"><rect x="20" y="8" width="20" height="12" rx="2" fill="currentColor"/><path d="M40 11h20v2H40zM40 15h20v2H40z" fill="currentColor"/><rect x="27" y="20" width="6" height="6" fill="currentColor"/><path d="M30 26L18 38M30 26l12 12M30 26v12" stroke="currentColor" stroke-width="3"/></svg>`,
 };
 const INFO = {
   Fists: { category: 'weapons', type: 'Melee', text: 'Your bare fists. Left click throws quick jabs, right click a hard hook. Punches leave bruises and can knock the ragdoll down or out.' },
@@ -26,6 +31,11 @@ const INFO = {
   Machete: { category: 'weapons', type: 'Melee', text: 'A 40 cm blade. Left click slashes (forehand, then backhand): long cuts that bleed hard and get deeper on the same spot, until they chop through a limb or the neck. Wrist, ankle and hamstring cuts sever tendons. Right click stabs deep into the organs.' },
   Medkit: { category: 'medical', type: 'Medical', text: 'Look at a body part and hold left click to treat it: bandages on its wounds, a tourniquet above a stump, a splint on a broken bone, a dressing on a bad burn. Right click gives morphine (twice slows the breathing), R hangs a 750 ml blood bag.' },
   Defibrillator: { category: 'medical', type: 'Medical', text: 'Hold left click to charge, let go with the paddles on the chest. It can restart a heart that has stopped if the heart and enough blood are left: give a blood bag first after heavy bleeding. Shocking a heart that is still beating can stop it.' },
+  'Assault Rifle': { category: 'weapons', type: 'Rifle', text: 'Full-auto 5.56 mm rifle with a red dot sight and 30 rounds in the magazine. Hold left click to fire; the recoil climbs through a long burst. Each round can go through a body. VS Undead only.' },
+  'Submachine Gun': { category: 'weapons', type: 'SMG', text: 'Very fast full auto on .45 rounds (the pistol\'s ammo), 32 in the magazine. Light recoil, but it spreads out at range. VS Undead only.' },
+  'Combat Shotgun': { category: 'weapons', type: 'Shotgun', text: 'Semi-automatic 12 gauge with an 8-shell box magazine: one shot per click, no pumping. VS Undead only.' },
+  'Proximity Mine': { category: 'weapons', type: 'Explosive', text: 'Put it down on the ground in front of you. A second later it arms, and it goes off when a zombie steps near. Shooting it sets it off too. VS Undead only.' },
+  'Sentry Gun': { category: 'tools', type: 'Gadget', text: 'Set it up on the ground and it turns to shoot every zombie it can see, aiming for the head. 180 rounds, then it packs up. VS Undead only.' },
   Grab: { category: 'tools', type: 'Tool', text: 'Picks up ragdolls and loose body parts from a distance. Right click grabs or drops, left click throws. Swing them into things to break bones.' },
 };
 const CATEGORIES = [['all', 'All'], ['weapons', 'Weapons'], ['medical', 'Medical'], ['tools', 'Tools']];
@@ -89,8 +99,47 @@ export class Toolbox {
     this.controlsKey = '';
     this.applyControlsVisibility();
     settings.onChange((k) => { if (k === 'showControls') this.applyControlsVisibility(); });
+    this.allowedFn = (t) => !t.vsOnly;    // the VS Undead items stay out of the sandbox
     this.setCategory('all');
     this.setQuality(this.quality);
+    this.refreshAllowed();
+  }
+
+  allowed(i) { const t = this.tools[i]; return !!t && this.allowedFn(t); }
+
+  /** Which items the toolbox offers: fn(tool) -> bool, or null for the sandbox's own set. */
+  setAllowed(fn) { this.allowedFn = fn || ((t) => !t.vsOnly); this.refreshAllowed(); }
+
+  /** After the allowed items changed: hide the rest, take them off the bar. */
+  refreshAllowed() {
+    this.bar = this.bar.filter((i) => this.allowed(i));
+    if (!this.bar.length) this.bar.push(Math.max(0, this.tools.findIndex((t, i) => this.allowed(i))));
+    if (!this.allowed(this.index) || (this.pending >= 0 && !this.allowed(this.pending))) { this.pending = -1; this.select(this.bar[0], true); }
+    this.barKey = null;
+    this.setCategory(this.category);
+    const n = (cat) => this.tools.filter((t, i) => this.allowed(i) && (cat === 'all' || INFO[t.name]?.category === cat)).length;
+    for (const b of this.el.cats.querySelectorAll('button')) { const sp = b.querySelector('span'); if (sp) sp.textContent = n(b.dataset.cat); }
+    if (!this.allowed(this.picked)) this.picked = this.index;
+    this.renderHotbar();
+  }
+
+  /** Put these items (by name) on the bar, in this order, and hold `hold`. */
+  setBar(names, hold) {
+    const idx = names.map((n) => this.tools.findIndex((t) => t.name === n)).filter((i) => i >= 0 && this.allowed(i));
+    if (!idx.length) return;
+    this.bar = idx.slice(0, BAR_SIZE);
+    const h = this.tools.findIndex((t) => t.name === hold);
+    this.barKey = null;
+    this.select(h >= 0 && this.bar.includes(h) ? h : this.bar[0], true);
+    this.renderHotbar();
+  }
+
+  /** A new item (VS Undead: bought or found): onto the bar if there's room. */
+  addToBar(name) {
+    const i = this.tools.findIndex((t) => t.name === name);
+    if (i < 0 || this.bar.includes(i)) return;
+    if (this.bar.length < BAR_SIZE) this.bar.push(i);
+    this.barKey = null;
     this.renderHotbar();
   }
 
@@ -99,7 +148,7 @@ export class Toolbox {
   setCategory(cat) {
     this.category = cat;
     for (const b of this.el.cats.querySelectorAll('button')) b.classList.toggle('on', b.dataset.cat === cat);
-    for (const c of this.cards) c.el.classList.toggle('hidden', cat !== 'all' && c.el.dataset.cat !== cat);
+    for (const c of this.cards) c.el.classList.toggle('hidden', (cat !== 'all' && c.el.dataset.cat !== cat) || (this.allowedFn && !this.allowedFn(this.tools[c.i])));
   }
 
   /** Low: pictures. Medium: spinning models. High / Very High: spinning models with effects. */
@@ -112,7 +161,7 @@ export class Toolbox {
   }
 
   pick(i) {
-    if (i < 0 || i >= this.tools.length) return;
+    if (i < 0 || i >= this.tools.length || !this.allowed(i)) return;
     this.picked = i;
     this.audio.play('click');
     this.renderHotbar();
@@ -121,7 +170,7 @@ export class Toolbox {
   /** Put an item on the bar (if it isn't there yet) and switch to it. A full bar swaps out the
    *  item in your hands. */
   equip(i) {
-    if (i < 0 || i >= this.tools.length) return;
+    if (i < 0 || i >= this.tools.length || !this.allowed(i)) return;
     if (!this.bar.includes(i)) {
       if (this.bar.length < BAR_SIZE) this.bar.push(i);
       else this.bar[Math.max(0, this.bar.indexOf(this.index))] = i;
@@ -155,6 +204,7 @@ export class Toolbox {
     // multiplayer, as a friend: only some items work yet
     if (this.canUse && !this.canUse(this.tools[i])) { this.audio.play('deny'); this.onDenied?.(this.tools[i]); return; }
     if (!force && !this.bar.includes(i)) return;
+    if (!this.allowed(i)) return;
     if (i === this.index && this.pending < 0) return;
     this.pending = i;
     this.audio.play('equip');
@@ -236,7 +286,10 @@ export class Toolbox {
 
   renderControls() {
     const t = this.active;
-    const rows = [...t.controls.filter(([k]) => k), [this.bar.length > 1 ? `1–${this.bar.length} or Q` : '1–9 or Q', 'Switch item'], ['Tab', 'Toolbox (equip items)'], ['B', 'Spawn menu'], ['Z', 'Slow down time'], ['V', 'Speed up time'], ['X', 'X-ray (again: 3D / Flat, again: close)'], ['H', 'Hide this list']];
+    const vs = document.body.classList.contains('vs');
+    const rows = [...t.controls.filter(([k]) => k), [this.bar.length > 1 ? `1–${this.bar.length} or Q` : '1–9 or Q', 'Switch item'], ['Tab', 'Toolbox (equip items)'],
+      ...(vs ? [['E', 'Open a supply crate, trade with the merchant'], ['G', 'Ready for the next wave']] : [['B', 'Spawn menu'], ['Z', 'Slow down time'], ['V', 'Speed up time']]),
+      ['X', 'X-ray (again: 3D / Flat, again: close)'], ['H', 'Hide this list']];
     const key = t.name + JSON.stringify(rows);
     if (key === this.controlsKey) return;
     this.controlsKey = key;

@@ -23,6 +23,7 @@ import { PARTS, PART_BY_NAME } from '../ragdoll/skeleton.js';
 import { GROUP } from '../core/physics.js';
 import { MAT as GORE_MAT } from '../gore/gore.js';
 import { CONFIG } from '../config.js';
+import { WORLD } from '../world/world.js';
 import { G as GRAB, connectedSet } from '../weapon/grab.js';
 
 const NET_VERSION = 1;
@@ -31,7 +32,7 @@ const STATE_HZ = 30;         // friend -> host: own movement
 const HEALTH_HZ = 5;         // host -> friends: health
 const DELAY = 110;           // ms friends see the world behind the host (smooths between updates)
 const MAX_PLAYERS = 6;
-const GUN_SOUND = { 'M1911': 'shot', 'Remington 870': 'shotgun', 'M24 Sniper': 'sniper', 'Flintlock Musket': 'musket' };
+const GUN_SOUND = { 'M1911': 'shot', 'Remington 870': 'shotgun', 'M24 Sniper': 'sniper', 'Flintlock Musket': 'musket', 'Assault Rifle': 'rifle', 'Submachine Gun': 'smg', 'Combat Shotgun': 'autoshotgun' };
 // what the host's game does that friends see, replayed on their copy (see Gore)
 const GORE_CALLS = ['spray', 'dust', 'bulletImpactWorld', 'bloodyImpactWorld', 'pelletSpatter', 'addBruise', 'bulletWound', 'bladeWound',
   'armorHit', 'sparks', 'bandage', 'tourniquet', 'splint', 'paddleMarks', 'onSever', 'openPart', 'explodePart', 'impactBlood'];
@@ -271,8 +272,7 @@ export class Net {
       link.send({ t: 'welcome', id, color, code: this.code, ...this.worldRecord() });
       p.ready = true;
       this.sendPlayers();
-      this.emit({ t: 'toast', s: `${name} joined` });
-      this.g.hud.toast(`${name} joined`);
+      this.notice(`${name} joined`);
       this.g.audio.play('button');
       this.onChange?.(this);
       return;
@@ -280,6 +280,34 @@ export class Net {
     const p = this.players.get(link.pid);
     if (!p) return;
     if (m.t === 'req') for (const r of m.r) this.request(p, r);
+    else if (m.t === 'chat') this.chatFrom(p, m.s);
+  }
+
+  /** Host: something everyone should see (a toast and a line in the chat). */
+  notice(text) {
+    this.emit({ t: 'toast', s: text });
+    this.g.hud.toast(text);
+    this.g.onSystem?.(text);
+  }
+
+  // ------------------------------------------------------------------ chat
+  /** Send a chat message (from the chat line). */
+  sendChat(text) {
+    if (this.host) this.chatFrom(this.me, text);
+    else if (this.guest) this.hostLink?.send({ t: 'chat', s: text });
+  }
+
+  /** Host: a message from a player (the host too) goes to everyone. A few per second at most. */
+  chatFrom(p, text) {
+    text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+    if (!text) return;
+    const now = performance.now();
+    p.chatT = (p.chatT || []).filter((t) => now - t < 5000);
+    if (p.chatT.length >= 6) return;
+    p.chatT.push(now);
+    const msg = { t: 'chat', id: p.id, n: p.name, c: p.color, s: text };
+    for (const q of this.players.values()) if (q.ready) q.link.send(msg);
+    this.g.onChat?.(msg);
   }
 
   dropGuest(link) {
@@ -290,10 +318,10 @@ export class Net {
     if (p.pusher) this.g.physics.world.removeBody(p.pusher);
     p.grab?.dispose();
     if (p.info) p.info.gone = true;
+    for (const v of this.g.vehicles?.list || []) if (v.driver === p.id) { v.driver = 0; v.netFollow = false; if (this.host) this.emit({ t: 'vdrv', id: v.id, d: 0 }); }
     if (this.host) {
       this.sendPlayers();
-      this.emit({ t: 'toast', s: `${p.name} left` });
-      this.g.hud.toast(`${p.name} left`);
+      this.notice(`${p.name} left`);
     }
     this.onChange?.(this);
   }
@@ -337,7 +365,8 @@ export class Net {
       case 'removeAll': g.removeAll(); break;
       case 'throw': {
         const v = (x) => new THREE.Vector3(...x);
-        g.explosives.throwGrenade(v(r.p), v(r.v), v(r.s));
+        if (g.canThrow && !g.canThrow(p)) break;
+        g.explosives.throwGrenade(v(r.p), v(r.v), v(r.s), p.id);
         g.explosives.spawnSpoon(v(r.sp), v(r.sv));
         break;
       }
@@ -346,11 +375,33 @@ export class Net {
         const a = tool && this.actArgs(r.a);
         if (!a) break;
         if (tool === g.grab) { (p.grab ||= new RemoteGrab(this, p)).act(r.n, a); break; }
+        WORLD.actor = p.id;
         const res = tool.run?.(r.n, a);
+        WORLD.actor = 0;
         if (res?.say) p.link.send({ t: 'say', w: r.w, s: res.say, toast: res.toast || null });
         break;
       }
+      case 'vsr': g.onVsRequest?.(p, r.d); break;
       case 'cleanUp': g.cleanUp(); break;
+      case 'spawnV': {
+        if (g.vehicles.list.length >= 6) break;
+        g.vehicles.spawn(r.k, new THREE.Vector3(...r.p), r.y);
+        g.audio.play('button');
+        break;
+      }
+      case 'removeV': g.vehicles.clear(); break;
+      case 'veh': {
+        const v = g.vehicles.byId(r.id);
+        if (!v) break;
+        if (r.op === 'in' && !v.driver) { v.driver = p.id; v.netFollow = true; v._netBuf = []; this.emit({ t: 'vdrv', id: v.id, d: p.id }); }
+        else if (r.op === 'out' && v.driver === p.id) {
+          if (r.s) g.vehicles.setState(v, r.s);
+          v.driver = 0; v.netFollow = false;
+          this.emit({ t: 'vdrv', id: v.id, d: 0, s: r.s || null });
+        }
+        break;
+      }
+      case 'horn': { const v = g.vehicles.byId(r.id); if (v) { this.emit({ t: 'horn', id: v.id, p: p.id }); this.playAt('horn', v.pos); g.ragdolls.alert(v.pos, 25, 0.25, 'shot'); } break; }
     }
   }
 
@@ -362,7 +413,8 @@ export class Net {
     for (const gib of g.gore.gibs) { if (gib.netId === undefined) gib.netId = this.nextBody++; bodies.push(this.gibRecord(gib)); }
     for (const n of g.explosives.live) { if (n.netId === undefined) n.netId = this.nextBody++; bodies.push(this.nadeRecord(n)); }
     const glass = g.getMap().glass ? g.getMap().glass.panes.filter((p) => p.broken).map((p) => p.i) : [];
-    return { map: g.getMap().def?.id, rags, bodies, glass, ts: g.timeScale() };
+    const vehicles = g.vehicles ? g.vehicles.list.map((v) => g.vehicles.record(v)) : [];
+    return { map: g.getMap().def?.id, rags, bodies, glass, vehicles, ts: g.timeScale() };
   }
 
   // ================================================================== joining
@@ -399,6 +451,8 @@ export class Net {
     if (m.t === 'hurt') { this.g.hurtMe?.(m.d, { kind: m.k, from: m.f ? new THREE.Vector3(...m.f) : null }); return; }
     if (m.t === 'say') { this.g.tools[m.w]?.say?.(m.s); if (m.toast) this.g.hud.toast(m.toast); return; }
     if (m.t === 'grabEnd') { this.g.grab.release(true); return; }
+    if (m.t === 'chat') { this.g.onChat?.(m); return; }
+    if (m.t === 'vsme') { this.g.onVsMe?.(m); return; }
     if (m.t === 'bye') { this.leave('The host closed the room.'); }
   }
 
@@ -414,14 +468,15 @@ export class Net {
     g.ballistics.clear();
     this.installGuestHooks();
     g.spawnMenu.remoteSpawn = (list) => this.requestSpawn(list);
-    if (m.map && m.map !== g.getMap().def?.id) g.loadMap(m.map);
-    g.ragdolls.clear(g.ragdolls.keep);
-    g.cleanUp(true);
-    this.ragById.clear(); this.bodyById.clear();
-    for (const rec of m.rags) this.spawnCopy(rec);
-    for (const b of m.bodies) this.addBody(b);
-    const glass = g.getMap().glass;
-    if (glass) { const a = glass.audio; glass.audio = null; for (const i of m.glass) { const p = glass.panes[i]; if (p) glass.breakPane(p, null, 0.5); } glass.audio = a; }
+    this.rebuildWorld(m);
+    g.vehicles.remote = {
+      enter: (v) => this.reqOut.push({ t: 'veh', op: 'in', id: v.id }),
+      exit: (v, st) => { v.netFollow = true; v._netBuf = []; this.reqOut.push({ t: 'veh', op: 'out', id: v.id, s: st }); },
+      horn: (v) => this.reqOut.push({ t: 'horn', id: v.id }),
+    };
+    g.vehicles.onHorn = (v) => this.reqOut.push({ t: 'horn', id: v.id });
+    g.vehicles.onSpawn = g.vehicles.onRemove = g.vehicles.onEnter = g.vehicles.onExit = null;
+    g.spawnMenu.remoteSpawnVehicle = (k, pos, yaw) => this.reqOut.push({ t: 'spawnV', k, p: [pos.x, pos.y, pos.z], y: yaw });
     // only the guns for now
     // every item's effect on the world goes to the host's game (see each tool's act())
     for (const t of g.tools) if (t.act) t.remote = (tool, name, a) => this.toolAct(tool, name, a);
@@ -429,6 +484,29 @@ export class Net {
     this.setStatus('');
     g.hud.toast(`Joined room ${this.code}`);
     this.onChange?.(this);
+  }
+
+  /** Friend: the host's whole world (on joining, and after the host loads a saved scene). */
+  rebuildWorld(m) {
+    const g = this.g;
+    if (m.map && m.map !== g.getMap().def?.id) g.loadMap(m.map);
+    g.vehicles.exit(true);
+    g.ragdolls.clear(g.ragdolls.keep);
+    g.cleanUp(true);
+    this.ragById.clear(); this.bodyById.clear();
+    for (const rec of m.rags) this.spawnCopy(rec);
+    for (const b of m.bodies) this.addBody(b);
+    g.vehicles.clear();
+    for (const rec of m.vehicles || []) this.addVehicle(rec);
+    const glass = g.getMap().glass;
+    if (glass) { const a = glass.audio; glass.audio = null; for (const i of m.glass || []) { const p = glass.panes[i]; if (p) glass.breakPane(p, null, 0.5); } glass.audio = a; }
+  }
+
+  /** Host: send friends the whole world again (a saved scene was loaded). */
+  resync() {
+    if (!this.host || !this.players.size) return;
+    for (const p of this.players.values()) p.hp.clear();
+    this.emit({ t: 'world', ...this.worldRecord() });
   }
 
   setPlayers(list) {
@@ -460,6 +538,8 @@ export class Net {
     setTimeout(() => { try { peer?.destroy(); } catch { /* */ } }, 300);
     for (const p of this.players.values()) { p.avatar?.dispose(); if (p.pusher) g.physics.world.removeBody(p.pusher); p.grab?.dispose(); if (p.info) p.info.gone = true; }
     this.players.clear();
+    // cars friends were driving stop where they are
+    for (const v of g.vehicles?.list || []) if (v.netFollow || (v.driver && v !== g.vehicles.driving)) { v.driver = 0; v.netFollow = false; }
     this.peer = null; this.hostLink = null; this.code = null; this.joining = false;
     this.role = 'off';
     this.queue.length = 0; this.out.length = 0;
@@ -467,6 +547,10 @@ export class Net {
     if (was === 'guest') {
       // back to playing alone: a fresh world of our own
       g.spawnMenu.remoteSpawn = null;
+      g.spawnMenu.remoteSpawnVehicle = null;
+      g.vehicles.exit(true);
+      g.vehicles.remote = null; g.vehicles.onHorn = null;
+      g.vehicles.clear();
       g.grab.release(true);
       for (const t of g.tools) t.remote = null;
       g.ballistics.ghostAll = false;
@@ -526,7 +610,7 @@ export class Net {
     }
     const armor = {};
     for (const [k, a] of Object.entries(r.armor || {})) armor[k] = { hp: a.hp, broken: !!a.broken, dropped: !!a.dropped };
-    const rec = { t: 'r+', id: r.netId, n: r.name, z: !!r.zombie, b: r.behavior === 'v2' ? 'v2' : 'classic', a: armor, pose };
+    const rec = { t: 'r+', id: r.netId, n: r.name, z: !!r.zombie, b: r.behavior === 'v2' ? 'v2' : 'classic', a: armor, pose, yaw: +(r.heading?.() || 0).toFixed(3) };
     if (full) {
       rec.hs = healthSections(r.health);
       rec.hs.x = this.brainRecord(r);
@@ -645,16 +729,25 @@ export class Net {
       if (self.host && self.players.size && !opts.fragment) {
         const owner = opts.owner || self.me.id;
         let w = -1;
-        if (!opts.fragment) {
+        if (!opts.fragment && !opts.bot) {
           if (opts.owner) w = opts.tool ?? -1;
           else if (!opts.shot || !opts.shot.netSent) { w = g.toolbox.index; if (opts.shot) opts.shot.netSent = true; }
         }
         const m = visualFrom ? [visualFrom.x, visualFrom.y, visualFrom.z] : null;
         self.emit({ t: 'shot', p: owner, w, o: [origin.x, origin.y, origin.z], d: [dir.x, dir.y, dir.z], m,
-          x: { size: opts.size, glowSize: opts.glowSize, speed: opts.speed, life: opts.life, range: opts.range, fragment: !!opts.fragment, pellet: !!opts.pellet } });
+          x: { size: opts.size, glowSize: opts.glowSize, speed: opts.speed, life: opts.life, range: opts.range, fragment: !!opts.fragment, pellet: !!opts.pellet, snd: opts.snd } });
       }
       return res;
     };
+    // vehicles
+    const vh = g.vehicles;
+    if (vh) {
+      vh.onSpawn = (v) => { if (self.host) self.emit({ t: 'v+', ...vh.record(v) }); };
+      vh.onRemove = (v) => { if (self.host) self.emit({ t: 'v-', id: v.id }); };
+      vh.onHorn = (v) => { if (self.host) self.emit({ t: 'horn', id: v.id, p: self.me.id }); };
+      vh.onEnter = (v) => { if (self.host) self.emit({ t: 'vdrv', id: v.id, d: self.me.id }); };
+      vh.onExit = (v) => { if (self.host) self.emit({ t: 'vdrv', id: v.id, d: 0 }); };
+    }
     // hit markers for a friend's shots go back to them
     g.ballistics.onRemoteMarker = (owner, organ) => { const p = this.players.get(owner); p?.link?.send({ t: 'hit', o: organ ? 1 : 0 }); };
     this.hookMap();
@@ -712,10 +805,15 @@ export class Net {
   }
 
   /** Friend: a spawn from the spawn menu goes to the host. */
+  /** VS Undead: a friend asks the host's game for something (buy, open a crate, place a gadget, ready). */
+  vsRequest(d) { if (this.guest) this.reqOut.push({ t: 'vsr', d }); }
+  /** VS Undead: the host tells one player something (what they bought, their loot). */
+  sendTo(id, m) { const p = this.players.get(id); p?.link?.send({ t: 'vsme', ...m }); }
   requestSpawn(list) { this.reqOut.push({ t: 'spawn', list }); }
   requestPress(i) { this.reqOut.push({ t: 'press', i }); }
   requestRemoveAll() { this.reqOut.push({ t: 'removeAll' }); }
   requestCleanUp() { this.reqOut.push({ t: 'cleanUp' }); }
+  requestRemoveVehicles() { this.reqOut.push({ t: 'removeV' }); }
   toolAllowed() { return true; }
   requestThrow(pos, vel, spin, spoonPos, spoonVel) {
     const a = (v) => [v.x, v.y, v.z];
@@ -785,9 +883,11 @@ export class Net {
       if (this.queue.length > 400) while (this.queue.length) this.applyBatch(this.queue.shift().e);   // fell far behind (tab was hidden)
       this.placeRagdolls(T);
       this.placeBodies(T);
+      this.placeVehicles(T);
       this.updateAvatars(dt, T);
     } else if (this.host) {
       this.updateAvatars(dt, now - DELAY);
+      this.placeVehicles(now - DELAY);
       this.updatePushers(now);
       for (const p of this.players.values()) p.grab?.update();
     }
@@ -837,9 +937,13 @@ export class Net {
       if (this.reqOut.length) { this.hostLink.send({ t: 'req', r: this.reqOut }); this.reqOut = []; }
       if (now - this.lastState >= 1000 / STATE_HZ - 2) {
         this.lastState = now;
-        const w = new Writer(64);
+        const w = new Writer(128);
         w.u8(2); w.u32(++this.seq); w.f64(now);
         this.writePlayer(w, this.myState());
+        // the car you drive
+        const dv = this.g.vehicles?.driving;
+        w.u16(dv ? dv.id : 0);
+        if (dv) this.writeVehicle(w, dv);
         this.hostLink.sendFast(w.done());
       }
     }
@@ -958,6 +1062,10 @@ export class Net {
     for (const n of g.explosives.live) if (n.netId !== undefined) bodies.push(n);
     w.u16(bodies.length);
     for (const x of bodies) { const b = x.body; w.u16(x.netId); w.f32(b.position.x); w.f32(b.position.y); w.f32(b.position.z); w.quat(b.quaternion); }
+    // vehicles (a friend's own car is skipped by that friend)
+    const vl = g.vehicles?.list || [];
+    w.u8(vl.length);
+    for (const v of vl) { w.u16(v.id); w.u8(v.driver & 255); this.writeVehicle(w, v); }
     return w.done();
   }
 
@@ -999,6 +1107,15 @@ export class Net {
       const x = this.bodyById.get(id);
       if (x) push(x._netBuf, { t: ht, data }, 8);
     }
+    if (rd.left >= 1) {
+      const nv = rd.u8();
+      for (let i = 0; i < nv; i++) {
+        const id = rd.u16(), d = rd.u8(), st = this.readVehicle(rd);
+        st.t = ht;
+        const v = this.g.vehicles?.byId(id);
+        if (v && v !== this.g.vehicles.driving) push(v._netBuf ||= [], st, 10);
+      }
+    }
   }
 
   /** Host: a friend's movement. */
@@ -1013,6 +1130,55 @@ export class Net {
     s.t = t - p.clock.offset;          // in the host's time
     s.id = p.id;
     push(p.buf, s, 16);
+    if (rd.left >= 2) {
+      const vid = rd.u16();
+      if (vid) {
+        const st = this.readVehicle(rd);
+        const v = this.g.vehicles?.byId(vid);
+        if (v && v.driver === p.id) { st.t = s.t; push(v._netBuf ||= [], st, 12); }
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------ vehicles
+  writeVehicle(w, v) {
+    w.f32(v.pos.x); w.f32(v.pos.y); w.f32(v.pos.z); w.f32(v.yaw);
+    w.i16(v.pitch * 10000); w.i16(v.roll * 10000);
+    w.f32(v.vel.x); w.f32(v.vel.z); w.i16(v.vy * 100); w.i16(v.speed * 100); w.i8(v.steer * 127); w.i8(v.throttle * 127); w.i16(v.yawRate * 1000);
+  }
+  readVehicle(rd) {
+    return { x: rd.f32(), y: rd.f32(), z: rd.f32(), yaw: rd.f32(), pitch: rd.i16() / 10000, roll: rd.i16() / 10000,
+      vx: rd.f32(), vz: rd.f32(), vy: rd.i16() / 100, speed: rd.i16() / 100, steer: rd.i8() / 127, th: rd.i8() / 127, yr: rd.i16() / 1000 };
+  }
+
+  /** A copy of one of the host's vehicles (moved by the host's updates). */
+  addVehicle(rec) {
+    const vh = this.g.vehicles;
+    if (vh.byId(rec.id)) return vh.byId(rec.id);
+    const v = vh.spawn(rec.k, new THREE.Vector3(...rec.p), rec.y, { id: rec.id, color: rec.c });
+    if (!v) return null;
+    v.netFollow = true; v._netBuf = []; v.driver = rec.d || 0;
+    return v;
+  }
+
+  /** Vehicles someone else drives: where they were DELAY ago, smoothed. */
+  placeVehicles(T) {
+    const vh = this.g.vehicles;
+    if (!vh) return;
+    for (const v of vh.list) {
+      if (!v.netFollow || v === vh.driving || !v._netBuf?.length) continue;
+      const br = bracket(v._netBuf, T);
+      if (!br) continue;
+      const [a, b, k] = br;
+      let dy = b.yaw - a.yaw; dy -= Math.round(dy / (Math.PI * 2)) * Math.PI * 2;
+      vh.setState(v, {
+        x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, z: a.z + (b.z - a.z) * k, yaw: a.yaw + dy * k,
+        pitch: a.pitch + (b.pitch - a.pitch) * k, roll: a.roll + (b.roll - a.roll) * k, vx: a.vx + (b.vx - a.vx) * k, vz: a.vz + (b.vz - a.vz) * k,
+        vy: b.vy, speed: a.speed + (b.speed - a.speed) * k, steer: a.steer + (b.steer - a.steer) * k, th: b.th, yr: b.yr,
+      });
+      v.spin += (v.speed / v.k.wheelR) * (1 / 60);
+      vh.place(v);
+    }
   }
 
   placeRagdolls(T) {
@@ -1118,11 +1284,12 @@ export class Net {
       }
       case 'spoon': g.explosives.spawnSpoon(new THREE.Vector3(...e.p), new THREE.Vector3(...e.v)); break;
       case 'shot': {
-        if (e.p === this.me.id) break;       // our own: already shown
+        if (e.p === this.me.id && !e.x?.snd) break;       // our own: already shown (a sentry gun's aren't)
         const o = new THREE.Vector3(...e.o), d = new THREE.Vector3(...e.d);
         const p = this.players.get(e.p);
         const m = p?.avatar?.muzzleWorld() || (e.m ? new THREE.Vector3(...e.m) : null);
         g.ballistics.fire(o, d, m, { ...e.x, replay: true, ghost: true });
+        if (e.x?.snd) this.playAt(e.x.snd, o);
         if (e.w >= 0) {
           const tool = g.tools[e.w]?.name, snd = tool && GUN_SOUND[tool];
           if (snd) this.playAt(snd, p?.avatar?.root.position || o);
@@ -1139,7 +1306,23 @@ export class Net {
       case 'snd': this.playAt(e.n, new THREE.Vector3(...e.p)); break;
       case 'clean': g.cleanUp(true); for (const [id, x] of this.bodyById) if (!g.gore.gibs.includes(x) && !g.explosives.live.includes(x)) this.bodyById.delete(id); break;
       case 'map': if (e.id !== g.getMap().def?.id) { g.loadMap(e.id); } this.ragById.clear(); this.bodyById.clear(); break;
-      case 'toast': g.hud.toast(e.s); break;
+      case 'toast': g.hud.toast(e.s); g.onSystem?.(e.s); break;
+      case 'world': this.rebuildWorld(e); break;
+      case 'vs': g.onVs?.(e); break;
+      case 'v+': this.addVehicle(e); break;
+      case 'v-': { const v = g.vehicles.byId(e.id); if (v) g.vehicles.remove(v); break; }
+      case 'vdrv': {
+        const v = g.vehicles.byId(e.id);
+        if (!v) break;
+        if (e.d === this.me.id) { if (g.vehicles.driving !== v) { v.netFollow = false; v.driver = 0; g.vehicles.enter(v); } }
+        else {
+          if (g.vehicles.driving === v) g.vehicles.exit(true);
+          v.driver = e.d; v.netFollow = true;
+          if (e.s) g.vehicles.setState(v, e.s);
+        }
+        break;
+      }
+      case 'horn': { if (e.p === this.me.id) break; const v = g.vehicles.byId(e.id); if (v) this.playAt('horn', v.pos); break; }
     }
   }
 
@@ -1155,12 +1338,23 @@ export class Net {
   spawnCopy(rec) {
     const g = this.g;
     if (this.ragById.has(rec.id)) { const old = this.ragById.get(rec.id); this.ragById.delete(rec.id); g.ragdolls.remove(old); }
+    const r = this.buildRagdoll(rec, true);
+    this.ragById.set(rec.id, r);
+    return r;
+  }
+
+  /**
+   * A ragdoll from a record (ragdollRecord(r, true)): in the same pose, with the same wounds,
+   * missing limbs and health. replica: a friend's copy (moved by the host); otherwise a real one
+   * (a saved scene being loaded).
+   */
+  buildRagdoll(rec, replica = false) {
+    const g = this.g;
     const P = rec.pose;
     const armor = { helmet: !!rec.a?.helmet, vest: !!rec.a?.vest };
-    const r = g.ragdolls.spawn([P[0], 0, P[2]], 0, { armor, behavior: rec.b, zombie: rec.z, name: rec.n });
-    r.netId = rec.id;
-    r._netBuf = [];
-    r.replica = true;
+    const y = replica ? 0 : g.getMap().groundAt(P[0], P[2], P[1] + 0.3);
+    const r = g.ragdolls.spawn([P[0], y, P[2]], rec.yaw || 0, { armor, behavior: rec.b, zombie: rec.z, name: rec.n });
+    if (replica) { r.netId = rec.id; r._netBuf = []; r.replica = true; }
     for (let i = 0; i < NPARTS; i++) {
       const b = r.parts[PARTS[i].name].body, j = i * 7;
       b.position.set(P[j], P[j + 1], P[j + 2]);
@@ -1173,10 +1367,9 @@ export class Net {
       mine.hp = a.hp; mine.broken = a.broken;
       if (a.dropped) { mine.dropped = true; for (const m of mine.all) m.visible = false; }
     }
-    // joined late: what has already happened to it
+    // joined late (or loaded): what has already happened to it
     if (rec.hs) this.restore(r, rec);
     r.sync();
-    this.ragById.set(rec.id, r);
     return r;
   }
 

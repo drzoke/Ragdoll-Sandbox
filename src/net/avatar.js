@@ -19,6 +19,7 @@ export const PLAYER_COLORS = ['#3d8bfd', '#ff8a2a', '#2fbf71', '#c35cf5', '#f2c1
 const HOLD = {
   'Fists': 'fists', 'M1911': 'pistol', 'Remington 870': 'shotgun', 'M24 Sniper': 'sniper', 'Flintlock Musket': 'musket',
   'Grenade': 'grenade', 'Grab': 'gadget', 'Machete': 'machete', 'Medkit': 'medkit', 'Defibrillator': 'defib',
+  'Assault Rifle': 'rifle', 'Submachine Gun': 'smg', 'Combat Shotgun': 'shotgun', 'Proximity Mine': 'grenade', 'Sentry Gun': 'medkit',
 };
 
 const S = 0.965;      // a little smaller than a ragdoll, so the eyes sit at the player's eye height
@@ -210,6 +211,18 @@ export class Avatar {
       part(g, geo.receiver, mat.metal, 0, 0, 0.2); part(g, geo.barrel, mat.metal, 0, 0.01, 0.65, 1, 1, 0.7);
       part(g, geo.scope, mat.metal, 0, 0.07, 0.2); part(g, geo.stock, mat.wood, 0, -0.02, -0.08, 1, 1.1, 1);
       g.userData.muzzle = new THREE.Vector3(0, 0.01, 1.0);
+    });
+    item('rifle', (g) => {
+      g.position.set(-0.13, -0.08, 0.02); hands(g, [0, -0.06, 0.1], [0, -0.04, 0.34]);
+      part(g, geo.receiver, mat.metal, 0, 0, 0.16); part(g, geo.barrel, mat.metal, 0, 0.012, 0.5, 1.2, 1.2, 0.5);
+      part(g, geo.box, mat.metal, 0, -0.08, 0.2, 0.03, 0.12, 0.05); part(g, geo.stock, mat.metal, 0, -0.025, -0.08, 0.9, 0.9, 0.9);
+      g.userData.muzzle = new THREE.Vector3(0, 0.012, 0.75);
+    });
+    item('smg', (g) => {
+      g.position.set(-0.1, -0.1, 0.2); hands(g, [0, -0.07, 0.02], [0, -0.05, 0.2]);
+      part(g, geo.receiver, mat.metal, 0, 0, 0.08, 0.8, 0.8, 0.7); part(g, geo.barrel, mat.metal, 0, 0.01, 0.3, 1.2, 1.2, 0.25);
+      part(g, geo.box, mat.metal, 0, -0.1, 0.12, 0.025, 0.14, 0.03);
+      g.userData.muzzle = new THREE.Vector3(0, 0.01, 0.42);
     });
     item('musket', (g) => {
       g.position.set(-0.13, -0.08, 0.02); hands(g, [0, -0.05, 0.12], [0, -0.03, 0.4]);

@@ -87,6 +87,9 @@
 <!-- Alpha: one step per full update (feature batch). Patch: small fixes shipped on that version
      (back to 0 when the Alpha number goes up). -->
 <div id="mp-hud" class="hidden"></div>
+<div id="drive" class="hidden"></div>
+<div id="drive-keys"><span><kbd>W</kbd><kbd>S</kbd> drive</span><span><kbd>A</kbd><kbd>D</kbd> steer</span><span><kbd>Space</kbd> handbrake</span><span><kbd>C</kbd> camera</span><span><kbd>Click</kbd> horn</span><span><kbd>E</kbd> get out</span></div>
+<div id="chat" class="hidden quiet"><div id="chat-log"></div><form id="chat-form" autocomplete="off"><input id="chat-in" placeholder="Say something (Enter sends, Esc closes)" spellcheck="false" enterkeyhint="send"><button id="chat-send" type="submit">Send</button></form></div>
 <div id="version">Alpha 0.9<small>Patch 7</small></div>
 
 <div id="toolbox" class="hidden">
@@ -127,7 +130,9 @@
     </div>
     <nav class="m-nav">
       <button id="play" class="m-btn primary"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg><span>Play</span></button>
+      <button id="vs-play" class="m-btn vs-btn title-only"><svg viewBox="0 0 24 24"><path d="M12 2.5c-4.4 0-7.5 3.2-7.5 7.6 0 2.6 1.1 4.3 2.6 5.4V19h2v-2h1.5v2h2.8v-2h1.5v2h2v-3.5c1.5-1.1 2.6-2.8 2.6-5.4 0-4.4-3.1-7.6-7.5-7.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="9" cy="10.5" r="1.7" fill="currentColor"/><circle cx="15" cy="10.5" r="1.7" fill="currentColor"/><path d="M11 14.2h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>VS Undead</span><em>co-op zombie waves</em></button>
       <button class="m-btn" data-panel="maps"><svg viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 4v14M15 6v14" stroke="currentColor" stroke-width="1.8"/></svg><span>Maps</span></button>
+      <button class="m-btn" data-panel="saves"><svg viewBox="0 0 24 24"><path d="M5 3h11l3 3v15H5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 3v5h7V3M8 21v-7h8v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>Saves</span></button>
       <button class="m-btn" data-panel="mp"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 19c.6-3.4 3-5.2 6-5.2s5.4 1.8 6 5.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="17" cy="9" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M16.5 13.9c2.3.2 4 1.7 4.5 4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Multiplayer</span></button>
       <button class="m-btn" data-panel="settings"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zm8.6 4.9l1.9 1.5-2 3.4-2.3-.8a8 8 0 01-2.1 1.2L15.7 21h-4l-.4-2.3a8 8 0 01-2.1-1.2l-2.3.8-2-3.4 1.9-1.5a8 8 0 010-2.4L4.9 9.6l2-3.4 2.3.8a8 8 0 012.1-1.2L11.7 3h4l.4 2.3a8 8 0 012.1 1.2l2.3-.8 2 3.4-1.9 1.5a8 8 0 010 2.4z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Settings</span></button>
       <button class="m-btn" data-panel="keys"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 10h1M10 10h1M14 10h1M18 10h1M7 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Controls</span></button>
@@ -144,6 +149,12 @@
     <section class="tab hidden" id="tab-maps">
       <p class="note">Pick where to play. Loading a map clears the bodies and the blood.</p>
       <div id="map-list"></div>
+    </section>
+    <section class="tab hidden" id="tab-saves">
+      <p class="note">Saves are kept in this browser on this device. Loading one brings back the map, every ragdoll and zombie with their wounds and missing limbs, the vehicles and where you stood. "Last session" saves itself when you leave the page.</p>
+      <div class="save-new"><input id="save-name" maxlength="40" placeholder="Name (optional)" autocomplete="off" spellcheck="false"><button class="mp-btn primary" id="save-new">Save this scene</button></div>
+      <p class="note warn hidden" id="save-note"></p>
+      <div id="save-list"></div>
     </section>
     <section class="tab hidden" id="tab-mp">
       <p class="note">Play in the same world with friends. One of you hosts a room, the others join it with its code. The host's computer runs the world (the bodies, the damage), so the fastest computer should host.</p>

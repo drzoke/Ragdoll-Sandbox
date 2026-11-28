@@ -232,6 +232,7 @@ export class Writer {
   u8(x) { this.need(1); this.dv.setUint8(this.o, x); this.o += 1; }
   u16(x) { this.need(2); this.dv.setUint16(this.o, x, true); this.o += 2; }
   u32(x) { this.need(4); this.dv.setUint32(this.o, x >>> 0, true); this.o += 4; }
+  i8(x) { this.need(1); this.dv.setInt8(this.o, Math.max(-127, Math.min(127, Math.round(x)))); this.o += 1; }
   i16(x) { this.need(2); this.dv.setInt16(this.o, Math.max(-32767, Math.min(32767, Math.round(x))), true); this.o += 2; }
   f32(x) { this.need(4); this.dv.setFloat32(this.o, x, true); this.o += 4; }
   f64(x) { this.need(8); this.dv.setFloat64(this.o, x, true); this.o += 8; }
@@ -247,6 +248,7 @@ export class Reader {
   u8() { const x = this.dv.getUint8(this.o); this.o += 1; return x; }
   u16() { const x = this.dv.getUint16(this.o, true); this.o += 2; return x; }
   u32() { const x = this.dv.getUint32(this.o, true); this.o += 4; return x; }
+  i8() { const x = this.dv.getInt8(this.o); this.o += 1; return x; }
   i16() { const x = this.dv.getInt16(this.o, true); this.o += 2; return x; }
   f32() { const x = this.dv.getFloat32(this.o, true); this.o += 4; return x; }
   f64() { const x = this.dv.getFloat64(this.o, true); this.o += 8; return x; }

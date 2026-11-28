@@ -131,6 +131,10 @@ export class GameMap {
     this.fill.intensity = def.fill || 0;
     this.hemi.intensity = def.hemi ?? 0.85;
     this.sun.intensity = def.sun ?? 1.9;
+    this.sun.color.set(def.sunColor ?? 0xffffff);
+    this.hemi.color.set(def.hemiSky ?? 0xdfe6ee); this.hemi.groundColor.set(def.hemiGround ?? 0x55585b);
+    this.scene.environmentIntensity = def.env ?? 0.4;
+    if (def.sunDir) this.sunOffset.set(...def.sunDir); else this.sunOffset.set(14, 26, 10).multiplyScalar(2.2);
     this.addColliderObj(this.titleCollider);
     for (const m of this.titleMeshes) this.solidMeshes.push(m);
     def.build(this);

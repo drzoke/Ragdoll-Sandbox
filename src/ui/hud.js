@@ -1,3 +1,4 @@
+import { AMMO } from '../weapon/ammo.js';
 import { CONFIG } from '../config.js';
 import { clamp } from '../core/util.js';
 import { XRayView } from './xray.js';
@@ -94,7 +95,7 @@ export class HUD {
 
     // Ammo (guns) or a status line (other tools)
     const am = isPistol
-      ? { mag: pistol.mag, chamber: pistol.chambered ? '+1' : '+0', reserve: CONFIG.weapon.infiniteReserve ? '∞' : pistol.reserve, name: 'M1911 · .45 ACP', low: pistol.mag <= 2 }
+      ? { mag: pistol.mag, chamber: pistol.chambered ? '+1' : '+0', reserve: AMMO.label('pistol'), name: 'M1911 · .45 ACP', low: pistol.mag <= 2 }
       : tool.ammo?.() || null;
     this.el.ammo.classList.toggle('hidden', !am);
     const st = am ? null : tool.status();

@@ -81,7 +81,7 @@ export class Explosives {
   meshes() { return this.live.flatMap((g) => g.mesh.children.filter((o) => o.isMesh && o.visible)); }
 
   // ---------------------------------------------------------------- grenades
-  throwGrenade(pos, vel, spin) {
+  throwGrenade(pos, vel, spin, owner = 0) {
     const mesh = this.template.root.clone(true);
     mesh.traverse((o) => { o.userData = {}; });
     const body = new CANNON.Body({
@@ -94,7 +94,7 @@ export class Explosives {
     body.velocity.set(vel.x, vel.y, vel.z);
     body.angularVelocity.set(spin.x, spin.y, spin.z);
     this.physics.world.addBody(body);
-    const g = { mesh, body, fuse: FUSE, lastClink: 0, smokeT: 0 };
+    const g = { mesh, body, fuse: FUSE, lastClink: 0, smokeT: 0, owner };
     this.byBody.set(body, g);
     // the ball mesh is what bullets / fists / the grab tool find
     mesh.traverse((o) => { if (o.isMesh) o.userData.grenade = g; });
@@ -128,19 +128,19 @@ export class Explosives {
     this.byBody.delete(g.body);
     this.scene.remove(g.mesh);
     this.live = this.live.filter((x) => x !== g);
-    this.explode(p);
+    this.explode(p, g.owner);
   }
 
-  explode(c) {
+  explode(c, owner = 0) {
     this.explodeVisual(c, false);
-    this.blast(c);
+    this.blast(c, owner);
     this.map.onBlast?.(c);   // windows nearby shatter
     this.ragdolls.alert(c, 45, 0.7, 'blast');
     // shrapnel: the casing breaks into hundreds of fragments. Fire a spread of random ones, plus
     // the share of the cloud that would land on each nearby body part (more the closer it is).
     if (this.ballistics) {
       const frag = (d) => this.ballistics.fire(c.clone().addScaledVector(d, 0.05), d, null,
-        { energy: rand(0.4, 0.72), impulse: 3.2, size: 0.4, glowSize: 0.03, speed: rand(260, 420), range: 40, life: 0.45, fragment: true });
+        { energy: rand(0.4, 0.72), impulse: 3.2, size: 0.4, glowSize: 0.03, speed: rand(260, 420), range: 40, life: 0.45, fragment: true, owner });
       for (let i = 0; i < SHRAPNEL; i++) frag(new THREE.Vector3(rand(-1, 1), rand(-0.45, 0.9), rand(-1, 1)).normalize());
       for (const r of this.ragdolls.list) {
         for (const part of Object.values(r.parts)) {
@@ -338,7 +338,7 @@ export class Explosives {
   }
 
   /** Damage, bruises, soot and knockback on every ragdoll part in range; pushes gibs and grenades. */
-  blast(c) {
+  blast(c, owner = 0) {
     const dismember = settings.get('dismemberment');
     for (const r of [...this.ragdolls.list]) {
       const todo = [];
@@ -357,6 +357,7 @@ export class Explosives {
         if (d < 0.6) k = Math.max(k, 1 - d * 0.15);
         if (k < 0.01) continue;
         any = true;
+        r.lastBy = owner;
         // armour soaks up part of the blast (and keeps the fireball off the skin)
         const covered = (r.armor?.vest && !r.armor.vest.broken && (name === 'chest' || name === 'abdomen')) || (r.armor?.helmet && !r.armor.helmet.dropped && name === 'head');
         // knockback: a velocity kick away from the blast (light limbs and the heavy torso both fly)

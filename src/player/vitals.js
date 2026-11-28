@@ -12,10 +12,13 @@ export class PlayerVitals {
     this.dead = false; this.deadT = 0;
     this.sinceHurt = 99; this.flash = 0; this.beatT = 0;
     this.god = false;   // tests / debugging
+    this.armor = 0;     // VS Undead: body armour soaks up most of a hit until it is used up
+    this.regen = 7;     // health back per second, a few seconds after the last hit
+    this.lockRespawn = '';   // VS Undead, with friends: no respawning until the wave is cleared
     const hud = document.getElementById('hud');
     this.bar = document.createElement('div');
     this.bar.id = 'health';
-    this.bar.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.1 0 3.6 1.2 5.2 3 1.6-1.8 3.1-3 5.2-3 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z" fill="currentColor"/></svg><div class="hb"><i></i><u></u></div><b>100</b>';
+    this.bar.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.1 0 3.6 1.2 5.2 3 1.6-1.8 3.1-3 5.2-3 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z" fill="currentColor"/></svg><div class="hb"><i></i><u></u><s></s></div><b>100</b>';
     hud.appendChild(this.bar);
     this.hurtEl = document.createElement('div');
     this.hurtEl.id = 'hurt';
@@ -26,13 +29,19 @@ export class PlayerVitals {
     this.deathEl.innerHTML = '<div class="dc"><h2>You died</h2><p class="cause"></p><button type="button">Respawn</button><small class="desk-only">or press Space</small></div>';
     document.body.appendChild(this.deathEl);
     this.deathEl.querySelector('button').addEventListener('click', () => this.respawn());
-    this.ui = { fill: this.bar.querySelector('.hb i'), lag: this.bar.querySelector('.hb u'), num: this.bar.querySelector('b'), cause: this.deathEl.querySelector('.cause') };
+    this.hideDeathScreen = false;   // VS Undead alone: its own game-over screen instead
+    this.ui = { fill: this.bar.querySelector('.hb i'), lag: this.bar.querySelector('.hb u'), arm: this.bar.querySelector('.hb s'), num: this.bar.querySelector('b'), cause: this.deathEl.querySelector('.cause'), btn: this.deathEl.querySelector('button'), h2: this.deathEl.querySelector('h2'), small: this.deathEl.querySelector('small') };
     this.lagHp = 100;
   }
 
   /** Take damage. kind: 'zombie' | 'fall' | 'blast'. */
   hurt(amount, { kind = 'hit' } = {}) {
     if (this.dead || this.god || amount <= 0) return;
+    if (this.armor > 0) {
+      const soak = Math.min(this.armor, amount * 0.65);
+      this.armor -= soak; amount -= soak;
+      if (this.armor <= 0) { this.armor = 0; this.audio.play('clink'); }
+    }
     this.hp = Math.max(0, this.hp - amount);
     this.sinceHurt = 0;
     this.flash = Math.min(1, this.flash + 0.35 + amount / 40);
@@ -44,14 +53,19 @@ export class PlayerVitals {
 
   die(kind) {
     this.dead = true; this.deadT = 0;
-    this.ui.cause.textContent = kind === 'zombie' ? 'The zombies got you.' : kind === 'fall' ? 'You fell too far.' : kind === 'blast' ? 'You were too close to the blast.' : 'You were killed.';
+    this.ui.cause.textContent = (kind === 'zombie' ? 'The zombies got you.' : kind === 'fall' ? 'You fell too far.' : kind === 'blast' ? 'You were too close to the blast.' : 'You were killed.') + (this.lockRespawn ? ` ${this.lockRespawn}` : '');
+    this.ui.h2.textContent = this.lockRespawn ? 'You\'re down' : 'You died';
+    this.ui.btn.classList.toggle('hidden', !!this.lockRespawn);
+    this.ui.small.classList.toggle('hidden', !!this.lockRespawn);
+
     this.audio.play('flatline', 0.8);
     document.body.classList.add('dead');
     this.onDeath?.(kind);
   }
 
-  respawn() {
+  respawn(force = false) {
     if (!this.dead) return;
+    if (this.lockRespawn && !force) return;
     this.dead = false; this.hp = this.max; this.lagHp = this.max; this.flash = 0; this.sinceHurt = 99;
     this.player.down = 0;
     this.deathEl.classList.add('hidden');
@@ -67,9 +81,9 @@ export class PlayerVitals {
     if (this.dead) {
       this.deadT += dt;
       this.player.down = Math.min(1, this.deadT / 0.9);
-      if (this.deadT > 1.1) this.deathEl.classList.remove('hidden');
-      if (this.deadT > 1.3 && playing && input.wasPressed('Space')) this.respawn();
-    } else if (this.sinceHurt > 5 && this.hp < this.max) this.hp = Math.min(this.max, this.hp + dt * 7);
+      if (this.deadT > 1.1 && !this.hideDeathScreen) this.deathEl.classList.remove('hidden');
+      if (this.deadT > 1.3 && playing && !this.lockRespawn && !this.hideDeathScreen && input.wasPressed('Space')) this.respawn();
+    } else if (this.sinceHurt > 5 && this.hp < this.max) this.hp = Math.min(this.max, this.hp + dt * this.regen);
     // heartbeat when badly hurt
     if (!this.dead && this.hp < 30 && playing) {
       this.beatT -= dt;
@@ -89,6 +103,8 @@ export class PlayerVitals {
       const n = String(Math.ceil(this.hp));
       if (this.ui.num.textContent !== n) this.ui.num.textContent = n;
       this.bar.classList.toggle('low', this.hp < 30);
+      this.ui.arm.style.transform = `scaleX(${(this.armor / 100).toFixed(3)})`;
+      this.bar.classList.toggle('armored', this.armor > 0);
     }
   }
 }

@@ -55,7 +55,7 @@ export class ZombieBrain extends Brain {
   /** Nearest living, non-zombie person on the same floor within sight. */
   findPrey() {
     const env = this.env, pp = this.r.bodyPos('pelvis', _v);
-    let best = null, bestD = SIGHT;
+    let best = null, bestD = this.sight || SIGHT;
     // you, and in multiplayer every other player too
     for (const P of env?.players || (env?.player ? [env.player] : [])) {
       if (P.alive === false) continue;
@@ -181,7 +181,7 @@ export class ZombieBrain extends Brain {
     const dist = Math.hypot(this.preyPos.x - pp.x, this.preyPos.z - pp.z);
     if (dist > REACH + 0.25) { env?.gore?.audio?.play('whoosh', 0.6); return; }
     if (this.prey.isPlayer) {
-      env?.hurtPlayer?.(rand(8, 13), { kind: 'zombie', from: pp.clone(), who: this.prey });
+      env?.hurtPlayer?.(rand(8, 13) * (this.dmgMul || 1), { kind: 'zombie', from: pp.clone(), who: this.prey });
       return;
     }
     this.bite(this.prey);

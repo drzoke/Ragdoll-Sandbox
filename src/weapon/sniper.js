@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AMMO } from './ammo.js';
 import { CONFIG } from '../config.js';
 import { clamp, damp, Spring, lerp, viewmodelToWorld, drawOffset } from '../core/util.js';
 import { buildSniper, buildRound } from './modelRifles.js';
@@ -170,7 +171,7 @@ export class Sniper {
   }
   status() { return null; }
   ammo() {
-    return { mag: this.ammoMag, chamber: this.chamber === 'live' ? '+1' : '+0', reserve: '∞', name: 'M24 · 7.62 mm', low: this.ammoMag === 0 && this.chamber !== 'live' };
+    return { mag: this.ammoMag, chamber: this.chamber === 'live' ? '+1' : '+0', reserve: AMMO.label('sniper'), name: 'M24 · 7.62 mm', low: this.ammoMag === 0 && this.chamber !== 'live' };
   }
   crosshair() { return { gap: 22 + Math.max(0, 0.3 - this.fireT) * 70, ads: this.ads > 0.6 }; }
 
@@ -296,6 +297,7 @@ export class Sniper {
   tryReload() {
     if (this.busy || this.sprint > 0.5) return;
     if (this.ammoMag >= S.mag) { if (this.chamber !== 'live') this.boltQueued = 0; return; }
+    if (!AMMO.has('sniper')) { this.audio.play('dry'); return; }
     this.anim.play(CL.reload, this._ev);
   }
 
@@ -313,7 +315,7 @@ export class Sniper {
         break;
       case 'boltDown': this.audio.play('boltDown'); break;
       case 'magOut': this.audio.play('magOut'); break;
-      case 'magSwap': this.ammoMag = S.mag; break;
+      case 'magSwap': if (AMMO.finite) AMMO.give('sniper', this.ammoMag); this.ammoMag = AMMO.take('sniper', S.mag); break;
       case 'magIn': this.audio.play('magIn'); break;
       case 'end':
         if (clip === CL.reload && this.chamber !== 'live') this.boltQueued = 0.05;

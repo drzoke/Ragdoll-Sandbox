@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AMMO } from './ammo.js';
 import { lerp, viewmodelToWorld, drawOffset } from '../core/util.js';
 import { Clip, ClipPlayer } from './anim.js';
 import { BlockArms, sampleHand, anchorPos } from './arms.js';
@@ -66,7 +67,7 @@ export class GrenadeTool {
   resize(aspect) { this.camera.aspect = aspect; this.camera.updateProjectionMatrix(); }
   refill() {}
   get controls() { return [['Left click', 'Throw (hold to aim, let go to throw)'], ['Right click', 'Lob underhand (hold to aim)']]; }
-  status() { return { title: 'Grenade', sub: '∞ · 3 second fuse' }; }
+  status() { return { title: 'Grenade', sub: `${AMMO.label('grenade')} · 3 second fuse` }; }
   crosshair() { return { gap: 6 }; }
 
   update(dt, input, active, worldDt) {
@@ -111,6 +112,7 @@ export class GrenadeTool {
   }
 
   start(kind) {
+    if (!AMMO.has('grenade')) { this.audio.play('deny'); return; }
     this.kind = kind;
     this.anim.play(CLIPS[kind], (e) => this.onEvent(e));
   }
@@ -135,7 +137,7 @@ export class GrenadeTool {
 
   reset() {
     this.inHand = true;
-    this.model.root.visible = true;
+    this.model.root.visible = AMMO.has('grenade');
     this.model.spoon.visible = true;
     if (this.pinOut) {
       this.model.root.add(this.model.pinGroup);
@@ -153,6 +155,7 @@ export class GrenadeTool {
     this.arc?.hide();
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion);
     const spin = right.clone().multiplyScalar((over ? -14 : 8) * (1 - down * 0.8)).add(new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4));
+    AMMO.take('grenade', 1);
     this.onThrow(pos, vel, spin, { right });
     this.model.root.visible = false;
     this.audio.play('throw');

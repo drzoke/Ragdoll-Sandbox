@@ -468,6 +468,8 @@ body.scoped #hotbar { opacity: 0; transition: opacity .15s; }
 #health .hb i { background: linear-gradient(#f1f4f6, #c9d2da); z-index: 1; }
 #health.low .hb i { background: linear-gradient(#ff7a70, #d2403a); }
 #health b { font-size: 15px; min-width: 28px; }
+#health .hb s { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; z-index: 2; transform-origin: left center; transform: scaleX(0); background: #5fb6ff; }
+#health.armored .hb { height: 10px; }
 body.touch #health { left: 50%; bottom: auto; top: calc(env(safe-area-inset-top) + 12px); transform: translateX(-50%); }
 body.touch #health .hb { width: 120px; }
 #hurt { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(150,0,0,0) 45%, rgba(150,0,0,.45) 78%, rgba(90,0,0,.85) 100%); }
@@ -566,3 +568,116 @@ body.dead #controls, body.dead #hotbar, body.dead #crosshair, body.dead #ammo, b
 .mp-status { margin: 12px 0 0; padding: 9px 12px; font-size: 13px; color: #ffd9a0; background: rgba(255,180,60,.08); border: 1px solid rgba(255,180,60,.22); border-radius: 8px; }
 #mp-hud { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 40; padding: 4px 12px; font-size: 12px; font-weight: 700; letter-spacing: .03em; color: #e8edf2; background: rgba(12,14,18,.5); border-radius: 999px; pointer-events: none; }
 body.title #mp-hud { display: none; }
+
+/* multiplayer chat (bottom left) */
+#chat { position: fixed; left: 16px; bottom: 72px; width: min(430px, 62vw); z-index: 30; pointer-events: none; }
+#chat-log { max-height: 170px; overflow: hidden; display: flex; flex-direction: column; align-items: flex-start; }
+#chat .cl { flex: none; max-width: 100%; margin-top: 3px; padding: 3px 9px; border-radius: 7px; font-size: 13px; line-height: 1.35; color: #eef2f5; background: rgba(10,12,16,.5); text-shadow: 0 1px 2px rgba(0,0,0,.6); overflow-wrap: anywhere; }
+#chat .cl b { margin-right: 7px; font-weight: 700; }
+#chat .cl.sys { color: #b9c6d2; font-style: italic; background: rgba(10,12,16,.35); }
+#chat .cl.old { display: none; }
+#chat.open .cl.old { display: block; opacity: .75; }
+#chat.open #chat-log { overflow-y: auto; pointer-events: auto; max-height: 240px; }
+#chat-form { display: none; margin-top: 6px; gap: 6px; pointer-events: auto; }
+#chat.open #chat-form { display: flex; }
+#chat-in { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,.22); background: rgba(10,12,16,.78); color: #fff; font: inherit; font-size: 14px; outline: none; }
+#chat-in:focus { border-color: rgba(255,255,255,.5); }
+#chat-send { padding: 0 14px; border-radius: 8px; border: 0; background: #e9edf1; color: #111; font: inherit; font-weight: 700; font-size: 13px; cursor: pointer; }
+body.title #chat, body.dead #chat:not(.open) { display: none; }
+body.touch #chat { left: calc(env(safe-area-inset-left) + 10px); bottom: auto; top: calc(env(safe-area-inset-top) + 64px); width: min(380px, 46vw); }
+body.touch #mp-hud { pointer-events: auto; cursor: pointer; }
+
+/* driving: speed bottom right, the keys along the bottom; the gun HUD is hidden */
+#drive { position: fixed; right: 28px; bottom: 30px; z-index: 20; text-align: right; color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.75); pointer-events: none; }
+#drive b { font-size: 46px; font-weight: 800; letter-spacing: -.02em; line-height: 1; }
+#drive small { margin-left: 5px; font-size: 13px; font-weight: 700; opacity: .8; }
+#drive span { display: block; margin-top: 3px; font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; opacity: .7; }
+#drive-keys { display: none; position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 20; gap: 14px; font-size: 12px; color: #dfe6ec; text-shadow: 0 1px 3px rgba(0,0,0,.8); pointer-events: none; white-space: nowrap; }
+#drive-keys kbd { display: inline-block; min-width: 18px; margin-right: 3px; padding: 1px 5px; border-radius: 4px; background: rgba(255,255,255,.16); font-family: inherit; font-size: 11px; font-weight: 700; text-align: center; }
+body.driving #drive-keys { display: flex; }
+body.touch #drive-keys, body.title #drive-keys, body.title #drive { display: none !important; }
+body.driving #hotbar, body.driving #crosshair, body.driving #ammo, body.driving #toolstatus, body.driving #controls { display: none !important; }
+
+/* saves */
+#tab-saves .save-new { display: flex; gap: 8px; margin: 12px 0 10px; }
+#tab-saves .save-new input { flex: 1; min-width: 0; padding: 9px 11px; border-radius: 8px; border: 1px solid rgba(255,255,255,.18); background: rgba(0,0,0,.25); color: #fff; font: inherit; font-size: 14px; outline: none; }
+#tab-saves .save-new button { flex: none; width: auto; padding: 0 16px; margin: 0; }
+#tab-saves .note.warn { color: #f0c27a; }
+#save-list { display: flex; flex-direction: column; gap: 8px; }
+#save-list .save { display: flex; gap: 10px; align-items: center; padding: 8px; border-radius: 10px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.07); }
+#save-list .save.auto { border-style: dashed; }
+#save-list .pic { flex: none; width: 112px; height: 63px; border-radius: 6px; overflow: hidden; background: #2a2e33; }
+#save-list .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#save-list .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#save-list .txt b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#save-list .txt span { font-size: 12px; color: #b9c6d2; }
+#save-list .txt small { font-size: 11px; color: #8d9aa6; }
+#save-list .acts { flex: none; display: flex; flex-direction: column; gap: 4px; }
+#save-list .acts button { padding: 5px 10px; border-radius: 6px; border: 0; background: rgba(255,255,255,.12); color: #e8edf2; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+#save-list .acts button.go { background: #e9edf1; color: #111; }
+#save-list .acts button.warn { background: #b8322a; color: #fff; }
+#save-list .acts button:disabled { opacity: .35; cursor: default; }
+
+/* ---------------------------------------------------------------- VS Undead */
+.m-btn.title-only { display: none; }
+#menu.title .m-btn.title-only { display: flex; }
+.m-btn.vs-btn { background: linear-gradient(90deg, rgba(120,190,90,.22), rgba(120,190,90,.06)); border-color: rgba(150,220,110,.3); color: #d6f5c4; }
+.m-btn.vs-btn:hover { background: linear-gradient(90deg, rgba(120,190,90,.34), rgba(120,190,90,.1)); }
+.m-btn.vs-btn em { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 600; letter-spacing: .04em; opacity: .7; }
+body.touch .m-btn.vs-btn em { display: none; }
+#vs-hud { position: absolute; left: 50%; top: 40px; transform: translateX(-50%); text-align: center; color: #e8edf2; text-shadow: 0 1px 4px rgba(0,0,0,.85); }
+#vs-hud .vs-wave { font-size: 13px; font-weight: 800; letter-spacing: .22em; text-transform: uppercase; color: #b9e6a0; }
+#vs-hud .vs-wave b { font-size: 22px; letter-spacing: .04em; color: #fff; }
+#vs-hud .vs-sub { margin-top: 2px; font-size: 14px; font-weight: 600; }
+#vs-hud kbd, #vs-shop kbd { display: inline-block; padding: 0 5px; border-radius: 4px; background: rgba(255,255,255,.16); font: inherit; font-size: .9em; font-weight: 800; }
+#vs-pts { position: absolute; right: 22px; top: 18px; display: flex; align-items: baseline; gap: 6px; color: #ffd76a; text-shadow: 0 1px 4px rgba(0,0,0,.85); }
+#vs-pts b { font-size: 26px; font-weight: 800; }
+#vs-pts span { font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; opacity: .8; }
+#vs-banner { position: absolute; left: 0; right: 0; top: 30%; text-align: center; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.9); }
+#vs-banner b { display: block; font-size: 54px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: #d9f2c8; }
+#vs-banner span { display: block; margin-top: 4px; font-size: 17px; font-weight: 600; color: #e8edf2; }
+#vs-banner.go { animation: vsban 3.4s ease-out forwards; }
+@keyframes vsban { 0% { opacity: 0; transform: scale(1.15); } 12% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
+#vs-pops { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.vs-pop { font-size: 15px; font-weight: 800; color: #ffd76a; text-shadow: 0 1px 4px rgba(0,0,0,.9); animation: vspop 1.4s ease-out forwards; white-space: nowrap; }
+.vs-pop.big { font-size: 19px; color: #ffef9a; }
+.vs-pop.info { color: #bfe3ff; font-size: 14px; }
+@keyframes vspop { 0% { opacity: 0; transform: translateY(8px); } 12% { opacity: 1; transform: none; } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
+body.vs #health { opacity: 1; }
+body.touch #vs-hud { top: calc(env(safe-area-inset-top) + 34px); }
+body.touch #vs-pts { top: calc(env(safe-area-inset-top) + 10px); right: 90px; }
+body.touch #vs-banner b { font-size: 36px; }
+#vs-shop, #vs-over { position: fixed; inset: 0; z-index: 22; display: grid; place-items: center; background: rgba(8,10,14,.55); color: #e8edf2; }
+#vs-shop.hidden, #vs-over.hidden { display: none; }
+.vs-panel { width: min(720px, 94vw); max-height: 88vh; display: flex; flex-direction: column; border-radius: 14px; background: rgba(22,20,26,.94); border: 1px solid rgba(255,210,140,.18); box-shadow: 0 18px 60px rgba(0,0,0,.5); overflow: hidden; }
+#vs-shop header { display: flex; align-items: center; gap: 16px; padding: 16px 18px 12px; border-bottom: 1px solid rgba(255,255,255,.08); }
+#vs-shop header h2 { margin: 0; font-size: 20px; color: #ffd9a0; }
+#vs-shop header p { margin: 2px 0 0; font-size: 13px; font-style: italic; opacity: .7; }
+.vs-wallet { margin-left: auto; display: flex; align-items: baseline; gap: 6px; color: #ffd76a; }
+.vs-wallet b { font-size: 24px; }
+.vs-wallet span { font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+.vs-x { width: 34px; height: 34px; border-radius: 8px; border: 0; background: rgba(255,255,255,.08); color: #e8edf2; font-size: 16px; cursor: pointer; }
+#vs-shop nav { display: flex; gap: 6px; padding: 10px 18px; }
+#vs-shop nav button { padding: 7px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,.12); background: transparent; color: #cfd8e2; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+#vs-shop nav button.on { background: #ffd9a0; border-color: #ffd9a0; color: #22170c; }
+.vs-items { overflow-y: auto; padding: 4px 18px 12px; display: grid; gap: 8px; }
+.vs-item { display: flex; align-items: center; gap: 14px; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.06); }
+.vs-item > div { flex: 1; min-width: 0; }
+.vs-item b { font-size: 15px; }
+.vs-item p { margin: 2px 0 0; font-size: 13px; opacity: .75; }
+.vs-item p em { font-style: normal; color: #9fd4ff; margin-left: 4px; }
+.vs-item button { min-width: 112px; display: flex; flex-direction: column; align-items: center; padding: 6px 12px; border-radius: 8px; border: 0; background: #e8edf2; color: #15191d; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.vs-item button span { font-size: 16px; color: #8a5a00; }
+.vs-item button:disabled { background: rgba(255,255,255,.1); color: rgba(232,237,242,.55); cursor: default; }
+.vs-item button:disabled span { color: inherit; }
+.vs-item.owned { opacity: .6; }
+#vs-shop footer { display: flex; justify-content: space-between; gap: 12px; padding: 10px 18px; font-size: 12px; opacity: .75; border-top: 1px solid rgba(255,255,255,.08); }
+#vs-over .vs-panel { width: min(460px, 92vw); padding: 24px 26px; text-align: center; border-color: rgba(255,120,110,.25); }
+#vs-over h2 { margin: 0 0 8px; font-size: 26px; color: #ff8a80; letter-spacing: .03em; }
+#vs-over .vs-sum { margin: 0 0 14px; color: #cfd8e2; }
+.vs-board { list-style: none; margin: 0 0 16px; padding: 0; text-align: left; }
+.vs-board li { display: flex; gap: 10px; padding: 6px 10px; border-radius: 6px; background: rgba(255,255,255,.05); margin-bottom: 4px; }
+.vs-board span { flex: 1; font-weight: 700; }
+.vs-board em { font-style: normal; color: #ffd76a; min-width: 80px; text-align: right; }
+.vs-acts { display: flex; gap: 10px; }
+.vs-acts .mp-btn { flex: 1; }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AMMO } from './ammo.js';
 import { CONFIG } from '../config.js';
 import { clamp, damp, Spring, lerp, viewmodelToWorld, drawOffset } from '../core/util.js';
 import { buildMusket } from './modelRifles.js';
@@ -59,7 +60,7 @@ CL.inspect.rh = [[0, 'grip']];
 const _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _h = new THREE.Vector3();
 
 /** World-space black-powder smoke: a thick white cloud that hangs around for seconds. */
-class PowderSmoke {
+export class PowderSmoke {
   constructor(scene, max = 48) {
     this.tex = puffTexture(false);
     this.pool = []; this.live = [];
@@ -68,11 +69,11 @@ class PowderSmoke {
       s.visible = false; s.renderOrder = 5; scene.add(s); this.pool.push(s);
     }
   }
-  puff(pos, vel, { size = 0.4, grow = 2.2, life = 5, opacity = 0.62, shade = 0.9 } = {}) {
+  puff(pos, vel, { size = 0.4, grow = 2.2, life = 5, opacity = 0.62, shade = 0.9, color = null } = {}) {
     const s = this.pool.length ? this.pool.pop() : this.live.shift().s;
     s.visible = true; s.position.copy(pos); s.scale.setScalar(size);
     s.material.rotation = Math.random() * Math.PI * 2;
-    s.material.color.setScalar(shade);
+    if (color !== null) s.material.color.set(color); else s.material.color.setScalar(shade);
     this.live.push({ s, vel: vel.clone(), age: 0, life, size, grow, opacity, spin: (Math.random() - 0.5) * 0.4 });
   }
   clear() { for (const p of this.live) { p.s.visible = false; this.pool.push(p.s); } this.live.length = 0; }
@@ -178,7 +179,7 @@ export class Musket {
   ammo() {
     const ready = this.loaded && this.primed && this.cock === 'full';
     const name = this.msgT > 0 ? this.msg : this.anim.clip === CL.reload ? 'Reloading…' : 'Flintlock · .75 ball';
-    return { mag: this.loaded ? 1 : 0, chamber: ready ? 'ready' : this.loaded ? 'unprimed' : 'empty', reserve: '∞', name, low: !ready };
+    return { mag: this.loaded ? 1 : 0, chamber: ready ? 'ready' : this.loaded ? 'unprimed' : 'empty', reserve: AMMO.label('ball'), name, low: !ready };
   }
   crosshair() { return { gap: 20 + Math.max(0, 0.35 - this.fireT) * 70, ads: this.ads > 0.6 }; }
 
@@ -281,6 +282,7 @@ export class Musket {
   tryReload() {
     if (this.busy || this.sprint > 0.5) return;
     if (this.loaded && this.primed && this.cock === 'full') return;
+    if (!this.loaded && !AMMO.has('ball')) { this.audio.play('dry'); return; }
     this.msgT = 0;
     this.anim.play(this.loaded ? CL.prime : CL.reload, this._ev);
   }
@@ -299,7 +301,7 @@ export class Musket {
       case 'ramTap': a.play('ramTap'); break;
       case 'fullCock': a.play('hammer'); this.cock = 'full'; break;
       case 'end':
-        if (clip === CL.reload) { this.loaded = true; this.primed = true; this.cock = 'full'; this.frizzenOpen = false; }
+        if (clip === CL.reload) { AMMO.take('ball', 1); this.loaded = true; this.primed = true; this.cock = 'full'; this.frizzenOpen = false; }
         else if (clip === CL.prime) { this.primed = true; this.cock = 'full'; this.frizzenOpen = false; }
         break;
     }

@@ -28,7 +28,7 @@ export const CONFIG = {
     groundAccel: 60,
     airAccel: 10,
     friction: 10,
-    jumpSpeed: 5.6,
+    jumpSpeed: 7.0,        // about 1.3 m high (gravity 19)
     gravity: 19,
     stepHeight: 0.36,
     coyoteTime: 0.1,

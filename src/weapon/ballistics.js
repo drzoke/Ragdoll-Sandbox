@@ -51,6 +51,8 @@ export class Ballistics {
       ...this.buttons.flatMap((b) => b.meshes),
       ...this.gore.gibs.map((g) => g.mesh),
       ...(this.explosives ? this.explosives.meshes() : []),
+      ...(this.vehicles ? this.vehicles.meshes() : []),
+      ...(this.extraTargets ? this.extraTargets() : []),
     ];
   }
 
@@ -78,7 +80,7 @@ export class Ballistics {
     this.bullets.push({
       pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), energy, impulse, pellet, fragment, shot, range, life, size, traveled: 0, age: 0, bloody: 0,
       skip: new Set(), offset: visualFrom ? visualFrom.clone().sub(origin) : new THREE.Vector3(), tracer, slug, dead: false,
-      ghost, mine: !!opts.mine, owner: opts.owner || 0,
+      ghost, mine: !!opts.mine, owner: opts.owner || 0, bot: !!opts.bot,
     });
   }
 
@@ -156,7 +158,7 @@ export class Ballistics {
       if (b.mine) { this.lastTarget = ud.ragdoll; this.sound(ud.armor ? 'clink' : 'flesh'); }
       return null;
     }
-    if (b.mine && !b.fragment) this.sound(ud.grenade ? 'clink' : 'concrete');
+    if (b.mine && !b.fragment) this.sound(ud.grenade ? 'clink' : ud.vehicle ? 'clang' : 'concrete');
     return null;
   }
 
@@ -220,6 +222,7 @@ export class Ballistics {
     // stopped: the impact still knocks the part and bruises what is under it
     const k = clamp(b.energy * (b.pellet ? 0.22 : b.fragment ? 0.2 : 0.75), 0, 1);
     r.health.blunt(ud.part, k, { helmet });
+    r.lastBy = b.owner || 0;
     if (!b.pellet && !b.fragment) r.health.log(`${helmet ? 'Helmet' : 'Vest'} stopped a round`, 'info');
     r.hitImpulse(ud.part, hit.point, dir, b.impulse * b.energy * 0.85);
     this.gore.armorHit(r, ud.part, hit.point, n, b.pellet || b.fragment ? 0.018 : 0.03);
@@ -254,6 +257,8 @@ export class Ballistics {
       const localEntry = hit.point.clone().sub(part.group.position).applyQuaternion(inv);
       const localDir = dir.clone().applyQuaternion(inv);
       const res = r.health.bulletHit(partName, localEntry, localDir, energy, { dismember: settings.get('dismemberment') });
+      r.lastBy = b.owner || 0;
+      this.onRagdollHit?.(r, b, res, partName);
       if (b.pellet && b.shot && b.traveled < 4.5) this.pointBlank(r, partName, part, b.shot, res);
       r.hitImpulse(partName, hit.point, dir, b.impulse * energy);
       this.gore.bulletWound(r, res, hit.point, dir);
@@ -292,6 +297,14 @@ export class Ballistics {
       return null;
     }
     if (ud.button) { ud.button.press(); this.sound('concrete'); return null; }
+    if (ud.vehicle || ud.metal) {
+      // a car (or a crate, a mine): sparks and a clang
+      const n = hit.face ? hit.face.normal.clone().transformDirection(obj.matrixWorld) : dir.clone().negate();
+      this.gore.sparks(hit.point, n, b.pellet || b.fragment ? 3 : 8);
+      this.sound('clang');
+      ud.onShot?.(b, hit);
+      return null;
+    }
     if (ud.glass) {
       // a window: it shatters and the bullet carries on through, a little slower
       this.map.glass?.shot(ud.glass, dir);

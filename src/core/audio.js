@@ -72,6 +72,33 @@ export class Audio {
     f.frequency.setTargetAtTime(500 + 600 * pitch, t, 0.05);
   }
 
+  /** Engine note of the car you drive: level 0..1, pitch ~0.6 (idle) .. 2.2 (flat out). */
+  engine(level, pitch = 1) {
+    if (!this.ctx) return;
+    if (!this.engineNodes) {
+      if (level <= 0.001) return;
+      const ctx = this.ctx;
+      const o1 = ctx.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = 42;
+      const o2 = ctx.createOscillator(); o2.type = 'square'; o2.frequency.value = 84;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 18;
+      const lg = ctx.createGain(); lg.gain.value = 0.25;
+      const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 420; f.Q.value = 2;
+      const g = ctx.createGain(); g.gain.value = 0;
+      const g2 = ctx.createGain(); g2.gain.value = 0.35;
+      o1.connect(f); o2.connect(g2).connect(f); f.connect(g).connect(this.master);
+      lfo.connect(lg).connect(g.gain);
+      o1.start(); o2.start(); lfo.start();
+      this.engineNodes = { o1, o2, f, g, lfo, lg };
+    }
+    const { o1, o2, f, g, lfo, lg } = this.engineNodes, t = this.ctx.currentTime;
+    g.gain.setTargetAtTime(level * 0.11, t, 0.08);
+    lg.gain.setTargetAtTime(level * 0.03, t, 0.08);
+    o1.frequency.setTargetAtTime(38 * pitch, t, 0.06);
+    o2.frequency.setTargetAtTime(76 * pitch, t, 0.06);
+    lfo.frequency.setTargetAtTime(14 * pitch, t, 0.06);
+    f.frequency.setTargetAtTime(260 + 380 * pitch, t, 0.06);
+  }
+
   /** Defibrillator charging whine: rises in pitch over dur seconds. Returns a stop() function. */
   charge(dur = 1.1) {
     if (!this.ctx) return () => {};
@@ -122,6 +149,27 @@ export class Audio {
 
   playNamed(name, t) {
     switch (name) {
+      case 'rifle':
+        this._noise(t, 0.3, { freq: 6400, gain: 0.95, decay: 0.22, toReverb: true });
+        this._noise(t, 0.08, { type: 'highpass', freq: 3200, gain: 0.6, decay: 0.05 });
+        this._tone(t, 170, 0.16, { gain: 0.75, endFreq: 45 });
+        break;
+      case 'smg':
+        this._noise(t, 0.18, { freq: 4600, gain: 0.8, decay: 0.14, toReverb: true });
+        this._noise(t, 0.05, { type: 'highpass', freq: 2800, gain: 0.45, decay: 0.035 });
+        this._tone(t, 160, 0.1, { gain: 0.6, endFreq: 55 });
+        break;
+      case 'autoshotgun':
+        this._noise(t, 0.5, { freq: 3400, gain: 1.1, decay: 0.38, toReverb: true });
+        this._noise(t, 0.12, { type: 'highpass', freq: 2000, gain: 0.6, decay: 0.07 });
+        this._tone(t, 100, 0.32, { gain: 1.0, endFreq: 32 });
+        this._noise(t + 0.09, 0.06, { type: 'bandpass', freq: 2200, q: 3, gain: 0.35, decay: 0.05 });
+        break;
+      case 'turret':
+        this._noise(t, 0.16, { freq: 5200, gain: 0.55, decay: 0.12, toReverb: true });
+        this._tone(t, 240, 0.08, { gain: 0.4, endFreq: 70 });
+        break;
+      case 'boltPull': this._noise(t, 0.1, { type: 'bandpass', freq: 1900, q: 2, gain: 0.6, decay: 0.08 }); this._noise(t + 0.08, 0.05, { type: 'bandpass', freq: 3400, q: 5, gain: 0.55, decay: 0.04 }); break;
       case 'shot':
         this._noise(t, 0.35, { freq: 5200, gain: 1.0, decay: 0.28, toReverb: true });
         this._noise(t, 0.12, { type: 'highpass', freq: 2500, gain: 0.5, decay: 0.06 });
@@ -143,6 +191,10 @@ export class Audio {
       case 'grab': this._tone(t, 220, 0.25, { gain: 0.12, type: 'sawtooth', endFreq: 880 }); this._tone(t, 1320, 0.18, { gain: 0.05, endFreq: 1760 }); this._noise(t, 0.1, { type: 'highpass', freq: 3000, gain: 0.25, decay: 0.08 }); break;
       case 'drop': this._tone(t, 660, 0.2, { gain: 0.08, type: 'sawtooth', endFreq: 160 }); break;
       case 'throw': this._noise(t, 0.35, { type: 'bandpass', freq: 900, q: 0.8, gain: 0.7, decay: 0.3, toReverb: true }); this._tone(t, 180, 0.3, { gain: 0.25, type: 'sawtooth', endFreq: 60 }); this._tone(t, 1600, 0.12, { gain: 0.06, endFreq: 3200 }); break;
+      case 'door': this._noise(t, 0.12, { freq: 380, gain: 0.8, decay: 0.1 }); this._tone(t, 110, 0.1, { gain: 0.3, endFreq: 70 }); this._noise(t + 0.03, 0.05, { type: 'bandpass', freq: 2400, q: 4, gain: 0.3, decay: 0.04 }); break;
+      case 'horn': this._tone(t, 392, 0.42, { gain: 0.13, type: 'square', endFreq: 392 }); this._tone(t, 494, 0.42, { gain: 0.1, type: 'square', endFreq: 494 }); break;
+      case 'crash': this._noise(t, 0.4, { freq: 900, gain: 1.0, decay: 0.35, toReverb: true }); this._noise(t, 0.25, { type: 'bandpass', freq: 2800, q: 1.5, gain: 0.5, decay: 0.2 }); this._tone(t, 75, 0.3, { gain: 0.5, endFreq: 40 }); { const f = 1300 + Math.random() * 500; this._tone(t + 0.02, f, 0.4, { gain: 0.07, type: 'triangle', endFreq: f * 0.95 }); } break;
+      case 'chat': this._tone(t, 880, 0.07, { gain: 0.05, type: 'triangle', endFreq: 900 }); this._tone(t + 0.07, 1175, 0.09, { gain: 0.045, type: 'triangle', endFreq: 1180 }); break;
       case 'deny': this._tone(t, 180, 0.12, { gain: 0.1, type: 'square', endFreq: 150 }); break;
       case 'equip': this._noise(t, 0.08, { type: 'bandpass', freq: 1200, q: 2, gain: 0.35, decay: 0.07 }); this._tone(t + 0.05, 1500, 0.04, { gain: 0.05, type: 'square' }); break;
       // shotgun
@@ -228,6 +280,15 @@ export class Audio {
       case 'heartbeat': this._tone(t, 55, 0.12, { gain: 0.5, endFreq: 40 }); this._tone(t + 0.18, 50, 0.12, { gain: 0.35, endFreq: 38 }); break;
       case 'flatline': this._tone(t, 1000, 1.6, { gain: 0.06, type: 'square', endFreq: 1000 }); break;
       // ---- the skyscraper ----
+      case 'buy':   // coins
+        for (let i = 0; i < 4; i++) { const f = 3200 + Math.random() * 1800; this._tone(t + i * 0.045 + Math.random() * 0.02, f, 0.16, { gain: 0.05, type: 'triangle', endFreq: f * 0.97 }); }
+        this._noise(t, 0.08, { type: 'highpass', freq: 5000, gain: 0.15, decay: 0.07 });
+        break;
+      case 'bell':  // the wave starts: a far-off, cracked bell
+        for (const [f, g] of [[196, 0.16], [392, 0.08], [523, 0.05], [740, 0.035]]) this._tone(t, f, 3.2, { gain: g, endFreq: f * 0.995 });
+        this._noise(t, 0.05, { type: 'bandpass', freq: 1500, q: 3, gain: 0.2, decay: 0.05, toReverb: true });
+        break;
+      case 'bandage': this._noise(t, 0.35, { type: 'bandpass', freq: 2600, q: 0.8, gain: 0.25, attack: 0.05, decay: 0.3 }); this._noise(t + 0.3, 0.2, { type: 'bandpass', freq: 3400, q: 0.8, gain: 0.2, decay: 0.18 }); break;
       case 'ding': this._tone(t, 1318, 0.9, { gain: 0.12, endFreq: 1318 }); this._tone(t + 0.28, 1046, 1.1, { gain: 0.11, endFreq: 1046 }); break;
       case 'liftDoor': this._noise(t, 1.1, { type: 'bandpass', freq: 600, q: 1.2, gain: 0.22, attack: 0.15, decay: 1.0 }); this._tone(t + 0.95, 140, 0.1, { gain: 0.12, endFreq: 100 }); break;
       case 'liftGo': this._tone(t, 60, 1.2, { gain: 0.2, type: 'sawtooth', endFreq: 90 }); this._noise(t, 1.4, { freq: 300, gain: 0.25, attack: 0.4, decay: 1.3 }); break;

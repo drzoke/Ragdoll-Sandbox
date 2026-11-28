@@ -8,6 +8,8 @@ import { buildGrenade } from '../weapon/grenadeModel.js';
 import { buildMachete, buildMedkit, buildPaddle, buildAED } from '../weapon/modelsMedical.js';
 import { ARM_MATERIALS } from '../weapon/arms.js';
 import { trackMaterials } from '../materials.js';
+import { buildRifle, buildSMG, buildCombatShotgun } from '../weapon/modelAuto.js';
+import { buildMine, buildSentry } from '../mode/gadgets.js';
 
 const W = 240, H = 180;
 
@@ -69,7 +71,22 @@ export class ItemPreview {
     this.items.Machete = this.makeMachete();
     this.items.Medkit = this.makeMedkit();
     this.items.Defibrillator = this.makeDefib();
+    // VS Undead
+    this.items['Assault Rifle'] = this.makeSimple(buildRifle().root, 1.15);
+    this.items['Submachine Gun'] = this.makeSimple(buildSMG().root, 1.0);
+    this.items['Combat Shotgun'] = this.makeSimple(buildCombatShotgun().root, 1.2);
+    this.items['Proximity Mine'] = this.makeSimple(buildMine().root, 0.75, 0.6);
+    this.items['Sentry Gun'] = this.makeSimple(buildSentry().root, 0.9, 0);
     this.level = 'medium';
+  }
+
+  /** A model that just spins (side on, barrel to the left), with no effects of its own. */
+  makeSimple(model, size = 1.05, tilt = null) {
+    const root = new THREE.Group();
+    root.add(model);
+    if (tilt === null) model.rotation.y = Math.PI / 2; else model.rotation.x = tilt;
+    const f = this.frame(root, size);
+    return { ...f, effects: () => 0 };
   }
 
   /** Centre and scale a model so it fills the frame; returns { holder, reflection }. */

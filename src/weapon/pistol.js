@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AMMO } from './ammo.js';
 import { CONFIG } from '../config.js';
 import { clamp, damp, Spring, lerp, viewmodelToWorld, drawOffset } from '../core/util.js';
 import { buildM1911, muzzleFlashTexture, flameTexture } from './model1911.js';
@@ -188,7 +189,7 @@ export class Pistol {
   tryReload() {
     if (this.busy || this.sprint > 0.5) return;
     if (this.mag >= W.magSize) return;
-    if (!W.infiniteReserve && this.reserve <= 0) return;
+    if (!AMMO.has('pistol')) { this.audio.play('dry'); return; }
     const empty = this.slideLocked;
     this.anim.play(empty ? CLIPS.reloadEmpty : CLIPS.reload, (e) => this.onAnimEvent(e));
   }
@@ -203,15 +204,14 @@ export class Pistol {
       case 'magOut': {
         this.audio.play('magOut');
         // Leftover rounds go back to the reserve (keeps the count simple).
-        if (!W.infiniteReserve) this.reserve += this.mag;
+        if (AMMO.finite && this.mag > 0) AMMO.give('pistol', this.mag);
         this.mag = 0;
         this.spawnDropMag();
         break;
       }
       case 'magIn': {
         this.audio.play('magIn');
-        const take = W.infiniteReserve ? W.magSize : Math.min(W.magSize, this.reserve);
-        if (!W.infiniteReserve) this.reserve -= take;
+        const take = AMMO.take('pistol', W.magSize);
         this.mag = take;
         break;
       }

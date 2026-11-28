@@ -822,6 +822,19 @@ export class Health {
       this.log(`Put down (${this.deathCause.toLowerCase()})`);
       return;
     }
+    // VS Undead: enough damage to the body (bullets, blasts, blades) also puts one down
+    if (this.alive && this.bodyDeath) {
+      const P = this.parts;
+      let t = 0, m = 0;
+      for (const n of ['chest', 'abdomen', 'pelvis']) if (P[n]) { t += P[n].attached ? P[n].tissue : 0; m += P[n].maxTissue; }
+      if (m && t / m < this.bodyDeath) {
+        this.alive = false;
+        this.deathCause = 'Torn apart';
+        this.consciousness = 0;
+        this.log('Put down (torn apart)');
+        return;
+      }
+    }
     if (!this.alive) { this.consciousness = 0; return; }
     // knocked silly by a big hit, then back on its feet
     this.consciousness += (100 - this.consciousness) * clamp(dt * 0.45);

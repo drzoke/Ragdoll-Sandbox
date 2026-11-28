@@ -39,6 +39,14 @@ import { TouchControls } from './ui/touch.js';
 import { PlayerVitals } from './player/vitals.js';
 import { benchmark, LEVEL_NAMES, savePerfCap } from './core/bench.js';
 import { Net } from './net/net.js';
+import { Chat } from './ui/chat.js';
+import { Vehicles } from './vehicle/vehicles.js';
+import { Saves } from './ui/saves.js';
+import { AutoGun } from './weapon/autogun.js';
+import { AUTO_MATERIALS } from './weapon/modelAuto.js';
+import { Gadgets, PlaceTool, GADGET_MATERIALS } from './mode/gadgets.js';
+import { UndeadMode } from './mode/undead.js';
+import { PROP_MATERIALS } from './mode/props.js';
 
 const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edg|android).)*safari/i.test(navigator.userAgent);
 // macOS: full screen moves the window to its own Space with an animation, and browsers drop (or
@@ -77,7 +85,7 @@ scene.add(camera);
 const input = new Input(canvas);
 const audio = new Audio();
 const physics = new Physics();
-const startMap = MAP_BY_ID[settings.get('map')] || MAPS[0];
+const startMap = MAP_BY_ID[settings.get('map')]?.hidden ? MAPS[0] : MAP_BY_ID[settings.get('map')] || MAPS[0];
 await stage(0.68, `Building the map: ${startMap.name}`);
 const map = new GameMap(scene, physics, renderer);
 map.load(startMap);
@@ -92,13 +100,24 @@ const graphics = new Graphics({ renderer, scene, camera, map, gore });
 const net = new Net({
   scene, camera, physics, ragdolls, gore, hud, audio, settings,
   get player() { return player; }, get ballistics() { return ballistics; }, get explosives() { return explosives; }, get grab() { return grab; },
-  get tools() { return tools; }, get toolbox() { return toolbox; }, get vitals() { return vitals; }, get spawnMenu() { return spawnMenu; }, get buttons() { return buttons; },
+  get tools() { return tools; }, get toolbox() { return toolbox; }, get vitals() { return vitals; }, get spawnMenu() { return spawnMenu; }, get buttons() { return buttons; }, get vehicles() { return vehicles; },
   version: document.getElementById('version')?.textContent.trim() || 'dev',
   getMap: () => map, loadMap: (id) => loadMap(id), cleanUp: (silent) => cleanUp(silent), removeAll: () => removeAllRagdolls(),
   timeScale: () => world.timeScale,
   onJoined: () => { timeIndex = TIME_STEPS.indexOf(1); },
   hurtMe: (dmg, opts) => { if (playing && !titleMode) vitals.hurt(dmg, opts); },
   onLeft: () => { shownTimeScale = world.timeScale; hud.setTimeScale(world.timeScale); },
+  onChat: (m) => chat.add(m.n, m.c, m.s),
+  onSystem: (text) => chat.system(text),
+  onVs: (e) => undead.onState(e.s),
+  onVsMe: (m) => undead.onMine(m),
+  onVsRequest: (p, d) => undead.onRequest(p, d),
+  canThrow: () => true,
+});
+// multiplayer chat: T or Enter while in a room (the game's keys are off while you type)
+const chat = new Chat({
+  audio, onSend: (text) => net.sendChat(text),
+  onOpenChange: (open) => { input.clear(); input.enabled = playing && !open; },
 });
 
 // the Respawn and Clean up buttons: rebuilt for each map, at the spots it gives (same array)
@@ -175,16 +194,27 @@ const grenade = new GrenadeTool({
     explosives.spawnSpoon(spoonPos, spoonVel);
   },
 });
+// VS Undead: the merchant's guns, the mines and the sentry gun
+const autoOpts = { mainScene: scene, mainCamera: camera, player, audio, environment: scene.environment, onFire: (o, d, muzzle, opts) => ballistics.fire(o, d, muzzle, opts) };
+const rifle = new AutoGun('rifle', autoOpts), smg = new AutoGun('smg', autoOpts), autoShotgun = new AutoGun('autoshotgun', autoOpts);
+const gadgets = new Gadgets({ scene, map, ragdolls, audio });
+gadgets.explosives = explosives; gadgets.ballistics = ballistics;
+const placeOpts = { mainCamera: camera, player, audio, environment: scene.environment, map, onPlace: (kind, pos, yaw) => undead.placeGadget(kind, pos, yaw) };
+const mineTool = new PlaceTool('mine', placeOpts), sentryTool = new PlaceTool('sentry', placeOpts);
+for (const t of [rifle, smg, autoShotgun, mineTool, sentryTool, pistol, shotgun, sniper, musket]) t.say = (text) => hud.toast(text);
+ballistics.extraTargets = () => gadgets.meshes();
 // Materials whose detail follows the graphics preset
 trackMaterials(RAGDOLL_GRAY); trackMaterials(RAGDOLL_BLACK, { grime: false }); trackMaterials(ZOMBIE_SKIN, { grime: false }); trackMaterials(ZOMBIE_JOINT, { grime: false });
 trackMaterials(pistol.gun.root); trackMaterials(grab.gadget.root); trackMaterials(shotgun.gun.root); trackMaterials(sniper.gun.root); trackMaterials(sniper.mag); trackMaterials(musket.gun.root); trackMaterials(grenade.model.root);
 trackMaterials(explosives.template.root);
+for (const g of [rifle, smg, autoShotgun]) trackMaterials(g.gun.root);
+for (const m of [...Object.values(AUTO_MATERIALS), ...Object.values(GADGET_MATERIALS), ...Object.values(PROP_MATERIALS)]) trackMaterials(m);
 trackMaterials(machete.model.root); trackMaterials(medkit.left); trackMaterials(medkit.right); trackMaterials(defib.pr.root); trackMaterials(defib.pl.root);
 for (const m of Object.values(ARMOR_MATERIALS)) trackMaterials(m);
 trackMaterials(ARM_MATERIALS.skin, { grime: false }); trackMaterials(ARM_MATERIALS.sleeve); trackMaterials(ARM_MATERIALS.cuff);
 graphics.apply(settings.get('graphics'));
 grab.setQuality(settings.get('graphics'));
-const tools = [fists, pistol, shotgun, sniper, musket, grenade, grab, machete, medkit, defib];
+const tools = [fists, pistol, shotgun, sniper, musket, grenade, grab, machete, medkit, defib, rifle, smg, autoShotgun, mineTool, sentryTool];
 const toolbox = new Toolbox(tools, { audio, start: 0, onOpenChange: (open) => onToolboxChange(open) });
 // multiplayer, as a friend: only the guns for now
 toolbox.canUse = (t) => net.toolAllowed(t);
@@ -206,10 +236,13 @@ trackMaterials(title.prop.root);
 const floorPicker = new FloorPicker({ audio, onOpenChange: (open) => onToolboxChange(open) });
 map.ctx = { player, ragdolls, gore, grab, audio, hud, input, camera, get playing() { return playing && !toolboxOpen; },
   pickFloor: (opts) => { toolbox.close(); spawnMenu.close(); floorPicker.open(opts); } };
+let undead = null;     // VS Undead (made further down)
 function loadMap(id) {
   const def = MAP_BY_ID[id];
   if (!def) return;
   grab.release();
+  vehicles.clear();
+  gadgets.clear();
   ragdolls.clear(ragdolls.keep);
   cleanUp(true);
   map.load(def);
@@ -217,18 +250,19 @@ function loadMap(id) {
   player.spawnAt(map.playerSpawn.pos, map.playerSpawn.yaw);
   if (graphics.passes?.ssr) graphics.passes.ssr.selects = [map.floor].filter(Boolean);
   camera.far = def.far || 600; camera.updateProjectionMatrix();
-  if (!net.guest) ragdolls.respawn();      // a friend in a room gets the host's ragdolls
-  if (!net.guest) settings.set('map', id);
+  if (!net.guest && !def.noRagdoll) ragdolls.respawn();      // a friend in a room gets the host's ragdolls
+  if (!net.guest && !def.hidden) settings.set('map', id);
   net.mapLoaded(id);
   target = null; ballistics.lastTarget = null;
   vitals.reset();
   resetDrs();
+  undead?.onMapLoaded(id);
 }
 
 // ---- your health: zombies, long falls and blasts hurt; at 0 you respawn at the map start ----
 const vitals = new PlayerVitals({
   player, audio,
-  onDeath: () => { grab.release(); floorPicker.close(); },
+  onDeath: () => { grab.release(); floorPicker.close(); vehicles.exit(true); },
   onRespawn: () => { player.spawnAt(map.playerSpawn.pos, map.playerSpawn.yaw); },
 });
 player.onLand = (speed, height) => { if (height > 4.5 && !player.script && playing && !titleMode) vitals.hurt((height - 4.5) * 7.5, { kind: 'fall' }); };
@@ -238,6 +272,45 @@ ragdolls.hurtPlayer = (dmg, opts) => {
   if (playing && !titleMode) vitals.hurt(dmg, opts);
 };
 camera.far = startMap.far || 600; camera.updateProjectionMatrix();
+
+// ---- vehicles (spawn menu, Vehicles): E to get in and out ----
+const vehicles = new Vehicles({ scene, physics, map, player, camera, audio, hud, ragdolls, gore, vitals });
+vehicles.myId = () => (net.active ? net.me.id : 1);
+vehicles.isHost = () => !net.guest;
+ballistics.vehicles = vehicles;
+spawnMenu.vehicles = vehicles;
+spawnMenu.onRemoveVehicles = () => {
+  if (net.guest) { net.requestRemoveVehicles(); return; }
+  const n = vehicles.list.length;
+  vehicles.clear();
+  hud.toast(n ? `Removed ${n} vehicle${n > 1 ? 's' : ''}` : 'No vehicles to remove');
+};
+
+// ---- VS Undead (see mode/undead.js): co-op zombie waves on the Dead Field ----
+undead = new UndeadMode({
+  scene, camera, map, ragdolls, player, vitals, audio, hud, net, toolbox, tools, pistol, explosives, ballistics, gadgets, physics, settings, gore, input,
+  loadMap: (id) => loadMap(id),
+  setOverlay: (open) => onToolboxChange(open),
+  exitToTitle: () => showTitle(),
+  titleMode: () => titleMode,
+});
+gadgets.onRemove = () => { undead.dirty = true; };
+gadgets.onBlow = (p) => net.emit({ t: 'boom', id: -1, p: [p.x, p.y, p.z] });
+/** Out of VS Undead, back to a sandbox map. */
+function leaveUndead() {
+  if (!undead.active) return;
+  undead.stop();
+  if (!net.guest && map.def?.id === 'cemetery') loadMap(MAP_BY_ID[settings.get('map')] && !MAP_BY_ID[settings.get('map')].hidden ? settings.get('map') : MAPS[0].id);
+}
+document.getElementById('vs-play').addEventListener('click', () => {
+  audio.unlock();
+  if (net.guest) { audio.play('deny'); hud.toast('Only the host can start VS Undead in this room'); return; }
+  audio.play('click');
+  vehicles.exit(true);
+  undead.start();
+  closePanel();
+  document.getElementById('play').click();
+});
 
 // ------------------------------------------------------------------ menu / pointer lock
 const menu = document.getElementById('menu');
@@ -263,10 +336,12 @@ function setPlaying(p) {
   if (p) {
     if (titleMode) { titleMode = false; title.setActive(false); map.setTitleMode(false); setMenuMode("pause"); vitals.reset(); }
     closePanel();
-  } else { input.clear(); toolbox.close(); spawnMenu.close(); floorPicker.close(); }
+  } else { chat.close(); input.clear(); toolbox.close(); spawnMenu.close(); floorPicker.close(); }
   touch.setPlaying(p);
 }
 function showTitle() {
+  vehicles.exit(true);
+  leaveUndead();
   titleMode = true;
   vitals.reset();
   if (document.pointerLockElement) document.exitPointerLock();
@@ -279,7 +354,7 @@ function showTitle() {
 }
 // side panels: Settings, Controls, What's new
 const panel = document.getElementById('m-panel');
-const PANEL_TITLES = { maps: 'Maps', mp: 'Multiplayer', settings: 'Settings', keys: 'Controls', news: "What's new" };
+const PANEL_TITLES = { maps: 'Maps', saves: 'Saves', mp: 'Multiplayer', settings: 'Settings', keys: 'Controls', news: "What's new" };
 // map picker: a card per map (picture, name, what's there); picking one loads it and starts playing
 const MAP_ART = {
   range: '<svg viewBox="0 0 160 90"><rect width="160" height="90" fill="#8d949b"/><path d="M0 52h160v38H0z" fill="#6f767d"/><g stroke="#5f666d" stroke-width="1"><path d="M0 60h160M0 70h160M0 82h160M20 52L-10 90M50 52l-15 38M80 52v38M110 52l15 38M140 52l30 38"/></g><rect x="22" y="40" width="22" height="16" fill="#c9ccd0"/><rect x="104" y="34" width="34" height="22" fill="#b8bcc1"/><path d="M60 56h14v-5h12v-5h12v10" fill="#d6d9dc"/><circle cx="78" cy="38" r="4" fill="#7f8286"/><rect x="74" y="42" width="8" height="12" rx="2" fill="#7f8286"/></svg>',
@@ -287,7 +362,7 @@ const MAP_ART = {
 };
 function renderMaps() {
   const cur = map.def?.id;
-  document.getElementById('map-list').innerHTML = MAPS.map((m) => `<button class="map-card${m.id === cur ? ' on' : ''}" data-map="${m.id}">
+  document.getElementById('map-list').innerHTML = MAPS.filter((m) => !m.hidden).map((m) => `<button class="map-card${m.id === cur ? ' on' : ''}" data-map="${m.id}">
     <div class="art">${MAP_ART[m.id] || ''}</div><div class="txt"><b>${m.name}${m.id === cur ? ' <span class="cur">current</span>' : ''}</b><p>${m.desc}</p></div></button>`).join('');
 }
 document.getElementById('map-list').addEventListener('click', (e) => {
@@ -295,6 +370,7 @@ document.getElementById('map-list').addEventListener('click', (e) => {
   if (!b) return;
   audio.unlock();
   if (net.guest) { audio.play('deny'); hud.toast('Only the host can change the map in this room'); return; }
+  if (undead.active) leaveUndead();
   audio.play('click');
   if (b.dataset.map !== map.def?.id) { loadMap(b.dataset.map); hud.toast(`Loaded ${MAP_BY_ID[b.dataset.map].name}`); }
   renderMaps();
@@ -307,6 +383,7 @@ function openPanel(name) {
   panelName = name;
   if (name === 'maps') renderMaps();
   if (name === 'mp') renderMp();
+  if (name === 'saves') saves.render();
   panel.classList.remove('hidden');
   document.getElementById('m-panel-title').textContent = PANEL_TITLES[name];
   for (const t of panel.querySelectorAll('.tab')) t.classList.toggle('hidden', t.id !== `tab-${name}`);
@@ -322,6 +399,52 @@ for (const b of menu.querySelectorAll('.m-btn[data-panel]')) b.addEventListener(
 document.getElementById('m-panel-close').addEventListener('click', () => closePanel());
 document.getElementById('to-title').addEventListener('click', () => { audio.play('click'); showTitle(); });
 setMenuMode('title');
+
+// ---- saves: scenes kept in this browser (menu, Saves) ----
+let thumbWanted = null;     // a picture of the next frame, for a save
+const saves = new Saves({
+  audio, hud,
+  mapName: (id) => MAP_BY_ID[id]?.name || id,
+  canSave: () => (titleMode ? 'Start playing first: then save from the pause menu (Esc).' : undead.active ? 'VS Undead games can\'t be saved.' : ''),
+  canLoad: () => (net.guest ? 'Only the host can load a scene in a room.' : undead.active ? 'Leave VS Undead first (Main menu).' : ''),
+  capture: () => captureScene(),
+  apply: (data) => applyScene(data),
+  thumb: (cb) => { thumbWanted = cb; },
+});
+/** Everything a save keeps: the map, the bodies (pose, wounds, health), the vehicles and you. */
+function captureScene() {
+  const glass = map.glass ? map.glass.panes.filter((p) => p.broken).map((p) => p.i) : [];
+  return {
+    v: 1, map: map.def?.id, ts: timeIndex,
+    player: { p: [player.pos.x, player.pos.y, player.pos.z], yaw: player.yaw, pitch: player.pitch },
+    rags: ragdolls.list.filter((r) => !r.hidden && !r.removed).map((r) => net.ragdollRecord(r, true)),
+    vehicles: vehicles.list.map((v) => vehicles.record(v)),
+    glass,
+  };
+}
+function applyScene(d) {
+  if (!MAP_BY_ID[d.map]) return;
+  vehicles.exit(true);
+  loadMap(d.map);                       // a clean map (and its default ragdoll, removed next)
+  ragdolls.clear(ragdolls.keep);
+  for (const rec of d.rags || []) {
+    const r = net.buildRagdoll(rec, false);
+    // anyone who wasn't standing starts on the ground and works out what to do from there
+    if (rec.hs?.x?.s && rec.hs.x.s !== 'stand') r.brain.fall?.();
+  }
+  for (const v of d.vehicles || []) vehicles.spawn(v.k, new THREE.Vector3(...v.p), v.y, { color: v.c });
+  const glass = map.glass;
+  if (glass && d.glass?.length) { const a = glass.audio; glass.audio = null; for (const i of d.glass) { const p = glass.panes[i]; if (p) glass.breakPane(p, null, 0.5); } glass.audio = a; }
+  if (d.player) { player.spawnAt(d.player.p, d.player.yaw); player.pitch = player.targetPitch = d.player.pitch || 0; }
+  if (!net.active && TIME_STEPS[d.ts] !== undefined) { timeIndex = d.ts; hud.setTimeScale(world.timeScale); }
+  net.resync();
+  closePanel();
+  document.getElementById('play').click();
+}
+// "Last session": saved when the page is closed or hidden
+function autoSave() { if (!titleMode && !net.guest && !undead.active && (ragdolls.list.some((r) => !r.hidden) || vehicles.list.length)) saves.save('auto', '', { auto: true, quiet: true }); }
+addEventListener('pagehide', autoSave);
+document.addEventListener('visibilitychange', () => { if (document.hidden) autoSave(); });
 
 // ---- multiplayer: host a room or join one with its code ----
 const mpEl = {
@@ -347,6 +470,8 @@ function renderMp() {
     mpEl.list.innerHTML = all.map((p) => `<li><i style="background:${esc(p.color)}"></i>${esc(p.name)}${p.id === 1 ? ' <em>host</em>' : ''}${p.me ? ' <em>you</em>' : ''}</li>`).join('');
   }
   mpEl.name.disabled = net.active;
+  document.getElementById('chat').classList.toggle('hidden', !on);
+  if (!net.active) { chat.close(); chat.clear(); }
   // the little indicator in the corner while in a room
   mpEl.hud.classList.toggle('hidden', !on);
   if (on) mpEl.hud.textContent = `Room ${net.code} · ${net.playerCount} player${net.playerCount > 1 ? 's' : ''}${net.guest ? ` · ${net.ping.toFixed(0)} ms` : ''}`;
@@ -361,6 +486,8 @@ mpEl.code.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key ==
 mpEl.name.addEventListener('keydown', (e) => e.stopPropagation());
 mpEl.code.addEventListener('input', () => { const p = mpEl.code.selectionStart; mpEl.code.value = mpEl.code.value.toUpperCase(); mpEl.code.setSelectionRange(p, p); });
 mpEl.leave.addEventListener('click', () => { audio.play('click'); net.leave(); });
+// touch screens: tap the room indicator to chat
+mpEl.hud.addEventListener('click', () => { if (touch.active && playing && net.active) chat.open(); });
 mpEl.copy.addEventListener('click', () => {
   audio.play('click');
   navigator.clipboard?.writeText(net.code || '').then(() => { mpEl.copy.textContent = 'Copied'; setTimeout(() => { mpEl.copy.textContent = 'Copy'; }, 1500); }).catch(() => {});
@@ -469,9 +596,10 @@ function onToolboxChange(open) {
   }
 }
 addEventListener('keydown', (e) => {
-  if (!playing || e.repeat) return;
+  if (!playing || e.repeat || chat.isOpen) return;
+  if ((e.code === 'KeyT' || e.code === 'Enter' || e.code === 'NumpadEnter') && net.active && !toolboxOpen) { e.preventDefault(); chat.open(); return; }
   if (e.code === 'Tab') { e.preventDefault(); if (spawnMenu.isOpen) spawnMenu.close(); toolbox.toggle(); }
-  if (e.code === 'KeyB') { if (toolbox.isOpen) toolbox.close(); spawnMenu.toggle(); }
+  if (e.code === 'KeyB') { if (undead.active) { if (!spawnMenu.isOpen) { audio.play('deny'); hud.toast('No spawn menu in VS Undead'); } return; } if (toolbox.isOpen) toolbox.close(); spawnMenu.toggle(); }
 });
 
 // ---- settings ----
@@ -615,10 +743,10 @@ function updatePlayerInfo() {
   playerInfo.name = net.active ? net.me.name : null;
   ragdolls.players = net.host ? [...(titleMode || !playing ? [] : [playerInfo]), ...net.friendInfos()] : null;
   if (titleMode || !playing) { ragdolls.player = null; return; }
-  const t = toolbox.active, out = t.raise > 0.6;
+  const t = toolbox.active, out = t.raise > 0.6 && !vehicles.driving;
   playerInfo.pos.copy(player.pos);
   playerInfo.alive = !vitals.dead;
-  playerInfo.armed = out && (t === pistol || t === shotgun || t === sniper || t === musket || t === machete || t === grenade);
+  playerInfo.armed = out && (t === pistol || t === shotgun || t === sniper || t === musket || t === machete || t === grenade || t instanceof AutoGun);
   playerInfo.melee = out && (t === machete || t === fists);
   playerInfo.aimedAt = lookedRagdoll;
   ragdolls.player = playerInfo;
@@ -783,6 +911,7 @@ function frame() {
   if (input.wasPressed('F3')) debugOn = !debugOn;
   if (input.wasPressed('KeyZ') || input.wasPressed('KeyV')) {
     if (net.guest) { audio.play('deny'); hud.toast('The host controls the time in this room'); }
+    else if (undead.active) { audio.play('deny'); hud.toast('No time warp in VS Undead'); }
     else setTimeIndex(timeIndex + (input.wasPressed('KeyV') ? 1 : -1));
   }
   // in a room as a friend: the host's world runs at the host's time scale
@@ -790,16 +919,24 @@ function frame() {
   const ts = net.guest ? net.hostTimeScale : world.timeScale;
   const wdt = dt * ts;
 
-  touch.update(dt, { tool: toolbox.active, useVisible: !!lastFocused, xrayMode: hud.xrayOpen ? settings.get('xrayMode') : 'off' });
+  touch.update(dt, { tool: toolbox.active, useVisible: !!lastFocused || !!vehicles.driving, xrayMode: hud.xrayOpen ? settings.get('xrayMode') : 'off' });
   player.update(dt, input, playing && !toolboxOpen && !touch.portrait && !vitals.dead);
   if (titleMode) title.update(dt);         // cinematic camera on the title screen
   player.aiming = false;                   // the gun in your hands sets it again
-  toolbox.update(dt, input, playing && !vitals.dead, wdt); // tools aim before the physics step
+  // vehicles: the one you drive, cars rolling to a stop, hitting people; then the chase camera
+  vehicles.update(dt, input, playing && !toolboxOpen && !touch.portrait && !vitals.dead);
+  if (vehicles.driving) vehicles.updateCamera(dt);
+  else if (vehicles.collidePlayer()) player.updateCamera(0, 0);
+  toolbox.update(dt, input, playing && !vitals.dead && !vehicles.driving, wdt); // tools aim before the physics step
   net.update(dt);                          // multiplayer: other players, and a friend's copy of the host's world
   if (net.guest) ragdolls.updateReplica(wdt);
   else { physics.update(dt, ts); ragdolls.update(wdt); }
   ballistics.update(wdt, dt);
   explosives.update(wdt);
+  gadgets.update(wdt, !net.guest);
+  // VS Undead: a friend whose host went away goes back to the sandbox
+  if (undead.active && undead.fromHost && !net.guest) { undead.fromHost = false; leaveUndead(); }
+  undead.update(dt);
   gore.update(wdt, camera, renderer.domElement.height);
   map.update(titleMode ? title.focus : player.pos, dt);
   updateInteraction(dt);
@@ -823,16 +960,27 @@ function frame() {
   watchFps(dt, now);
   watchResolution(now);
   const t = toolbox.active;
-  vitals.update(dt, { input, playing: playing && !toolboxOpen, show: !titleMode && ragdolls.list.some((r) => r.zombie && !r.hidden) });
+  vitals.update(dt, { input, playing: playing && !toolboxOpen, show: !titleMode && (undead.active || ragdolls.list.some((r) => r.zombie && !r.hidden)) });
   physics.flush();                  // worker mode: send this frame's changes, it steps while we draw
   net.flush();                      // multiplayer: send this frame's updates
   map.cull(camera);
   updateBatches(scene, camera);     // ragdoll parts and the marks on them, drawn instanced
-  if (titleMode || vitals.dead) graphics.render(null, null);
+  if (titleMode || vitals.dead || vehicles.driving) graphics.render(null, null);
   else graphics.render(t.scene, t.camera);
   drawCalls = renderer.info.render.calls; renderer.info.reset();   // the whole frame's (shadows and view model included)
+  if (thumbWanted) { const cb = thumbWanted; thumbWanted = null; cb(snapshotThumb()); }
   input.endFrame();
   cpuMs += (performance.now() - now - cpuMs) * 0.1;
+}
+
+/** A small picture of what was just drawn (for the saves list). */
+function snapshotThumb() {
+  try {
+    const c = document.createElement('canvas'); c.width = 224; c.height = 126;
+    const src = renderer.domElement, ar = src.width / src.height, w = Math.min(src.width, src.height * 16 / 9), h = w / (16 / 9);
+    c.getContext('2d').drawImage(src, (src.width - w) / 2, (src.height - h) / 2, w, h, 0, 0, 224, 126);
+    return ar ? c.toDataURL('image/jpeg', 0.72) : '';
+  } catch { return ''; }
 }
 
 // ---- finish loading: compile shaders, then hand over to the menu ----
@@ -852,4 +1000,4 @@ setTimeout(() => {
 
 // Exposed for debugging from the console and for automated tests.
 watchForUpdates({ hud });
-window.game = { net, batchStats, vitals, map, loadMap, MAPS, machete, medkit, defib, spawnMenu, title, showTitle, get titleMode() { return titleMode; }, fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, sniper, musket, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };
+window.game = { net, vehicles, chat, saves, undead, gadgets, rifle, smg, autoShotgun, mineTool, sentryTool, batchStats, vitals, map, loadMap, MAPS, machete, medkit, defib, spawnMenu, title, showTitle, get titleMode() { return titleMode; }, fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, sniper, musket, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };
