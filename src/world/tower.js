@@ -649,6 +649,11 @@ export function buildTower(map) {
     }
   });
   map.onUnload = () => { for (const r of map.ctx?.ragdolls?.list || []) if (!r.hidden) r.root.visible = true; };
+  /** Whether something at p shows from where the camera is now (multiplayer: other players on other floors). */
+  map.seen = (p) => {
+    if (inTower(p)) return view.inside ? levelAt(p.y) === view.level : !view.roof;
+    return true;
+  };
 
   // ---- moving parts ----
   map.updaters.push((dt, focus, ctx) => {

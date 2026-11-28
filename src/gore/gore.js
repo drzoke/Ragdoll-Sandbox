@@ -35,7 +35,7 @@ const lumpy = (detail, i) => geo(`lump${detail}.${i}`, () => {
 const LUMPS = 6;
 const mm = (r) => Math.round(r * 1000);
 
-const MAT = {
+export const MAT = {
   meat: new THREE.MeshStandardMaterial({ color: 0x6e0b0b, roughness: 0.35, metalness: 0.05 }),
   meatDark: new THREE.MeshStandardMaterial({ color: 0x2a0303, roughness: 0.5 }),
   bone: new THREE.MeshStandardMaterial({ color: 0xe8e0cc, roughness: 0.55 }),
@@ -44,6 +44,7 @@ const MAT = {
   brain: new THREE.MeshStandardMaterial({ color: 0xd59aa0, roughness: 0.4 }),
   organ: new THREE.MeshStandardMaterial({ color: 0x7a1c22, roughness: 0.3 }),
 };
+const MAT_NAME = new Map(Object.entries(MAT).map(([k, m]) => [m, k]));
 // medical kit on the ragdoll
 const MED = {
   bandage: null,   // made on first use (canvas texture)
@@ -644,7 +645,7 @@ export class Gore {
   }
 
   // ---------------------------------------------------------------- gibs
-  spawnGib(pos, vel, material, radius) {
+  spawnGib(pos, vel, material, radius, { lump = Math.floor(Math.random() * LUMPS) } = {}) {
     const r = radius ?? rand(0.014, 0.03);
     if (this.gibs.length >= G.maxGibs) this.removeGib(this.gibs[0]);
     const body = new CANNON.Body({
@@ -656,13 +657,13 @@ export class Gore {
     body.velocity.set(vel.x + rand(-1, 1), vel.y + rand(0, 1.5), vel.z + rand(-1, 1));
     body.angularVelocity.set(rand(-10, 10), rand(-10, 10), rand(-10, 10));
     this.physics.world.addBody(body);
-    const mesh = new THREE.Mesh(lumpy(1, Math.floor(Math.random() * LUMPS)), material);
+    const mesh = new THREE.Mesh(lumpy(1, lump % LUMPS), material);
     mesh.scale.setScalar(r);
     mesh.castShadow = true;
     mesh.userData.surface = 'gib';
     this.scene.add(mesh);
     batch(mesh, mesh);
-    const gib = { body, mesh, bleed: 2.5, acc: 0, keepGeometry: true };
+    const gib = { body, mesh, bleed: 2.5, acc: 0, keepGeometry: true, r, lump, matName: MAT_NAME.get(material) || 'meat' };
     mesh.userData.gib = gib;
     this.gibs.push(gib);
   }

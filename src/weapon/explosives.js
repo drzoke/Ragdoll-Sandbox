@@ -132,10 +132,7 @@ export class Explosives {
   }
 
   explode(c) {
-    const dist = this.camera.position.distanceTo(c);
-    this.audio.boom(dist);
-    this.effects(c);
-    this.scorch(c);
+    this.explodeVisual(c, false);
     this.blast(c);
     this.map.onBlast?.(c);   // windows nearby shatter
     this.ragdolls.alert(c, 45, 0.7, 'blast');
@@ -159,6 +156,25 @@ export class Explosives {
             frag(t.sub(c).normalize());
           }
         }
+      }
+    }
+  }
+
+  /**
+   * What an explosion looks, sounds and feels like where you stand (bang, fireball, scorch marks,
+   * camera shake, getting hurt and shoved), without the damage to ragdolls. In multiplayer a
+   * friend's game shows the host's explosions with this; fragments = random shrapnel tracers.
+   */
+  explodeVisual(c, fragments = false) {
+    const dist = this.camera.position.distanceTo(c);
+    this.audio.boom(dist);
+    this.effects(c);
+    this.scorch(c);
+    if (fragments && this.ballistics) {
+      for (let i = 0; i < SHRAPNEL; i++) {
+        const d = new THREE.Vector3(rand(-1, 1), rand(-0.45, 0.9), rand(-1, 1)).normalize();
+        this.ballistics.fire(c.clone().addScaledVector(d, 0.05), d, null,
+          { energy: 0, impulse: 0, size: 0.4, glowSize: 0.03, speed: rand(260, 420), range: 40, life: 0.45, fragment: true, replay: true, ghost: true });
       }
     }
     // camera shake + a shove if you're close
@@ -415,7 +431,7 @@ export class Explosives {
     for (const g of [...this.live]) {
       g.mesh.position.set(g.body.position.x, g.body.position.y, g.body.position.z);
       g.mesh.quaternion.set(g.body.quaternion.x, g.body.quaternion.y, g.body.quaternion.z, g.body.quaternion.w);
-      g.fuse -= dt;
+      if (!g.remote) g.fuse -= dt;     // a friend's copy of the host's grenade goes off when the host's does
       // thin smoke wisp from the burning fuse
       g.smokeT -= dt;
       if (g.smokeT <= 0) { g.smokeT = 0.07; this.wisp(g.mesh.position); }
@@ -476,6 +492,14 @@ export class Explosives {
     this.scene.add(s);
     const vel = new THREE.Vector3(rand(-0.05, 0.05), rand(0.25, 0.45), rand(-0.05, 0.05));
     this.fx.push({ s, life: 1.4, age: 0, fn: (f, k, dt) => { s.position.addScaledVector(vel, dt); s.scale.setScalar(0.06 + k * 0.3); s.material.opacity = 0.35 * (1 - k) * Math.min(1, f.age * 10); } });
+  }
+
+  /** Take one grenade away without it going off. */
+  removeGrenade(g) {
+    this.physics.world.removeBody(g.body);
+    this.byBody.delete(g.body);
+    this.scene.remove(g.mesh);
+    this.live = this.live.filter((x) => x !== g);
   }
 
   clear() {

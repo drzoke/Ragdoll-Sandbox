@@ -6,6 +6,7 @@ const DEFAULTS = {
   dynamicRes: true,        // lower the resolution a little while the frame rate is low
   vsync: true,             // false: run frames as fast as possible (above the refresh rate)
   physicsWorker: true,     // run the physics on another processor core (see core/physicsLink.js)
+  mpName: '',              // multiplayer: the name other players see
   showOrgans: true,        // exposed organs + organ gibs
   bloodColor: 'red',       // 'red' | 'purple'
   dismemberment: true,     // severing + exploding body parts

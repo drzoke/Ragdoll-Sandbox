@@ -86,7 +86,8 @@
 <div id="vignette"></div>
 <!-- Alpha: one step per full update (feature batch). Patch: small fixes shipped on that version
      (back to 0 when the Alpha number goes up). -->
-<div id="version">Alpha 0.9<small>Patch 4</small></div>
+<div id="mp-hud" class="hidden"></div>
+<div id="version">Alpha 0.9<small>Patch 5</small></div>
 
 <div id="toolbox" class="hidden">
   <div class="tb-card">
@@ -127,6 +128,7 @@
     <nav class="m-nav">
       <button id="play" class="m-btn primary"><svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z" fill="currentColor"/></svg><span>Play</span></button>
       <button class="m-btn" data-panel="maps"><svg viewBox="0 0 24 24"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 4v14M15 6v14" stroke="currentColor" stroke-width="1.8"/></svg><span>Maps</span></button>
+      <button class="m-btn" data-panel="mp"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3 19c.6-3.4 3-5.2 6-5.2s5.4 1.8 6 5.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="17" cy="9" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M16.5 13.9c2.3.2 4 1.7 4.5 4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>Multiplayer</span></button>
       <button class="m-btn" data-panel="settings"><svg viewBox="0 0 24 24"><path d="M12 8.5a3.5 3.5 0 100 7 3.5 3.5 0 000-7zm8.6 4.9l1.9 1.5-2 3.4-2.3-.8a8 8 0 01-2.1 1.2L15.7 21h-4l-.4-2.3a8 8 0 01-2.1-1.2l-2.3.8-2-3.4 1.9-1.5a8 8 0 010-2.4L4.9 9.6l2-3.4 2.3.8a8 8 0 012.1-1.2L11.7 3h4l.4 2.3a8 8 0 012.1 1.2l2.3-.8 2 3.4-1.9 1.5a8 8 0 010 2.4z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Settings</span></button>
       <button class="m-btn" data-panel="keys"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 10h1M10 10h1M14 10h1M18 10h1M7 14h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Controls</span></button>
       <button class="m-btn" data-panel="news"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg><span>What's new</span></button>
@@ -142,6 +144,22 @@
     <section class="tab hidden" id="tab-maps">
       <p class="note">Pick where to play. Loading a map clears the bodies and the blood.</p>
       <div id="map-list"></div>
+    </section>
+    <section class="tab hidden" id="tab-mp">
+      <p class="note">Play in the same world with friends. One of you hosts a room, the others join it with its code. The host's computer runs the world (the bodies, the damage), so the fastest computer should host.</p>
+      <label class="mp-field"><span>Your name</span><input id="mp-name" maxlength="16" placeholder="Player" autocomplete="off" spellcheck="false"></label>
+      <div id="mp-off">
+        <button class="mp-btn primary" id="mp-host">Host a room</button>
+        <div class="mp-or"><span>or join a friend</span></div>
+        <div class="mp-join"><input id="mp-code" maxlength="8" placeholder="Room code" autocomplete="off" spellcheck="false"><button class="mp-btn" id="mp-join">Join</button></div>
+      </div>
+      <div id="mp-on" class="hidden">
+        <div class="mp-room"><span>Room code</span><b id="mp-room-code"></b><button id="mp-copy">Copy</button></div>
+        <ul id="mp-players"></ul>
+        <button class="mp-btn danger" id="mp-leave">Leave the room</button>
+      </div>
+      <p id="mp-status" class="mp-status hidden"></p>
+      <p class="note">Friends who join can use the pistol, shotgun, sniper rifle and musket, spawn ragdolls and press the buttons. The other items, the elevator and zombies going after friends come in a later update. Up to 6 players.</p>
     </section>
     <section class="tab hidden" id="tab-settings">
       <h3>Graphics</h3>
@@ -238,6 +256,7 @@
           <li><span class="patch">Patch 3</span> <b>Physics twice as fast.</b> A hidden check that grew with the square of the number of ragdolls is gone, body parts are only checked against others close by, and limbs only against the ground when they're near it. Each step also does 10 solver passes instead of 18: at 120 steps a second the joints stay just as tight. With 24 ragdolls a physics step went from 7.7 to 3.9 ms.</li>
           <li><span class="patch">Patch 3</span> <b>Far and off-screen bodies cost less to draw.</b> Ragdolls in the distance use simpler shapes (about a fifth of the triangles; you can't tell at that distance, and the switch moves further out when you zoom in), and bodies behind you or off to the side aren't drawn at all.</li>
           <li><span class="patch">Patch 4</span> <b>Physics on its own processor core</b> (Settings, on by default). The physics now runs on a separate core while the game draws on another, instead of the two taking turns in every frame. In a test with 40 ragdolls the game went from 19 to 43 FPS, and the physics kept stepping 90 times a second instead of dropping to 60. Everything plays the same; what you see of the physics is one frame later, which you can't notice. If your browser can't run it, the physics stays on the main core like before.</li>
+          <li><span class="patch">Patch 5</span> <b>Multiplayer</b> (Multiplayer in the menu). One player hosts a room and gets a short code; friends type the code to join and play in the same world. You see each other walk, crouch, jump and aim, each in your own colour with your name over your head, holding the item you have out. The ragdolls, their wounds, blood, missing limbs and X-ray, gibs, grenades going off, broken windows and map changes are the same on every screen. A friend's shots hit, wound and dismember just like the host's, and the hit marker shows for whoever fired. Joining a game in progress rebuilds everything that already happened. For now friends can use the pistol, shotgun, sniper rifle and musket, spawn ragdolls and press the buttons; the other items, the elevator and zombies going after friends come next. Up to 6 players.</li>
         </ul>
         <h3>Alpha 0.8</h3>
         <ul>

@@ -186,10 +186,15 @@ export class SpawnMenu {
       for (let j = 0; j < 12 && !this.free(p.x, a.y, p.z, 0.35); j++) p.addScaledVector(toward, 0.35);
       const y = WORLD.groundAt(p.x, p.z, a.y + 0.4);
       const yaw = Math.atan2(eye.x - p.x, eye.z - p.z) + (Math.random() - 0.5) * 0.3;
-      const r = this.ragdolls.spawn([p.x, y, p.z], yaw, { armor: { helmet: o.helmet, vest: o.vest }, behavior: zombie ? 'classic' : o.behavior, zombie });
-      if (!zombie && o.behavior === 'v2') r.brain.fearMul = TEMPER[o.temper] || 1;
+      const opts = { armor: { helmet: o.helmet, vest: o.vest }, behavior: zombie ? 'classic' : o.behavior, zombie };
+      const fear = !zombie && o.behavior === 'v2' ? TEMPER[o.temper] || 1 : 0;
+      // multiplayer, as a friend: the host's game spawns them
+      if (this.remoteSpawn) { spawned.push({ p: [p.x, y, p.z], y: yaw, o: opts, fm: fear }); continue; }
+      const r = this.ragdolls.spawn([p.x, y, p.z], yaw, opts);
+      if (fear) r.brain.fearMul = fear;
       spawned.push(r);
     }
+    if (this.remoteSpawn) this.remoteSpawn(spawned);
     this.audio.play('button');
     if (zombie) this.audio.play('groan', 0.8);
     const what = [o.helmet && 'helmet', o.vest && 'vest'].filter(Boolean).join(' and ');

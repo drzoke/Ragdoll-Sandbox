@@ -73,6 +73,18 @@ export class RagdollManager {
     }
   }
 
+  /**
+   * Multiplayer, a friend's copy of the host's ragdolls: the bodies are placed from the host's
+   * updates and the health comes from the host, so only the meshes and the bleeding run here.
+   */
+  updateReplica(dt) {
+    for (const r of this.list) {
+      r.health.time += dt;
+      r.sync();
+      this.gore.updateRagdoll(r, dt);
+    }
+  }
+
   /** An infected body rises as a zombie. */
   reanimate(r) {
     r.health.log('Came back as a zombie', 'warn');

@@ -38,6 +38,7 @@ import { IS_TOUCH, IS_IOS, IS_STANDALONE } from './core/device.js';
 import { TouchControls } from './ui/touch.js';
 import { PlayerVitals } from './player/vitals.js';
 import { benchmark, LEVEL_NAMES, savePerfCap } from './core/bench.js';
+import { Net } from './net/net.js';
 
 const IS_SAFARI = /^((?!chrome|chromium|crios|fxios|edg|android).)*safari/i.test(navigator.userAgent);
 // macOS: full screen moves the window to its own Space with an animation, and browsers drop (or
@@ -87,16 +88,28 @@ const gore = new Gore(scene, physics, map, audio);
 const ragdolls = new RagdollManager(scene, physics, gore);
 const hud = new HUD(scene);
 const graphics = new Graphics({ renderer, scene, camera, map, gore });
+// multiplayer (see net/net.js): what it uses of the game, read when needed
+const net = new Net({
+  scene, camera, physics, ragdolls, gore, hud, audio, settings,
+  get player() { return player; }, get ballistics() { return ballistics; }, get explosives() { return explosives; }, get grab() { return grab; },
+  get tools() { return tools; }, get toolbox() { return toolbox; }, get vitals() { return vitals; }, get spawnMenu() { return spawnMenu; }, get buttons() { return buttons; },
+  version: document.getElementById('version')?.textContent.trim() || 'dev',
+  getMap: () => map, loadMap: (id) => loadMap(id), cleanUp: (silent) => cleanUp(silent), removeAll: () => removeAllRagdolls(),
+  timeScale: () => world.timeScale,
+  onJoined: () => { timeIndex = TIME_STEPS.indexOf(1); },
+  onLeft: () => { shownTimeScale = world.timeScale; hud.setTimeScale(world.timeScale); },
+});
 
 // the Respawn and Clean up buttons: rebuilt for each map, at the spots it gives (same array)
 const buttons = [];
 function makeButtons() {
   buttons.length = 0;
   const [a, b] = map.buttonSpots;
+  // (multiplayer, as a friend: the press goes to the host's game)
   if (a) buttons.push(new PressButton({ map, position: a.pos, yaw: a.yaw, label: 'RESPAWN', sub: 'Press E · new ragdoll', prompt: 'Respawn ragdoll', color: 0xd8302a,
-    onPress: () => { audio.play('button'); grab.release(); ragdolls.respawn(); pistol.refill(); hud.toast('Ragdoll respawned'); } }));
+    onPress: () => { audio.play('button'); if (net.guest) { net.requestPress(0); pistol.refill(); return; } grab.release(); ragdolls.respawn(); pistol.refill(); hud.toast('Ragdoll respawned'); } }));
   if (b) buttons.push(new PressButton({ map, position: b.pos, yaw: b.yaw, label: 'CLEAN UP', sub: 'Press E · blood & gibs', prompt: 'Clean up blood', color: 0x2a7bd8,
-    onPress: () => { audio.play('button'); cleanUp(); } }));
+    onPress: () => { audio.play('button'); if (net.guest) { net.requestCleanUp(); return; } cleanUp(); } }));
 }
 makeButtons();
 
@@ -106,8 +119,10 @@ function cleanUp(silent = false) {
   map.onCleanUp?.();   // e.g. broken windows go back in
   if (title) title.dirty = true;   // the title screen's blood went too: rebuild it next time
   if (!silent) hud.toast('Cleaned up');
+  net.cleanedUp();
 }
 function removeAllRagdolls() {
+  if (net.guest) { net.requestRemoveAll(); return; }
   grab.release();
   const n = ragdolls.list.filter((r) => !r.hidden).length;
   ragdolls.clear(ragdolls.keep);
@@ -168,10 +183,14 @@ graphics.apply(settings.get('graphics'));
 grab.setQuality(settings.get('graphics'));
 const tools = [fists, pistol, shotgun, sniper, musket, grenade, grab, machete, medkit, defib];
 const toolbox = new Toolbox(tools, { audio, start: 0, onOpenChange: (open) => onToolboxChange(open) });
+// multiplayer, as a friend: only the guns for now
+toolbox.canUse = (t) => net.toolAllowed(t);
+toolbox.onDenied = (t) => hud.toast(`${t.short || t.name}: not in multiplayer yet (friends can use the guns for now)`);
 
 await stage(0.86, 'Spawning ragdoll');
 ragdolls.spawn();
-const spawnMenu = new SpawnMenu({ ragdolls, camera, map, audio, hud, onOpenChange: (open) => onToolboxChange(open), onRemoveAll: removeAllRagdolls, onCleanUp: cleanUp });
+const spawnMenu = new SpawnMenu({ ragdolls, camera, map, audio, hud, onOpenChange: (open) => onToolboxChange(open), onRemoveAll: removeAllRagdolls,
+  onCleanUp: () => { if (net.guest) net.requestCleanUp(); else cleanUp(); } });
 await stage(0.88, 'Setting the scene');
 const title = new TitleScene({ scene, ragdolls, gore, ballistics, physics, camera });
 title.ensure();
@@ -195,8 +214,9 @@ function loadMap(id) {
   player.spawnAt(map.playerSpawn.pos, map.playerSpawn.yaw);
   if (graphics.passes?.ssr) graphics.passes.ssr.selects = [map.floor].filter(Boolean);
   camera.far = def.far || 600; camera.updateProjectionMatrix();
-  ragdolls.respawn();
-  settings.set('map', id);
+  if (!net.guest) ragdolls.respawn();      // a friend in a room gets the host's ragdolls
+  if (!net.guest) settings.set('map', id);
+  net.mapLoaded(id);
   target = null; ballistics.lastTarget = null;
   vitals.reset();
   resetDrs();
@@ -253,7 +273,7 @@ function showTitle() {
 }
 // side panels: Settings, Controls, What's new
 const panel = document.getElementById('m-panel');
-const PANEL_TITLES = { maps: 'Maps', settings: 'Settings', keys: 'Controls', news: "What's new" };
+const PANEL_TITLES = { maps: 'Maps', mp: 'Multiplayer', settings: 'Settings', keys: 'Controls', news: "What's new" };
 // map picker: a card per map (picture, name, what's there); picking one loads it and starts playing
 const MAP_ART = {
   range: '<svg viewBox="0 0 160 90"><rect width="160" height="90" fill="#8d949b"/><path d="M0 52h160v38H0z" fill="#6f767d"/><g stroke="#5f666d" stroke-width="1"><path d="M0 60h160M0 70h160M0 82h160M20 52L-10 90M50 52l-15 38M80 52v38M110 52l15 38M140 52l30 38"/></g><rect x="22" y="40" width="22" height="16" fill="#c9ccd0"/><rect x="104" y="34" width="34" height="22" fill="#b8bcc1"/><path d="M60 56h14v-5h12v-5h12v10" fill="#d6d9dc"/><circle cx="78" cy="38" r="4" fill="#7f8286"/><rect x="74" y="42" width="8" height="12" rx="2" fill="#7f8286"/></svg>',
@@ -267,7 +287,9 @@ function renderMaps() {
 document.getElementById('map-list').addEventListener('click', (e) => {
   const b = e.target.closest('[data-map]');
   if (!b) return;
-  audio.unlock(); audio.play('click');
+  audio.unlock();
+  if (net.guest) { audio.play('deny'); hud.toast('Only the host can change the map in this room'); return; }
+  audio.play('click');
   if (b.dataset.map !== map.def?.id) { loadMap(b.dataset.map); hud.toast(`Loaded ${MAP_BY_ID[b.dataset.map].name}`); }
   renderMaps();
   closePanel();
@@ -278,6 +300,7 @@ function openPanel(name) {
   if (panelName === name) { closePanel(); return; }
   panelName = name;
   if (name === 'maps') renderMaps();
+  if (name === 'mp') renderMp();
   panel.classList.remove('hidden');
   document.getElementById('m-panel-title').textContent = PANEL_TITLES[name];
   for (const t of panel.querySelectorAll('.tab')) t.classList.toggle('hidden', t.id !== `tab-${name}`);
@@ -293,6 +316,52 @@ for (const b of menu.querySelectorAll('.m-btn[data-panel]')) b.addEventListener(
 document.getElementById('m-panel-close').addEventListener('click', () => closePanel());
 document.getElementById('to-title').addEventListener('click', () => { audio.play('click'); showTitle(); });
 setMenuMode('title');
+
+// ---- multiplayer: host a room or join one with its code ----
+const mpEl = {
+  name: document.getElementById('mp-name'), code: document.getElementById('mp-code'), off: document.getElementById('mp-off'), on: document.getElementById('mp-on'),
+  room: document.getElementById('mp-room-code'), list: document.getElementById('mp-players'), status: document.getElementById('mp-status'),
+  host: document.getElementById('mp-host'), join: document.getElementById('mp-join'), leave: document.getElementById('mp-leave'), copy: document.getElementById('mp-copy'),
+  hud: document.getElementById('mp-hud'),
+};
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+mpEl.name.value = settings.get('mpName') || '';
+const mpName = () => mpEl.name.value.trim().slice(0, 16) || 'Player';
+function renderMp() {
+  const on = net.active && !net.joining;
+  mpEl.off.classList.toggle('hidden', net.active);
+  mpEl.on.classList.toggle('hidden', !on);
+  mpEl.host.disabled = mpEl.join.disabled = !!net.status && /…$/.test(net.status);
+  mpEl.status.textContent = net.status;
+  mpEl.status.classList.toggle('hidden', !net.status);
+  if (on) {
+    mpEl.room.textContent = net.code || '';
+    const me = { ...net.me, me: true };
+    const all = [me, ...net.players.values()].sort((a, b) => a.id - b.id);
+    mpEl.list.innerHTML = all.map((p) => `<li><i style="background:${esc(p.color)}"></i>${esc(p.name)}${p.id === 1 ? ' <em>host</em>' : ''}${p.me ? ' <em>you</em>' : ''}</li>`).join('');
+  }
+  mpEl.name.disabled = net.active;
+  // the little indicator in the corner while in a room
+  mpEl.hud.classList.toggle('hidden', !on);
+  if (on) mpEl.hud.textContent = `Room ${net.code} · ${net.playerCount} player${net.playerCount > 1 ? 's' : ''}${net.guest ? ` · ${net.ping.toFixed(0)} ms` : ''}`;
+}
+net.onChange = () => renderMp();
+setInterval(() => { if (net.guest) renderMp(); }, 2000);   // the ping
+mpEl.name.addEventListener('change', () => settings.set('mpName', mpEl.name.value.trim().slice(0, 16)));
+mpEl.host.addEventListener('click', () => { audio.unlock(); audio.play('click'); net.hostRoom(mpName()); });
+const doJoin = () => { audio.unlock(); audio.play('click'); net.joinRoom(mpEl.code.value, mpName()); };
+mpEl.join.addEventListener('click', doJoin);
+mpEl.code.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') doJoin(); });
+mpEl.name.addEventListener('keydown', (e) => e.stopPropagation());
+mpEl.code.addEventListener('input', () => { const p = mpEl.code.selectionStart; mpEl.code.value = mpEl.code.value.toUpperCase(); mpEl.code.setSelectionRange(p, p); });
+mpEl.leave.addEventListener('click', () => { audio.play('click'); net.leave(); });
+mpEl.copy.addEventListener('click', () => {
+  audio.play('click');
+  navigator.clipboard?.writeText(net.code || '').then(() => { mpEl.copy.textContent = 'Copied'; setTimeout(() => { mpEl.copy.textContent = 'Copy'; }, 1500); }).catch(() => {});
+});
+// a link with ?join=CODE fills the code in
+{ const j = new URLSearchParams(location.search).get('join'); if (j) mpEl.code.value = j.toUpperCase(); }
+addEventListener('beforeunload', () => { if (net.active) net.leave(); });
 
 // ---- touch controls (phones and tablets, played sideways) ----
 /** X-ray button on touch screens: off -> 3D -> flat -> off. */
@@ -550,6 +619,7 @@ function updatePlayerInfo() {
 const TIME_STEPS = [0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 1, 1.5, 2, 3];
 let timeIndex = TIME_STEPS.indexOf(1);
 const world = { get timeScale() { return TIME_STEPS[timeIndex]; } };
+let shownTimeScale = 1;
 function setTimeIndex(i) {
   const ni = Math.max(0, Math.min(TIME_STEPS.length - 1, i));
   if (ni === timeIndex) { audio.play('deny'); return; }
@@ -702,9 +772,13 @@ function frame() {
     } else cycleXray();
   }
   if (input.wasPressed('F3')) debugOn = !debugOn;
-  if (input.wasPressed('KeyZ')) setTimeIndex(timeIndex - 1);
-  if (input.wasPressed('KeyV')) setTimeIndex(timeIndex + 1);
-  const ts = world.timeScale;
+  if (input.wasPressed('KeyZ') || input.wasPressed('KeyV')) {
+    if (net.guest) { audio.play('deny'); hud.toast('The host controls the time in this room'); }
+    else setTimeIndex(timeIndex + (input.wasPressed('KeyV') ? 1 : -1));
+  }
+  // in a room as a friend: the host's world runs at the host's time scale
+  if (net.guest && net.hostTimeScale !== shownTimeScale) { shownTimeScale = net.hostTimeScale; hud.setTimeScale(shownTimeScale); }
+  const ts = net.guest ? net.hostTimeScale : world.timeScale;
   const wdt = dt * ts;
 
   touch.update(dt, { tool: toolbox.active, useVisible: !!lastFocused, xrayMode: hud.xrayOpen ? settings.get('xrayMode') : 'off' });
@@ -712,8 +786,9 @@ function frame() {
   if (titleMode) title.update(dt);         // cinematic camera on the title screen
   player.aiming = false;                   // the gun in your hands sets it again
   toolbox.update(dt, input, playing && !vitals.dead, wdt); // tools aim before the physics step
-  physics.update(dt, ts);
-  ragdolls.update(wdt);
+  net.update(dt);                          // multiplayer: other players, and a friend's copy of the host's world
+  if (net.guest) ragdolls.updateReplica(wdt);
+  else { physics.update(dt, ts); ragdolls.update(wdt); }
   ballistics.update(wdt, dt);
   explosives.update(wdt);
   gore.update(wdt, camera, renderer.domElement.height);
@@ -731,7 +806,8 @@ function frame() {
       `particles ${gore.particles.alive.size}  pools ${gore.decals.pools.length}  gibs ${gore.gibs.length}  draw calls ${drawCalls}  ragdoll batches ${batchStats().draws} (${batchStats().instances})`,
       r0 ? `${r0.name}: ${r0.brain.state} / ${r0.brain.activity}  pelvis y ${r0.pelvis.position.y.toFixed(2)}` : '',
       `pistol ${pistol.state}  mag ${pistol.mag}  chamber ${pistol.chambered}  shotgun ${shotgun.state} ${shotgun.tube}+${shotgun.chamber}  bullets ${ballistics.bullets.length}  grenades ${explosives.live.length}`,
-      `time ${world.timeScale}x  gfx ${graphics.level} res ${(graphics.resScale * 100).toFixed(0)}%  tool ${toolbox.active.name}${grab.held ? ' holding ' + (grab.held.part || 'gib') : ''}`,
+      net.active ? `room ${net.code || '…'} ${net.role}  players ${net.playerCount}  ping ${net.ping.toFixed(0)} ms  up ${(net.stats.upRate / 1024).toFixed(1)} KB/s  down ${(net.stats.downRate / 1024).toFixed(1)} KB/s` : '',
+      `time ${ts}x  gfx ${graphics.level} res ${(graphics.resScale * 100).toFixed(0)}%  tool ${toolbox.active.name}${grab.held ? ' holding ' + (grab.held.part || 'gib') : ''}`,
     ].join('\n') : null,
   });
 
@@ -740,6 +816,7 @@ function frame() {
   const t = toolbox.active;
   vitals.update(dt, { input, playing: playing && !toolboxOpen, show: !titleMode && ragdolls.list.some((r) => r.zombie && !r.hidden) });
   physics.flush();                  // worker mode: send this frame's changes, it steps while we draw
+  net.flush();                      // multiplayer: send this frame's updates
   map.cull(camera);
   updateBatches(scene, camera);     // ragdoll parts and the marks on them, drawn instanced
   if (titleMode || vitals.dead) graphics.render(null, null);
@@ -755,7 +832,7 @@ try { renderer.compile(scene, camera); for (const t of tools) renderer.compile(t
 await stage(1, 'Ready');
 // the physics moves to its own processor core (unless switched off in Settings)
 physics.setWorker(settings.get('physicsWorker') !== false);
-settings.onChange((k, v) => { if (k === 'physicsWorker') physics.setWorker(v !== false); });
+settings.onChange((k, v) => { if (k === 'physicsWorker' && !net.guest) physics.setWorker(v !== false); });
 frame();
 setTimeout(() => {
   menu.classList.remove('hidden');
@@ -766,4 +843,4 @@ setTimeout(() => {
 
 // Exposed for debugging from the console and for automated tests.
 watchForUpdates({ hud });
-window.game = { batchStats, vitals, map, loadMap, MAPS, machete, medkit, defib, spawnMenu, title, showTitle, get titleMode() { return titleMode; }, fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, sniper, musket, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };
+window.game = { net, batchStats, vitals, map, loadMap, MAPS, machete, medkit, defib, spawnMenu, title, showTitle, get titleMode() { return titleMode; }, fpsWatch, touch, debug, THREE, scene, camera, renderer, physics, player, pistol, grab, shotgun, sniper, musket, fists, grenade, explosives, tools, toolbox, graphics, settings, world, setTimeIndex, ragdolls, gore, hud, buttons, ballistics, input, setPlaying, CONFIG };

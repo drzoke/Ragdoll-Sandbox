@@ -157,6 +157,7 @@ export class GameMap {
     this.cullers = [];
     this.distanceCulled = [];
     this.view = null;
+    this.seen = null; this.glass = null; this.elevator = null;
     this.interactables.length = 0;
     this.areas = [];
     this.floor = null;

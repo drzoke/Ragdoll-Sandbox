@@ -152,6 +152,8 @@ export class Toolbox {
 
   select(i, force = false) {
     if (i < 0 || i >= this.tools.length) return;
+    // multiplayer, as a friend: only some items work yet
+    if (this.canUse && !this.canUse(this.tools[i])) { this.audio.play('deny'); this.onDenied?.(this.tools[i]); return; }
     if (!force && !this.bar.includes(i)) return;
     if (i === this.index && this.pending < 0) return;
     this.pending = i;

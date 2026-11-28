@@ -62,8 +62,10 @@ export class Ballistics {
    */
   fire(origin, dir, visualFrom, opts = {}) {
     const { energy = 1, impulse = W.impulse, size = 1, speed = this.speed, pellet = false, fragment = false, shot = null, range = W.range, life = 1.5, glowSize = 0.075 } = opts;
+    // ghost: only the tracer (a friend's copy of the host's game in multiplayer: the host works out the hits)
+    const ghost = !!(opts.ghost || this.ghostAll);
     // a gunshot scares every ragdoll in earshot (once per shotgun shot)
-    if (!fragment && !this.silent && !(shot && shot.alerted)) { if (shot) shot.alerted = true; this.ragdolls.alert(origin, 32, 0.13, 'shot'); }
+    if (!ghost && !fragment && !this.silent && !(shot && shot.alerted)) { if (shot) shot.alerted = true; this.ragdolls.alert(origin, 32, 0.13, 'shot'); }
     const tracer = new THREE.Mesh(tracerGeo, tracerMat);
     tracer.frustumCulled = false;
     const slug = new THREE.Mesh(slugGeo, slugMat);
@@ -76,6 +78,7 @@ export class Ballistics {
     this.bullets.push({
       pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), energy, impulse, pellet, fragment, shot, range, life, size, traveled: 0, age: 0, bloody: 0,
       skip: new Set(), offset: visualFrom ? visualFrom.clone().sub(origin) : new THREE.Vector3(), tracer, slug, dead: false,
+      ghost, mine: !!opts.mine, owner: opts.owner || 0,
     });
   }
 
@@ -106,7 +109,7 @@ export class Ballistics {
         b.pos.copy(hit.point);
         b.traveled += hit.distance;
         remaining -= hit.distance;
-        const exit = this.processHit(b, hit, _dir.clone());
+        const exit = b.ghost ? this.ghostHit(b, hit, _dir) : this.processHit(b, hit, _dir.clone());
         if (!exit) { b.dead = true; break; }
         // penetrated: continue from the exit point with what energy is left
         remaining = Math.max(0, remaining - exit.distanceTo(b.pos));
@@ -134,6 +137,27 @@ export class Ballistics {
     b.tracer.scale.set(wd, len, wd);
     b.slug.scale.set(1, 1 / len, 1); // keep the bullet itself real-size
     b.slug.position.set(0, 0, 0);
+  }
+
+  /** Hit marker for whoever fired: you, or (multiplayer, hosting) the friend whose shot it was. */
+  marker(b, organ) {
+    if (b.owner && this.onRemoteMarker) this.onRemoteMarker(b.owner, organ);
+    else this.hud.hitMarker(organ);
+  }
+
+  /**
+   * A tracer with no damage (a friend's view of a shot: the host's game works out what it did and
+   * sends the wounds). Stops at what it meets, goes on through windows. Returns where it goes on, or null.
+   */
+  ghostHit(b, hit, dir) {
+    const ud = hit.object.userData;
+    if (ud.glass) { b.skip.add(hit.object); return hit.point.clone().addScaledVector(dir, 0.15); }
+    if (ud.ragdoll) {
+      if (b.mine) { this.lastTarget = ud.ragdoll; this.sound(ud.armor ? 'clink' : 'flesh'); }
+      return null;
+    }
+    if (b.mine && !b.fragment) this.sound(ud.grenade ? 'clink' : 'concrete');
+    return null;
   }
 
   /**
@@ -185,7 +209,7 @@ export class Ballistics {
     const pierce = a.broken || (full && b.energy > 1.7 && Math.random() < (helmet ? 0.75 : 0.9)) || (helmet && full && b.energy > 0.8 && Math.random() < 0.12);
     a.hp = Math.max(0, a.hp - wear);
     if (a.hp <= 0 && !a.broken) { a.broken = true; r.health.log(`${helmet ? 'Helmet' : 'Vest'} broken: rounds go through now`, 'warn'); }
-    this.lastTarget = r;
+    if (!b.owner) this.lastTarget = r;
     if (pierce) {
       b.energy *= 0.7;
       b.skip.add(hit.object);
@@ -201,7 +225,7 @@ export class Ballistics {
     this.gore.armorHit(r, ud.part, hit.point, n, b.pellet || b.fragment ? 0.018 : 0.03);
     if (k > 0.3) this.gore.addBruise(r, ud.part, hit.point, k * 0.6);
     this.sound(helmet ? 'clink' : 'thud');
-    if (b.size >= 0.9 || b.pellet) this.hud.hitMarker(false);
+    if (b.size >= 0.9 || b.pellet) this.marker(b, false);
     if (b.pellet && b.shot) {
       const n2 = (b.shot.hits.get(r) || 0) + 1;
       b.shot.hits.set(r, n2);
@@ -244,8 +268,8 @@ export class Ballistics {
       }
       b.bloody = 1;
       this.sound(res.bones.length ? 'bone' : 'flesh');
-      if (b.size >= 0.9 || b.pellet) this.hud.hitMarker(res.organs.length > 0 || res.vessels.length > 0);
-      this.lastTarget = r;
+      if (b.size >= 0.9 || b.pellet) this.marker(b, res.organs.length > 0 || res.vessels.length > 0);
+      if (!b.owner) this.lastTarget = r;
       if (res.explode) {
         this.gore.explodePart(r, partName, dir);
         return null;
